@@ -10,7 +10,8 @@ import {
   Sun, 
   Moon, 
   ChevronLeft, 
-  ChevronRight 
+  ChevronRight,
+  Lock
 } from 'lucide-react';
 import { useHabitStore } from '../lib/store';
 import { useTheme } from '../lib/theme';
@@ -23,6 +24,7 @@ interface HeaderProps {
   onSelectDate: (date: string) => void;
   onOpenAddModal: () => void;
   onOpenSyncModal: () => void;
+  onLockApp: () => void;
   completedCount: number;
   totalCount: number;
 }
@@ -32,6 +34,7 @@ export function Header({
   onSelectDate,
   onOpenAddModal,
   onOpenSyncModal,
+  onLockApp,
   completedCount,
   totalCount,
 }: HeaderProps) {
@@ -66,7 +69,7 @@ export function Header({
             <h1 className="text-base font-bold tracking-tight text-main flex items-center gap-2 font-mono uppercase">
               Zenith
               <span className="text-[10px] font-mono font-bold tracking-widest px-1.5 py-0.5 rounded-none bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
-                IDE
+                PRO
               </span>
             </h1>
           </div>
@@ -105,6 +108,15 @@ export function Header({
             ) : (
               <Moon className="w-4 h-4 text-neutral-300" />
             )}
+          </button>
+
+          {/* Lock App Button */}
+          <button
+            onClick={onLockApp}
+            className="p-2 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-rose-500 transition-all flex items-center justify-center cursor-pointer"
+            title="Lock Session"
+          >
+            <Lock className="w-4 h-4" />
           </button>
 
           {/* Add Habit Button */}

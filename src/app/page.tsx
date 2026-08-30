@@ -6,6 +6,7 @@ import { Habit } from '../lib/types';
 import { calculateHabitStats } from '../lib/utils/streaks';
 import { getTodayDateString, isHabitDueOnDate } from '../lib/utils/date';
 import { triggerDailyCelebration } from '../lib/utils/confetti';
+import { isDeviceUnlocked, lockDevice, verifyPin, setDeviceUnlocked } from '../lib/auth/pin';
 import { Header } from '../components/Header';
 import { ViewTabs, ActiveTab } from '../components/ViewTabs';
 import { MinimalHabitItem } from '../components/MinimalHabitItem';
@@ -14,9 +15,12 @@ import { MinimalHeatmap } from '../components/MinimalHeatmap';
 import { AnalyticsView } from '../components/AnalyticsView';
 import { HabitModal } from '../components/HabitModal';
 import { SyncSettingsModal } from '../components/SyncSettingsModal';
+import { PinLockScreen } from '../components/PinLockScreen';
 import { Plus, Sparkles } from 'lucide-react';
 
 export default function HabitTrackerPage() {
+  const [isUnlocked, setIsUnlocked] = useState<boolean | null>(null);
+
   const {
     habits,
     logs,
@@ -35,6 +39,33 @@ export default function HabitTrackerPage() {
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
   const prevCompletionRef = useRef<boolean>(false);
+
+  // Check unlock status on mount & check URL for ?pin=
+  useEffect(() => {
+    const checkInitialAuth = async () => {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const urlPin = params.get('pin');
+        if (urlPin) {
+          const isValid = await verifyPin(urlPin);
+          if (isValid) {
+            setDeviceUnlocked();
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setIsUnlocked(true);
+            return;
+          }
+        }
+      }
+      setIsUnlocked(isDeviceUnlocked());
+    };
+
+    checkInitialAuth();
+  }, []);
+
+  const handleLockApp = () => {
+    lockDevice();
+    setIsUnlocked(false);
+  };
 
   const dueHabits = useMemo(() => {
     return habits.filter((h) => isHabitDueOnDate(h, selectedDate));
@@ -96,6 +127,23 @@ export default function HabitTrackerPage() {
     }
   };
 
+  // Initial Auth Loading Screen
+  if (isUnlocked === null) {
+    return (
+      <div className="min-h-screen bg-main flex items-center justify-center font-mono">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent animate-spin" />
+          <span className="text-xs font-mono text-sub">INITIALIZING SECURE SESSION...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // If locked, render PIN Gate
+  if (!isUnlocked) {
+    return <PinLockScreen onUnlock={() => setIsUnlocked(true)} />;
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-main flex items-center justify-center font-mono">
@@ -115,6 +163,7 @@ export default function HabitTrackerPage() {
         onSelectDate={setSelectedDate}
         onOpenAddModal={handleOpenAddModal}
         onOpenSyncModal={() => setIsSyncModalOpen(true)}
+        onLockApp={handleLockApp}
         completedCount={completedCount}
         totalCount={totalCount}
       />
