@@ -189,6 +189,11 @@ function loadLocalDataFromStorage() {
 
 // Unified Single Cloud Sync Executor
 async function executeCloudSync(isBackground = false) {
+  // If user performed a local action (add, delete, toggle) within the last 3.5s, skip sync to avoid race conditions
+  if (isBackground && Date.now() - lastLocalMutationTime < 3500) {
+    return;
+  }
+
   const requestStartTime = Date.now();
   if (!isBackground) {
     globalIsSyncing = true;
@@ -211,20 +216,38 @@ async function executeCloudSync(isBackground = false) {
         return;
       }
 
-      let serverHabits = (res.habits || []).filter((h) => !h.archived);
+      const serverHabits = (res.habits || []).filter((h) => !h.archived);
       const serverLogs = res.logs || {};
 
-      // 1. Guard against in-flight delete race: never resurrect a habit that is pending deletion
-      serverHabits = serverHabits.filter((h) => !pendingDeletedHabitIds.has(h.id));
+      // Robust Map-based reconciliation:
+      const habitMap = new Map<string, Habit>();
 
-      // 2. Guard against in-flight add race: retain any newly added habit that hasn't landed in this server snapshot yet
-      pendingAddedHabits.forEach((pendingHabit, id) => {
-        if (!serverHabits.some((h) => h.id === id) && !pendingDeletedHabitIds.has(id)) {
-          serverHabits.push(pendingHabit);
+      // 1. Add valid habits from server (excluding pending deleted)
+      serverHabits.forEach((h) => {
+        if (!pendingDeletedHabitIds.has(h.id)) {
+          habitMap.set(h.id, h);
         }
       });
 
-      // 3. Clean logs for deleted habits
+      // 2. Retain all pending locally added habits
+      pendingAddedHabits.forEach((pendingHabit, id) => {
+        if (!pendingDeletedHabitIds.has(id)) {
+          habitMap.set(id, pendingHabit);
+        }
+      });
+
+      // 3. Preserve any local habits created recently that haven't landed on server yet
+      globalHabits.forEach((localHabit) => {
+        if (!habitMap.has(localHabit.id) && !pendingDeletedHabitIds.has(localHabit.id)) {
+          if (pendingAddedHabits.has(localHabit.id) || Date.now() - lastLocalMutationTime < 10000) {
+            habitMap.set(localHabit.id, localHabit);
+          }
+        }
+      });
+
+      const mergedHabits = Array.from(habitMap.values());
+
+      // 4. Clean logs for deleted habits
       const cleanLogs: Record<string, HabitLog> = {};
       Object.entries(serverLogs).forEach(([key, log]) => {
         if (!pendingDeletedHabitIds.has(log.habit_id)) {
@@ -234,7 +257,7 @@ async function executeCloudSync(isBackground = false) {
 
       const hasBeenInitialized = typeof window !== 'undefined' && localStorage.getItem(INITIALIZED_KEY) === 'true';
 
-      if (!hasBeenInitialized && serverHabits.length === 0 && globalHabits.length > 0) {
+      if (!hasBeenInitialized && mergedHabits.length === 0 && globalHabits.length > 0) {
         for (const h of globalHabits) {
           await saveHabitAction(h);
         }
@@ -246,11 +269,11 @@ async function executeCloudSync(isBackground = false) {
           localStorage.setItem(INITIALIZED_KEY, 'true');
         }
 
-        const habitsChanged = JSON.stringify(serverHabits) !== JSON.stringify(globalHabits);
+        const habitsChanged = JSON.stringify(mergedHabits) !== JSON.stringify(globalHabits);
         const logsChanged = JSON.stringify(cleanLogs) !== JSON.stringify(globalLogs);
 
         if (habitsChanged || logsChanged) {
-          globalHabits = serverHabits;
+          globalHabits = mergedHabits;
           globalLogs = cleanLogs;
           persistLocally(globalHabits, globalLogs);
           emitChange();
@@ -285,13 +308,16 @@ function initGlobalSyncCoordinator() {
     }
   }, 5000);
 
-  // Sync immediately when switching tabs or focusing window
-  window.addEventListener('focus', () => executeCloudSync(true));
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
+  // Sync on tab focus or visibility change only when no recent local action took place
+  const handleFocusOrVisibility = () => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      if (Date.now() - lastLocalMutationTime < 3500) return;
       executeCloudSync(true);
     }
-  });
+  };
+
+  window.addEventListener('focus', handleFocusOrVisibility);
+  document.addEventListener('visibilitychange', handleFocusOrVisibility);
 
   window.addEventListener('storage', (e: StorageEvent) => {
     if (e.key === HABITS_STORAGE_KEY && e.newValue) {
