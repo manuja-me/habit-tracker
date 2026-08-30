@@ -5,19 +5,35 @@ import { requireAuth } from './auth';
 import { Habit, HabitLog } from '../types';
 
 // Server-side private credentials
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+function getCleanSupabaseConfig() {
+  let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
+  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim();
 
-const isServerDbConfigured = Boolean(
-  supabaseUrl &&
-  supabaseKey &&
-  supabaseUrl.startsWith('https://') &&
-  !supabaseUrl.includes('your-project-url')
-);
+  if (!url || !key) return null;
+
+  // Handle accidental dashboard URL paste like https://supabase.com/dashboard/project/abcdefghijklmnop
+  const dashboardMatch = url.match(/supabase\.com\/dashboard\/project\/([a-z0-9_-]+)/i);
+  if (dashboardMatch && dashboardMatch[1]) {
+    url = `https://${dashboardMatch[1]}.supabase.co`;
+  }
+
+  // Remove any trailing slashes and subpaths like /rest/v1 that cause PostgREST "Invalid path" error
+  url = url.replace(/\/+$/, '');
+  if (url.includes('/rest/v1')) {
+    url = url.replace(/\/rest\/v1.*$/, '');
+  }
+
+  if (!url.startsWith('https://') || url.includes('your-project-url')) {
+    return null;
+  }
+
+  return { url, key };
+}
 
 function getServerSupabase() {
-  if (!isServerDbConfigured) return null;
-  return createClient(supabaseUrl, supabaseKey, {
+  const config = getCleanSupabaseConfig();
+  if (!config) return null;
+  return createClient(config.url, config.key, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -30,6 +46,7 @@ function getServerSupabase() {
  */
 export async function getHabitsAndLogsAction(): Promise<{
   success: boolean;
+  isConfigured: boolean;
   habits?: Habit[];
   logs?: Record<string, HabitLog>;
   error?: string;
@@ -37,9 +54,14 @@ export async function getHabitsAndLogsAction(): Promise<{
   try {
     await requireAuth();
 
+    const config = getCleanSupabaseConfig();
+    if (!config) {
+      return { success: true, isConfigured: false, habits: [], logs: {} };
+    }
+
     const supabase = getServerSupabase();
     if (!supabase) {
-      return { success: true, habits: [], logs: {} };
+      return { success: true, isConfigured: false, habits: [], logs: {} };
     }
 
     // 1. Fetch habits
@@ -92,11 +114,12 @@ export async function getHabitsAndLogsAction(): Promise<{
 
     return {
       success: true,
+      isConfigured: true,
       habits: formattedHabits,
       logs: mappedLogs,
     };
   } catch (err: any) {
-    return { success: false, error: err?.message || 'Failed to fetch data' };
+    return { success: false, isConfigured: Boolean(getCleanSupabaseConfig()), error: err?.message || 'Failed to fetch data' };
   }
 }
 
@@ -141,6 +164,9 @@ export async function deleteHabitAction(habitId: string): Promise<{ success: boo
     await requireAuth();
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
+
+    // Delete associated logs first to prevent foreign key errors
+    await supabase.from('habit_logs').delete().eq('habit_id', habitId);
 
     const { error } = await supabase.from('habits').delete().eq('id', habitId);
     if (error) throw error;

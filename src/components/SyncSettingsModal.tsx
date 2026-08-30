@@ -19,7 +19,7 @@ interface SyncSettingsModalProps {
 }
 
 export function SyncSettingsModal({ isOpen, onClose }: SyncSettingsModalProps) {
-  const { isSyncing, syncWithCloud, syncError } = useHabitStore();
+  const { isSyncing, syncWithCloud, syncError, isCloudReady } = useHabitStore();
 
   if (!isOpen) return null;
 
@@ -46,19 +46,31 @@ export function SyncSettingsModal({ isOpen, onClose }: SyncSettingsModalProps) {
         </div>
 
         <div className="pt-3 sm:pt-4 space-y-3.5 sm:space-y-4">
-          <div className="p-3.5 sm:p-4 rounded-none bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-600 dark:text-emerald-300 space-y-2">
-            <div className="flex items-center gap-2 font-bold text-emerald-500">
-              <Check className="w-4 h-4" />
-              SERVER ACTION GATEWAY ACTIVE
+          {isCloudReady ? (
+            <div className="p-3.5 sm:p-4 rounded-none bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-600 dark:text-emerald-300 space-y-2">
+              <div className="flex items-center gap-2 font-bold text-emerald-500">
+                <Check className="w-4 h-4" />
+                CLOUD SYNC ACTIVE
+              </div>
+              <p className="text-sub leading-relaxed text-[11px]">
+                Multi-device real-time sync is enabled. Habits, completions, and deletions sync automatically across all your devices.
+              </p>
+              <div className="flex items-center gap-4 pt-2 text-[10px] text-sub">
+                <span className="flex items-center gap-1.5"><Laptop className="w-3.5 h-3.5 text-main" /> LAPTOP READY</span>
+                <span className="flex items-center gap-1.5"><Smartphone className="w-3.5 h-3.5 text-main" /> PHONE READY</span>
+              </div>
             </div>
-            <p className="text-sub leading-relaxed text-[11px]">
-              Your database is protected behind server-side authentication. Direct public client access is blocked.
-            </p>
-            <div className="flex items-center gap-4 pt-2 text-[10px] text-sub">
-              <span className="flex items-center gap-1.5"><Laptop className="w-3.5 h-3.5 text-main" /> LAPTOP READY</span>
-              <span className="flex items-center gap-1.5"><Smartphone className="w-3.5 h-3.5 text-main" /> PHONE READY</span>
+          ) : (
+            <div className="p-3.5 sm:p-4 rounded-none bg-subtle border border-main text-xs space-y-2">
+              <div className="flex items-center gap-2 font-bold text-main">
+                <ShieldCheck className="w-4 h-4 text-amber-500" />
+                LOCAL STORAGE MODE
+              </div>
+              <p className="text-sub leading-relaxed text-[11px]">
+                Running in local offline mode. To enable automatic multi-device synchronization across phones and laptops, provide your Supabase URL & Key in environment variables.
+              </p>
             </div>
-          </div>
+          )}
 
           {syncError && (
             <div className="p-3 rounded-none bg-rose-500/10 border border-rose-500/30 text-[11px] text-rose-500 font-mono">

@@ -12,10 +12,11 @@ import {
 
 const HABITS_STORAGE_KEY = 'zenith_habits_v1';
 const LOGS_STORAGE_KEY = 'zenith_logs_v1';
+const INITIALIZED_KEY = 'zenith_initialized_v1';
 
 const INITIAL_DEFAULT_HABITS: Habit[] = [
   {
-    id: 'habit-1',
+    id: 'f1a1a1a1-1111-4111-8111-111111111111',
     title: 'Morning Deep Work',
     description: '90 minutes of focused, distraction-free work',
     category: 'productivity',
@@ -29,7 +30,7 @@ const INITIAL_DEFAULT_HABITS: Habit[] = [
     created_at: new Date().toISOString(),
   },
   {
-    id: 'habit-2',
+    id: 'f2a2a2a2-2222-4222-8222-222222222222',
     title: 'Drink 2.5L Water',
     description: 'Stay hydrated throughout the day',
     category: 'health',
@@ -44,7 +45,7 @@ const INITIAL_DEFAULT_HABITS: Habit[] = [
     created_at: new Date().toISOString(),
   },
   {
-    id: 'habit-3',
+    id: 'f3a3a3a3-3333-4333-8333-333333333333',
     title: 'Daily Movement / Workout',
     description: 'Gym, running, or 30-min brisk walk',
     category: 'fitness',
@@ -58,7 +59,7 @@ const INITIAL_DEFAULT_HABITS: Habit[] = [
     created_at: new Date().toISOString(),
   },
   {
-    id: 'habit-4',
+    id: 'f4a4a4a4-4444-4444-8444-444444444444',
     title: 'Read 20 Pages',
     description: 'Books on technology, philosophy, or growth',
     category: 'learning',
@@ -73,7 +74,7 @@ const INITIAL_DEFAULT_HABITS: Habit[] = [
     created_at: new Date().toISOString(),
   },
   {
-    id: 'habit-5',
+    id: 'f5a5a5a5-5555-4555-8555-555555555555',
     title: 'Evening Reflection & Journal',
     description: 'Review wins, lessons, and tomorrow\'s plan',
     category: 'mindfulness',
@@ -90,6 +91,7 @@ const INITIAL_DEFAULT_HABITS: Habit[] = [
 
 let globalHabits: Habit[] = [];
 let globalLogs: Record<string, HabitLog> = {};
+let globalIsCloudReady = true;
 let listeners: Array<() => void> = [];
 
 function emitChange() {
@@ -98,11 +100,48 @@ function emitChange() {
   }
 }
 
+// Cross-tab synchronization via BroadcastChannel
+let broadcastChannel: BroadcastChannel | null = null;
+if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+  try {
+    broadcastChannel = new BroadcastChannel('zenith_cross_tab_sync');
+    broadcastChannel.onmessage = (event) => {
+      if (event.data?.type === 'SYNC_STATE') {
+        if (Array.isArray(event.data.habits)) {
+          globalHabits = event.data.habits;
+        }
+        if (event.data.logs) {
+          globalLogs = event.data.logs;
+        }
+        emitChange();
+      }
+    };
+  } catch (e) {
+    // Unsupported or restricted environment
+  }
+}
+
+function broadcastLocalUpdate() {
+  if (broadcastChannel) {
+    try {
+      broadcastChannel.postMessage({
+        type: 'SYNC_STATE',
+        habits: globalHabits,
+        logs: globalLogs,
+      });
+    } catch (e) {}
+  }
+}
+
 export function generateId(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-  return 'h_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 export function useHabitStore() {
@@ -111,6 +150,7 @@ export function useHabitStore() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [isCloudReady, setIsCloudReady] = useState<boolean>(globalIsCloudReady);
 
   const persistLocally = (newHabits: Habit[], newLogs: Record<string, HabitLog>) => {
     try {
@@ -122,8 +162,8 @@ export function useHabitStore() {
   };
 
   // Sync with Server (Protected Server Action Proxy)
-  const syncWithCloud = useCallback(async () => {
-    setIsSyncing(true);
+  const syncWithCloud = useCallback(async (isBackground = false) => {
+    if (!isBackground) setIsSyncing(true);
     setSyncError(null);
 
     try {
@@ -133,27 +173,45 @@ export function useHabitStore() {
         return;
       }
 
-      if (res.habits && res.habits.length > 0) {
-        globalHabits = res.habits;
-        setHabits(res.habits);
-      } else if (globalHabits.length > 0) {
-        // Seed server database with initial habits
-        for (const h of globalHabits) {
-          await saveHabitAction(h);
+      globalIsCloudReady = Boolean(res.isConfigured);
+      setIsCloudReady(globalIsCloudReady);
+
+      if (res.isConfigured) {
+        const serverHabits = res.habits || [];
+        const serverLogs = res.logs || {};
+
+        const hasBeenInitialized = typeof window !== 'undefined' && localStorage.getItem(INITIALIZED_KEY) === 'true';
+
+        if (!hasBeenInitialized && serverHabits.length === 0 && globalHabits.length > 0) {
+          // First time ever running with empty cloud DB: seed defaults
+          for (const h of globalHabits) {
+            await saveHabitAction(h);
+          }
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(INITIALIZED_KEY, 'true');
+          }
+        } else {
+          // Cloud database is authoritative!
+          // If a habit was deleted on another device, serverHabits will NOT contain it.
+          // Replacing local habits with serverHabits ensures deleted habits disappear on this device too.
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(INITIALIZED_KEY, 'true');
+          }
+
+          globalHabits = serverHabits;
+          globalLogs = serverLogs;
+          setHabits(serverHabits);
+          setLogs(serverLogs);
+          persistLocally(globalHabits, globalLogs);
+          emitChange();
+          broadcastLocalUpdate();
         }
       }
-
-      if (res.logs) {
-        globalLogs = res.logs;
-        setLogs(res.logs);
-      }
-
-      persistLocally(globalHabits, globalLogs);
     } catch (err: any) {
       console.warn('Server sync notice:', err?.message || err);
       setSyncError(err?.message || 'Sync failed');
     } finally {
-      setIsSyncing(false);
+      if (!isBackground) setIsSyncing(false);
     }
   }, []);
 
@@ -188,12 +246,63 @@ export function useHabitStore() {
   useEffect(() => {
     loadLocalData();
     syncWithCloud();
+
+    // 1. Periodic background polling every 8s when window is visible
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        syncWithCloud(true);
+      }
+    }, 8000);
+
+    // 2. Immediate sync on window focus (e.g. switching back to this device/tab)
+    const handleFocus = () => {
+      syncWithCloud(true);
+    };
+
+    // 3. Immediate sync on visibility change (e.g. unlocking phone or switching browser tab)
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        syncWithCloud(true);
+      }
+    };
+
+    // 4. Cross-tab storage event
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === HABITS_STORAGE_KEY && e.newValue) {
+        try {
+          globalHabits = JSON.parse(e.newValue);
+          emitChange();
+        } catch (err) {}
+      }
+      if (e.key === LOGS_STORAGE_KEY && e.newValue) {
+        try {
+          globalLogs = JSON.parse(e.newValue);
+          emitChange();
+        } catch (err) {}
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', handleFocus);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('storage', handleStorage);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', handleFocus);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('storage', handleStorage);
+      }
+    };
   }, [loadLocalData, syncWithCloud]);
 
   useEffect(() => {
     const handleUpdate = () => {
       setHabits([...globalHabits]);
       setLogs({ ...globalLogs });
+      setIsCloudReady(globalIsCloudReady);
     };
 
     listeners.push(handleUpdate);
@@ -232,6 +341,7 @@ export function useHabitStore() {
     };
     persistLocally(globalHabits, globalLogs);
     emitChange();
+    broadcastLocalUpdate();
 
     // Background Server Action
     saveHabitLogAction(updatedLog).catch((e) => {
@@ -252,6 +362,7 @@ export function useHabitStore() {
     globalHabits = [...globalHabits, newHabit];
     persistLocally(globalHabits, globalLogs);
     emitChange();
+    broadcastLocalUpdate();
 
     saveHabitAction(newHabit).catch((e) => {
       console.error('Background server habit add error:', e);
@@ -273,6 +384,7 @@ export function useHabitStore() {
 
     persistLocally(globalHabits, globalLogs);
     emitChange();
+    broadcastLocalUpdate();
 
     if (updatedHabitObj) {
       saveHabitAction(updatedHabitObj).catch((e) => {
@@ -281,10 +393,12 @@ export function useHabitStore() {
     }
   };
 
-  // 4. Delete Habit
+  // 4. Delete Habit (Optimistic + Server Action + Cascade Logs cleanup)
   const deleteHabit = async (habitId: string) => {
+    // Remove habit from memory
     globalHabits = globalHabits.filter((h) => h.id !== habitId);
     
+    // Remove all associated logs
     const newLogs: Record<string, HabitLog> = {};
     Object.entries(globalLogs).forEach(([key, log]) => {
       if (log.habit_id !== habitId) {
@@ -293,12 +407,22 @@ export function useHabitStore() {
     });
     globalLogs = newLogs;
 
+    // Persist to localStorage and notify other open tabs
     persistLocally(globalHabits, globalLogs);
     emitChange();
+    broadcastLocalUpdate();
 
-    deleteHabitAction(habitId).catch((e) => {
+    // Delete on the server cloud database
+    try {
+      const res = await deleteHabitAction(habitId);
+      if (!res.success && res.error) {
+        console.error('Server habit delete error:', res.error);
+        setSyncError(res.error);
+      }
+    } catch (e: any) {
       console.error('Background server habit delete error:', e);
-    });
+      setSyncError(e?.message || 'Failed to delete on server');
+    }
   };
 
   // 5. Reorder Habits
@@ -307,6 +431,7 @@ export function useHabitStore() {
     globalHabits = updated;
     persistLocally(globalHabits, globalLogs);
     emitChange();
+    broadcastLocalUpdate();
 
     reorderHabitsAction(updated).catch((e) => {
       console.error('Background server reorder error:', e);
@@ -320,7 +445,7 @@ export function useHabitStore() {
     isLoading,
     isSyncing,
     syncError,
-    isCloudReady: true,
+    isCloudReady,
     toggleHabit,
     addHabit,
     updateHabit,
