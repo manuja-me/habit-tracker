@@ -191,20 +191,23 @@ export function useHabitStore() {
             localStorage.setItem(INITIALIZED_KEY, 'true');
           }
         } else {
-          // Cloud database is authoritative!
-          // If a habit was deleted on another device, serverHabits will NOT contain it.
-          // Replacing local habits with serverHabits ensures deleted habits disappear on this device too.
           if (typeof window !== 'undefined') {
             localStorage.setItem(INITIALIZED_KEY, 'true');
           }
 
-          globalHabits = serverHabits;
-          globalLogs = serverLogs;
-          setHabits(serverHabits);
-          setLogs(serverLogs);
-          persistLocally(globalHabits, globalLogs);
-          emitChange();
-          broadcastLocalUpdate();
+          // Check if data actually changed before updating state to avoid UI jitter
+          const habitsChanged = JSON.stringify(serverHabits) !== JSON.stringify(globalHabits);
+          const logsChanged = JSON.stringify(serverLogs) !== JSON.stringify(globalLogs);
+
+          if (habitsChanged || logsChanged) {
+            globalHabits = serverHabits;
+            globalLogs = serverLogs;
+            setHabits([...serverHabits]);
+            setLogs({ ...serverLogs });
+            persistLocally(globalHabits, globalLogs);
+            emitChange();
+            broadcastLocalUpdate();
+          }
         }
       }
     } catch (err: any) {

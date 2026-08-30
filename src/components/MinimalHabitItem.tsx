@@ -4,12 +4,11 @@ import React, { useState } from 'react';
 import { 
   Check, 
   Flame, 
-  MoreVertical, 
   Edit3, 
   Trash2, 
   Plus, 
   Minus,
-  CheckCircle2
+  AlertCircle
 } from 'lucide-react';
 import { Habit, HabitLog, HabitStats } from '../lib/types';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
@@ -34,7 +33,7 @@ export function MinimalHabitItem({
   onEdit,
   onDelete,
 }: MinimalHabitItemProps) {
-  const [showMenu, setShowMenu] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   const isCompleted = Boolean(log?.completed);
   const currentValue = log?.value ?? (isCompleted ? habit.target_value : 0);
@@ -59,176 +58,157 @@ export function MinimalHabitItem({
     ? Math.min(100, Math.round((currentValue / habit.target_value) * 100))
     : (isCompleted ? 100 : 0);
 
-  const presetSteps = habit.target_value >= 1000 
-    ? [250, 500, 1000] 
-    : habit.target_value >= 50 
-    ? [5, 10, 25] 
-    : habit.target_value >= 10 
-    ? [1, 2, 5] 
-    : [1];
-
   return (
     <div
-      onMouseLeave={() => setShowMenu(false)}
-      className={`group relative flex flex-col p-3.5 sm:p-4 rounded-none transition-all duration-150 border ${
+      className={`group relative flex flex-col p-3 sm:p-3.5 rounded-none transition-all duration-150 border font-mono ${
         isCompleted
-          ? 'bg-card/70 border-emerald-500/40'
-          : 'bg-card border-main hover:border-hover'
+          ? 'bg-card/50 border-emerald-500/30'
+          : 'bg-card border-main hover:border-emerald-500/40'
       }`}
     >
-      {/* Top Row: Checkbox, Title, Quick Actions */}
+      {/* Main Row: Checkbox, Title & Streak, Action Buttons */}
       <div className="flex items-center justify-between gap-2.5 sm:gap-3">
-        {/* Left: Checkbox + Icon + Title */}
+        {/* Left Side: Checkbox + Icon + Title */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-          {/* Sharp Checkbox */}
+          {/* Tactile Checkbox */}
           <button
             onClick={handleCheckboxClick}
-            className={`relative flex-shrink-0 w-7 h-7 rounded-none flex items-center justify-center transition-all duration-100 active:scale-95 cursor-pointer touch-manipulation ${
+            className={`relative flex-shrink-0 w-6 h-6 sm:w-7 sm:h-7 rounded-none flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation ${
               isCompleted
-                ? 'bg-emerald-500 text-black border border-emerald-400'
-                : 'border border-main hover:border-emerald-500 bg-input'
+                ? 'bg-emerald-500 text-black border border-emerald-400 shadow-sm'
+                : 'border border-main hover:border-emerald-500 bg-input/70'
             }`}
             aria-label={isCompleted ? 'Mark incomplete' : 'Mark complete'}
           >
             {isCompleted && (
-              <Check className="w-4 h-4 stroke-[3]" />
+              <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[3]" />
             )}
           </button>
 
-          {/* Icon Badge */}
+          {/* Minimal Category Icon */}
           <div 
-            className="flex-shrink-0 w-7 h-7 rounded-none flex items-center justify-center border border-subtle"
+            className="flex-shrink-0 w-6 h-6 sm:w-7 sm:h-7 rounded-none flex items-center justify-center border border-subtle"
             style={{ 
-              backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.15)' : colorConfig.bg,
+              backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.12)' : colorConfig.bg,
               color: isCompleted ? '#10B981' : colorConfig.hex 
             }}
           >
-            <IconComponent className="w-3.5 h-3.5" />
+            <IconComponent className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
           </div>
 
-          {/* Title & Description */}
-          <div className="min-w-0 flex-1">
+          {/* Title and Streak */}
+          <div className="min-w-0 flex-1 flex flex-col justify-center">
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-              <h3 className="text-xs sm:text-sm font-bold font-mono tracking-tight truncate text-main">
+              <span 
+                onClick={handleCheckboxClick}
+                className={`text-xs sm:text-sm font-bold tracking-tight truncate cursor-pointer select-none transition-colors ${
+                  isCompleted ? 'text-sub line-through opacity-80' : 'text-main'
+                }`}
+              >
                 {habit.title}
-              </h3>
+              </span>
               
-              {/* Streak Badge */}
+              {/* Clean Streak Tag */}
               {stats.currentStreak > 0 && (
-                <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-none text-[10px] font-mono font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30">
-                  <Flame className="w-3 h-3 fill-amber-500" />
-                  {stats.currentStreak}D
-                </span>
-              )}
-
-              {isCompleted && (
-                <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-none text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
-                  DONE
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                  <Flame className="w-2.5 h-2.5 fill-amber-500" />
+                  {stats.currentStreak}d
                 </span>
               )}
             </div>
 
             {habit.description && (
-              <p className="text-[11px] font-mono text-sub truncate mt-0.5">
+              <p className="text-[10px] sm:text-[11px] text-sub truncate mt-0.5">
                 {habit.description}
               </p>
             )}
           </div>
         </div>
 
-        {/* Right Controls */}
-        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-          {/* Quick Menu Button */}
-          <div className="relative">
-            <button
-              onClick={() => setShowMenu(!showMenu)}
-              className="p-1.5 rounded-none text-sub hover:text-main hover:bg-subtle transition-colors cursor-pointer touch-manipulation"
-              aria-label="Habit options"
-            >
-              <MoreVertical className="w-4 h-4" />
-            </button>
-
-            {showMenu && (
-              <div 
-                className="absolute right-0 top-7 z-30 w-36 rounded-none bg-card border border-main p-1 shadow-2xl animate-in fade-in duration-100"
+        {/* Right Side: Quick Action Buttons (Edit / Delete) */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {isConfirmingDelete ? (
+            <div className="flex items-center gap-1 bg-rose-500/10 border border-rose-500/30 p-1 animate-in fade-in duration-100">
+              <span className="text-[10px] text-rose-500 font-bold px-1">DELETE?</span>
+              <button
+                onClick={() => onDelete(habit.id)}
+                className="px-2 py-0.5 text-[10px] font-bold bg-rose-500 text-black hover:bg-rose-400 cursor-pointer touch-manipulation"
               >
-                <button
-                  onClick={() => {
-                    setShowMenu(false);
-                    onEdit(habit);
-                  }}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs font-mono text-sub hover:text-main hover:bg-subtle rounded-none transition-colors cursor-pointer touch-manipulation"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  EDIT
-                </button>
-                <button
-                  onClick={() => {
-                    setShowMenu(false);
-                    onDelete(habit.id);
-                  }}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs font-mono text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 rounded-none transition-colors cursor-pointer touch-manipulation"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  DELETE
-                </button>
-              </div>
-            )}
-          </div>
+                YES
+              </button>
+              <button
+                onClick={() => setIsConfirmingDelete(false)}
+                className="px-1.5 py-0.5 text-[10px] text-sub hover:text-main cursor-pointer touch-manipulation"
+              >
+                NO
+              </button>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => onEdit(habit)}
+                className="p-1.5 text-sub hover:text-main hover:bg-subtle transition-colors cursor-pointer touch-manipulation"
+                title="Edit habit"
+                aria-label="Edit habit"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setIsConfirmingDelete(true)}
+                className="p-1.5 text-sub hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer touch-manipulation"
+                title="Delete habit"
+                aria-label="Delete habit"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Measurable Progress Section */}
+      {/* Numeric Progress Section (Clean & uncluttered) */}
       {habit.type === 'number' && (
-        <div className="mt-3 pt-2.5 border-t border-subtle space-y-2">
-          {/* Status Label & Stepper Controls */}
-          <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <span className="font-bold text-main font-mono text-xs">
-                {currentValue.toLocaleString()} <span className="text-sub font-normal">/ {habit.target_value.toLocaleString()} {habit.target_unit}</span>
+        <div className="mt-2.5 pt-2 border-t border-subtle/60 space-y-1.5">
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-1.5 text-[11px] sm:text-xs">
+              <span className="font-bold text-main">
+                {currentValue.toLocaleString()}
               </span>
-              <span className="px-1 py-0.5 rounded-none text-[10px] font-mono font-bold bg-subtle text-sub border border-main">
+              <span className="text-sub">
+                / {habit.target_value.toLocaleString()} {habit.target_unit}
+              </span>
+              <span className="text-[10px] font-bold text-sub px-1 py-0.2 border border-subtle bg-subtle/50">
                 {progressPercent}%
               </span>
             </div>
 
-            {/* Quick Add Presets & Steppers */}
-            <div className="flex items-center gap-1 flex-wrap sm:flex-nowrap">
+            {/* Clean Inline Steppers */}
+            <div className="flex items-center gap-1">
               <button
                 onClick={(e) => handleIncrement(e, -stepAmount)}
-                className="w-7 h-7 sm:w-6 sm:h-6 rounded-none flex items-center justify-center bg-input hover:bg-subtle active:bg-subtle border border-main text-sub hover:text-main transition-colors cursor-pointer touch-manipulation"
-                title={`Subtract ${stepAmount}`}
-                aria-label={`Subtract ${stepAmount}`}
+                className="w-6 h-6 flex items-center justify-center bg-input hover:bg-subtle active:bg-subtle border border-main text-sub hover:text-main transition-colors cursor-pointer touch-manipulation"
+                title={`-${stepAmount}`}
+                aria-label={`-${stepAmount}`}
               >
-                <Minus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                <Minus className="w-3 h-3" />
               </button>
-
-              {presetSteps.map((amt) => (
-                <button
-                  key={amt}
-                  onClick={(e) => handleIncrement(e, amt)}
-                  className="h-7 sm:h-6 px-2 sm:px-1.5 rounded-none text-[10px] font-mono font-medium bg-input hover:bg-subtle active:bg-subtle border border-main text-sub hover:text-main transition-colors cursor-pointer touch-manipulation"
-                >
-                  +{amt}
-                </button>
-              ))}
 
               <button
                 onClick={(e) => handleIncrement(e, stepAmount)}
-                className="w-7 h-7 sm:w-6 sm:h-6 rounded-none flex items-center justify-center bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/30 border border-emerald-500/30 text-emerald-500 font-bold transition-colors cursor-pointer touch-manipulation"
-                title={`Add ${stepAmount}`}
-                aria-label={`Add ${stepAmount}`}
+                className="h-6 px-2 text-[10px] font-bold bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/30 border border-emerald-500/30 text-emerald-500 transition-colors cursor-pointer touch-manipulation"
+                title={`+${stepAmount}`}
+                aria-label={`+${stepAmount}`}
               >
-                <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3 stroke-[2.5]" />
+                +{stepAmount}
               </button>
             </div>
           </div>
 
-          {/* High-Contrast Visual Progress Bar */}
+          {/* Clean Progress Bar */}
           <Progress
             value={currentValue}
             max={habit.target_value}
-            size="md"
+            size="sm"
             indicatorColor={isCompleted ? '#10B981' : habit.color}
           />
         </div>
