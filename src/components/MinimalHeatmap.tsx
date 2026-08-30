@@ -56,16 +56,16 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6">
-      <div className="p-4 sm:p-5 rounded-none bg-card border border-main transition-colors">
+    <div className="w-full max-w-4xl mx-auto px-3.5 sm:px-6">
+      <div className="p-3.5 sm:p-5 rounded-none bg-card border border-main transition-colors">
         {/* Header & Filter */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-5">
           <div>
             <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-emerald-500" />
-              <h2 className="text-sm font-bold font-mono uppercase text-main">CONSISTENCY HEATMAP</h2>
+              <Activity className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+              <h2 className="text-xs sm:text-sm font-bold font-mono uppercase text-main">CONSISTENCY HEATMAP</h2>
             </div>
-            <p className="text-xs text-sub font-mono mt-0.5">
+            <p className="text-[11px] sm:text-xs text-sub font-mono mt-0.5">
               {totalCheckins} logs across {activeDays} active days in past 364 days
             </p>
           </div>
@@ -73,7 +73,7 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
           <select
             value={selectedHabitId}
             onChange={(e) => setSelectedHabitId(e.target.value)}
-            className="text-xs font-mono font-medium bg-input text-main border border-main rounded-none px-3 py-1.5 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
+            className="w-full sm:w-auto text-xs font-mono font-medium bg-input text-main border border-main rounded-none px-3 py-2 sm:py-1.5 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
           >
             <option value="all">ALL HABITS</option>
             {habits.map((h) => (
@@ -85,16 +85,17 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
         </div>
 
         {/* Heatmap Grid */}
-        <div className="overflow-x-auto pb-2">
+        <div className="overflow-x-auto -mx-3.5 px-3.5 sm:mx-0 sm:px-0 pb-2">
           <div className="flex gap-1 min-w-[700px] justify-between">
             {weeks.map((week, wIdx) => (
               <div key={wIdx} className="flex flex-col gap-1">
                 {week.map((day) => (
                   <div
                     key={day.date}
+                    onClick={() => setHoveredDay(day)}
                     onMouseEnter={() => setHoveredDay(day)}
                     onMouseLeave={() => setHoveredDay(null)}
-                    className={`w-3 h-3 rounded-none border transition-all duration-100 cursor-pointer ${getLevelStyle(
+                    className={`w-3 h-3 rounded-none border transition-all duration-100 cursor-pointer touch-manipulation ${getLevelStyle(
                       day.level
                     )}`}
                   />
@@ -105,10 +106,10 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
         </div>
 
         {/* Footer: Legend & Tooltip detail */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-4 pt-3 border-t border-subtle text-xs font-mono">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 sm:gap-3 mt-4 pt-3 border-t border-subtle text-xs font-mono">
           <div className="text-main min-h-[1.5rem] flex items-center gap-2">
             {hoveredDay ? (
-              <div className="flex items-center gap-2 animate-in fade-in duration-100">
+              <div className="flex items-center gap-2 animate-in fade-in duration-100 flex-wrap">
                 <span className="font-bold text-main">
                   {formatDisplayDate(hoveredDay.date)}:
                 </span>
@@ -122,13 +123,13 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
                 )}
               </div>
             ) : (
-              <span className="text-sub flex items-center gap-1.5">
-                <Info className="w-3.5 h-3.5" /> Hover or tap any cell for details
+              <span className="text-sub flex items-center gap-1.5 text-[11px] sm:text-xs">
+                <Info className="w-3.5 h-3.5 flex-shrink-0" /> Tap or hover any cell for details
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 text-sub text-[11px]">
+          <div className="flex items-center gap-1.5 text-sub text-[10px] sm:text-[11px]">
             <span>LESS</span>
             <div className="w-2.5 h-2.5 rounded-none bg-[var(--heatmap-empty)] border border-subtle" />
             <div className="w-2.5 h-2.5 rounded-none bg-emerald-900/60 border border-emerald-700/50" />

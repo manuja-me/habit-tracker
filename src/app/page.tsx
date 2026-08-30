@@ -173,7 +173,7 @@ export default function HabitTrackerPage() {
       {/* Main View Content */}
       <main className="w-full">
         {activeTab === 'today' && (
-          <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 space-y-4">
+          <div className="w-full max-w-4xl mx-auto px-3.5 sm:px-6 space-y-3 sm:space-y-4">
             {/* Filter pills */}
             <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 text-xs">
               <div className="flex items-center gap-1">
@@ -185,9 +185,9 @@ export default function HabitTrackerPage() {
                   <button
                     key={f.id}
                     onClick={() => setFilterCategory(f.id)}
-                    className={`px-3 py-1 rounded-none text-xs font-mono font-medium transition-all cursor-pointer ${
+                    className={`px-2.5 sm:px-3 py-1 rounded-none text-xs font-mono font-medium transition-all cursor-pointer touch-manipulation select-none ${
                       filterCategory === f.id
-                        ? 'bg-card text-main font-bold border border-main'
+                        ? 'bg-card text-main font-bold border border-main shadow-xs'
                         : 'text-sub hover:text-main hover:bg-subtle/50'
                     }`}
                   >
@@ -196,25 +196,25 @@ export default function HabitTrackerPage() {
                 ))}
               </div>
 
-              <span className="text-xs text-sub font-mono">
+              <span className="text-[11px] sm:text-xs text-sub font-mono flex-shrink-0">
                 {displayedDailyHabits.length} HABITS
               </span>
             </div>
 
             {/* Habit List */}
             {displayedDailyHabits.length === 0 ? (
-              <div className="p-12 text-center rounded-none bg-card border border-main transition-colors">
+              <div className="p-8 sm:p-12 text-center rounded-none bg-card border border-main transition-colors">
                 <div className="w-10 h-10 rounded-none bg-subtle text-emerald-500 border border-subtle flex items-center justify-center mx-auto mb-4">
                   <Sparkles className="w-5 h-5" />
                 </div>
-                <h3 className="text-sm font-bold font-mono uppercase text-main mb-1">
+                <h3 className="text-xs sm:text-sm font-bold font-mono uppercase text-main mb-1">
                   {filterCategory === 'completed'
                     ? 'No habits completed yet today'
                     : filterCategory === 'pending'
                     ? 'All clear! Everything is completed.'
                     : 'No habits scheduled for today'}
                 </h3>
-                <p className="text-xs font-mono text-sub max-w-sm mx-auto mb-6">
+                <p className="text-[11px] sm:text-xs font-mono text-sub max-w-sm mx-auto mb-6">
                   {filterCategory === 'all'
                     ? 'Start building your daily routines by creating your first custom habit.'
                     : 'Consistency maintained.'}
@@ -222,7 +222,7 @@ export default function HabitTrackerPage() {
                 {filterCategory === 'all' && (
                   <button
                     onClick={handleOpenAddModal}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-none text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-400 active:scale-95 transition-all cursor-pointer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-none text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-400 active:scale-95 transition-all cursor-pointer touch-manipulation"
                   >
                     <Plus className="w-4 h-4 stroke-[3]" />
                     <span>ADD HABIT</span>
@@ -230,7 +230,7 @@ export default function HabitTrackerPage() {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-2">
+              <div className="grid grid-cols-1 gap-2.5 sm:gap-2">
                 {displayedDailyHabits.map((habit) => (
                   <MinimalHabitItem
                     key={habit.id}

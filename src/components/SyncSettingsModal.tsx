@@ -24,10 +24,10 @@ export function SyncSettingsModal({ isOpen, onClose }: SyncSettingsModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-100 font-mono">
-      <div className="w-full max-w-md rounded-none bg-card border border-main p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-100 font-mono">
+      <div className="w-full max-w-md rounded-none bg-card border border-main p-4 sm:p-6 shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-subtle">
+        <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-subtle">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-none bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 flex items-center justify-center">
               <Cloud className="w-4 h-4" />
@@ -38,14 +38,15 @@ export function SyncSettingsModal({ isOpen, onClose }: SyncSettingsModalProps) {
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-none text-sub hover:text-main hover:bg-subtle transition-colors cursor-pointer"
+            className="p-1 rounded-none text-sub hover:text-main hover:bg-subtle transition-colors cursor-pointer touch-manipulation"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="pt-4 space-y-4">
-          <div className="p-4 rounded-none bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-600 dark:text-emerald-300 space-y-2">
+        <div className="pt-3 sm:pt-4 space-y-3.5 sm:space-y-4">
+          <div className="p-3.5 sm:p-4 rounded-none bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-600 dark:text-emerald-300 space-y-2">
             <div className="flex items-center gap-2 font-bold text-emerald-500">
               <Check className="w-4 h-4" />
               SERVER ACTION GATEWAY ACTIVE
@@ -68,7 +69,7 @@ export function SyncSettingsModal({ isOpen, onClose }: SyncSettingsModalProps) {
           <button
             onClick={() => syncWithCloud()}
             disabled={isSyncing}
-            className="w-full py-2.5 flex items-center justify-center gap-2 text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black rounded-none border border-emerald-400 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+            className="w-full py-2.5 flex items-center justify-center gap-2 text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black rounded-none border border-emerald-400 active:scale-95 transition-all disabled:opacity-50 cursor-pointer touch-manipulation"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>{isSyncing ? 'SYNCING...' : 'FORCE SYNC NOW'}</span>
@@ -76,7 +77,7 @@ export function SyncSettingsModal({ isOpen, onClose }: SyncSettingsModalProps) {
 
           <button
             onClick={onClose}
-            className="w-full py-2 text-xs font-mono font-medium bg-subtle hover:bg-main border border-subtle text-main rounded-none transition-all cursor-pointer"
+            className="w-full py-2 text-xs font-mono font-medium bg-subtle hover:bg-main border border-subtle text-main rounded-none transition-all cursor-pointer touch-manipulation"
           >
             CLOSE
           </button>

@@ -70,20 +70,20 @@ export function MinimalHabitItem({
   return (
     <div
       onMouseLeave={() => setShowMenu(false)}
-      className={`group relative flex flex-col p-4 rounded-none transition-all duration-150 border ${
+      className={`group relative flex flex-col p-3.5 sm:p-4 rounded-none transition-all duration-150 border ${
         isCompleted
           ? 'bg-card/70 border-emerald-500/40'
           : 'bg-card border-main hover:border-hover'
       }`}
     >
       {/* Top Row: Checkbox, Title, Quick Actions */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-2.5 sm:gap-3">
         {/* Left: Checkbox + Icon + Title */}
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
           {/* Sharp Checkbox */}
           <button
             onClick={handleCheckboxClick}
-            className={`relative flex-shrink-0 w-7 h-7 rounded-none flex items-center justify-center transition-all duration-100 active:scale-95 cursor-pointer ${
+            className={`relative flex-shrink-0 w-7 h-7 rounded-none flex items-center justify-center transition-all duration-100 active:scale-95 cursor-pointer touch-manipulation ${
               isCompleted
                 ? 'bg-emerald-500 text-black border border-emerald-400'
                 : 'border border-main hover:border-emerald-500 bg-input'
@@ -108,7 +108,7 @@ export function MinimalHabitItem({
 
           {/* Title & Description */}
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               <h3 className="text-xs sm:text-sm font-bold font-mono tracking-tight truncate text-main">
                 {habit.title}
               </h3>
@@ -137,12 +137,13 @@ export function MinimalHabitItem({
         </div>
 
         {/* Right Controls */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
           {/* Quick Menu Button */}
           <div className="relative">
             <button
               onClick={() => setShowMenu(!showMenu)}
-              className="p-1 rounded-none text-sub hover:text-main hover:bg-subtle transition-colors cursor-pointer"
+              className="p-1.5 rounded-none text-sub hover:text-main hover:bg-subtle transition-colors cursor-pointer touch-manipulation"
+              aria-label="Habit options"
             >
               <MoreVertical className="w-4 h-4" />
             </button>
@@ -156,7 +157,7 @@ export function MinimalHabitItem({
                     setShowMenu(false);
                     onEdit(habit);
                   }}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs font-mono text-sub hover:text-main hover:bg-subtle rounded-none transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs font-mono text-sub hover:text-main hover:bg-subtle rounded-none transition-colors cursor-pointer touch-manipulation"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                   EDIT
@@ -166,7 +167,7 @@ export function MinimalHabitItem({
                     setShowMenu(false);
                     onDelete(habit.id);
                   }}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs font-mono text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 rounded-none transition-colors cursor-pointer"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs font-mono text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 rounded-none transition-colors cursor-pointer touch-manipulation"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   DELETE
@@ -181,8 +182,8 @@ export function MinimalHabitItem({
       {habit.type === 'number' && (
         <div className="mt-3 pt-2.5 border-t border-subtle space-y-2">
           {/* Status Label & Stepper Controls */}
-          <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <span className="font-bold text-main font-mono text-xs">
                 {currentValue.toLocaleString()} <span className="text-sub font-normal">/ {habit.target_value.toLocaleString()} {habit.target_unit}</span>
               </span>
@@ -192,20 +193,21 @@ export function MinimalHabitItem({
             </div>
 
             {/* Quick Add Presets & Steppers */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-wrap sm:flex-nowrap">
               <button
                 onClick={(e) => handleIncrement(e, -stepAmount)}
-                className="w-6 h-6 rounded-none flex items-center justify-center bg-input hover:bg-subtle border border-main text-sub hover:text-main transition-colors cursor-pointer"
+                className="w-7 h-7 sm:w-6 sm:h-6 rounded-none flex items-center justify-center bg-input hover:bg-subtle active:bg-subtle border border-main text-sub hover:text-main transition-colors cursor-pointer touch-manipulation"
                 title={`Subtract ${stepAmount}`}
+                aria-label={`Subtract ${stepAmount}`}
               >
-                <Minus className="w-3 h-3" />
+                <Minus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
               </button>
 
               {presetSteps.map((amt) => (
                 <button
                   key={amt}
                   onClick={(e) => handleIncrement(e, amt)}
-                  className="px-1.5 py-0.5 rounded-none text-[10px] font-mono font-medium bg-input hover:bg-subtle border border-main text-sub hover:text-main transition-colors cursor-pointer"
+                  className="h-7 sm:h-6 px-2 sm:px-1.5 rounded-none text-[10px] font-mono font-medium bg-input hover:bg-subtle active:bg-subtle border border-main text-sub hover:text-main transition-colors cursor-pointer touch-manipulation"
                 >
                   +{amt}
                 </button>
@@ -213,10 +215,11 @@ export function MinimalHabitItem({
 
               <button
                 onClick={(e) => handleIncrement(e, stepAmount)}
-                className="w-6 h-6 rounded-none flex items-center justify-center bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-500 font-bold transition-colors cursor-pointer"
+                className="w-7 h-7 sm:w-6 sm:h-6 rounded-none flex items-center justify-center bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/30 border border-emerald-500/30 text-emerald-500 font-bold transition-colors cursor-pointer touch-manipulation"
                 title={`Add ${stepAmount}`}
+                aria-label={`Add ${stepAmount}`}
               >
-                <Plus className="w-3 h-3 stroke-[2.5]" />
+                <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3 stroke-[2.5]" />
               </button>
             </div>
           </div>

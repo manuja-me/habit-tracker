@@ -14,6 +14,14 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const pinRef = useRef(pin);
+  pinRef.current = pin;
+  const isVerifyingRef = useRef(isVerifying);
+  isVerifyingRef.current = isVerifying;
+  const lockoutSecondsRef = useRef(lockoutSeconds);
+  lockoutSecondsRef.current = lockoutSeconds;
+
   // Auto check URL query string ?pin= on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -23,6 +31,11 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
         verifyAndSubmit(urlPin);
       }
     }
+  }, []);
+
+  // Auto focus container on mount so key events work instantly without clicking
+  useEffect(() => {
+    containerRef.current?.focus();
   }, []);
 
   // Lockout countdown timer
@@ -36,7 +49,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   }, [lockoutSeconds]);
 
   const verifyAndSubmit = async (enteredPin: string) => {
-    if (enteredPin.length !== 4 || isVerifying || lockoutSeconds !== null) return;
+    if (enteredPin.length !== 4 || isVerifyingRef.current || lockoutSecondsRef.current !== null) return;
     setIsVerifying(true);
     setErrorMsg(null);
 
@@ -64,9 +77,10 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   };
 
   const handleDigitPress = (digit: string) => {
-    if (lockoutSeconds !== null) return;
-    if (pin.length < 4 && !isVerifying) {
-      const nextPin = pin + digit;
+    if (lockoutSecondsRef.current !== null || isVerifyingRef.current) return;
+    const currentPin = pinRef.current;
+    if (currentPin.length < 4) {
+      const nextPin = currentPin + digit;
       setPin(nextPin);
       if (nextPin.length === 4) {
         verifyAndSubmit(nextPin);
@@ -75,40 +89,65 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   };
 
   const handleBackspace = () => {
-    if (lockoutSeconds !== null) return;
+    if (lockoutSecondsRef.current !== null || isVerifyingRef.current) return;
     setPin((prev) => prev.slice(0, -1));
     setErrorMsg(null);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (lockoutSeconds !== null) return;
-    if (e.key >= '0' && e.key <= '9') {
-      handleDigitPress(e.key);
-    } else if (e.key === 'Backspace') {
-      handleBackspace();
+  // Global window listener: allows immediate typing anywhere on the page without clicking
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Let browser shortcuts pass through
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      if (lockoutSecondsRef.current !== null || isVerifyingRef.current) return;
+
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        handleDigitPress(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handleBackspace();
+      } else if (e.key === 'Escape' || e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        setPin('');
+        setErrorMsg(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const text = e.clipboardData.getData('text').trim();
+    if (/^\d{4}$/.test(text) && lockoutSecondsRef.current === null && !isVerifyingRef.current) {
+      e.preventDefault();
+      setPin(text);
+      verifyAndSubmit(text);
     }
   };
 
   return (
     <div
+      ref={containerRef}
       tabIndex={0}
-      onKeyDown={handleKeyDown}
-      className="min-h-screen bg-main text-main flex flex-col items-center justify-center p-4 selection:bg-emerald-500/30 font-mono select-none outline-none"
+      onPaste={handlePaste}
+      className="min-h-screen bg-main text-main flex flex-col items-center justify-center p-3.5 sm:p-6 selection:bg-emerald-500/30 font-mono select-none outline-none focus:outline-none"
     >
-      <div className="w-full max-w-sm rounded-none bg-card border border-main p-6 sm:p-8 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-150">
+      <div className="w-full max-w-[360px] sm:max-w-md rounded-none bg-card border border-main p-5 sm:p-8 shadow-2xl space-y-5 sm:space-y-6 animate-in fade-in zoom-in-95 duration-150">
         {/* Terminal Header */}
-        <div className="border-b border-subtle pb-4 space-y-2">
+        <div className="border-b border-subtle pb-3.5 sm:pb-4 space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-none bg-emerald-500 flex items-center justify-center text-black font-bold">
                 <Flame className="w-3.5 h-3.5 fill-black" />
               </div>
-              <span className="text-xs font-bold tracking-widest text-main uppercase">
+              <span className="text-[11px] sm:text-xs font-bold tracking-widest text-main uppercase">
                 ZENITH // SECURE GATE
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-[10px] text-emerald-500 font-bold border border-emerald-500/30 px-1.5 py-0.5 bg-emerald-500/10">
-              <Lock className="w-3 h-3" />
+            <div className="flex items-center gap-1 text-[9px] sm:text-[10px] text-emerald-500 font-bold border border-emerald-500/30 px-1.5 py-0.5 bg-emerald-500/10">
+              <Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
               PROTECTED
             </div>
           </div>
@@ -119,17 +158,17 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
 
         {/* PIN Dots Display */}
         <div className="space-y-3">
-          <div className="flex items-center justify-center gap-3 py-2">
+          <div className="flex items-center justify-center gap-2.5 sm:gap-4 py-1 sm:py-2">
             {[0, 1, 2, 3].map((index) => {
               const isFilled = pin.length > index;
               return (
                 <div
                   key={index}
-                  className={`w-11 h-12 rounded-none flex items-center justify-center border text-lg font-bold transition-all duration-100 ${
+                  className={`w-12 h-14 sm:w-14 sm:h-16 rounded-none flex items-center justify-center border text-2xl sm:text-3xl font-bold transition-all duration-100 ${
                     errorMsg
                       ? 'border-rose-500 bg-rose-500/10 text-rose-500'
                       : isFilled
-                      ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500'
+                      ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500 shadow-xs'
                       : 'border-main bg-input text-sub'
                   }`}
                 >
@@ -161,14 +200,14 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
         </div>
 
         {/* Numeric Keypad */}
-        <div className="grid grid-cols-3 gap-2 pt-2">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-1">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
             <button
               key={digit}
               type="button"
               disabled={lockoutSeconds !== null || isVerifying}
               onClick={() => handleDigitPress(digit)}
-              className="h-12 rounded-none bg-input hover:bg-subtle border border-main text-sm font-bold text-main transition-all active:scale-95 cursor-pointer flex items-center justify-center font-mono disabled:opacity-40"
+              className="h-14 sm:h-16 rounded-none bg-input hover:bg-subtle active:bg-emerald-500/15 border border-main hover:border-hover active:border-emerald-500/40 text-xl sm:text-2xl font-bold text-main transition-all active:scale-[0.96] cursor-pointer flex items-center justify-center font-mono disabled:opacity-40 touch-manipulation select-none"
             >
               {digit}
             </button>
@@ -177,7 +216,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
             type="button"
             disabled={lockoutSeconds !== null || isVerifying}
             onClick={() => { setPin(''); setErrorMsg(null); }}
-            className="h-12 rounded-none bg-input hover:bg-subtle border border-main text-[11px] font-bold text-sub hover:text-main transition-all active:scale-95 cursor-pointer flex items-center justify-center font-mono disabled:opacity-40"
+            className="h-14 sm:h-16 rounded-none bg-input hover:bg-subtle active:bg-subtle border border-main hover:border-hover text-[11px] sm:text-xs font-bold tracking-wider text-sub hover:text-main transition-all active:scale-[0.96] cursor-pointer flex items-center justify-center font-mono disabled:opacity-40 touch-manipulation select-none"
           >
             CLEAR
           </button>
@@ -185,7 +224,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
             type="button"
             disabled={lockoutSeconds !== null || isVerifying}
             onClick={() => handleDigitPress('0')}
-            className="h-12 rounded-none bg-input hover:bg-subtle border border-main text-sm font-bold text-main transition-all active:scale-95 cursor-pointer flex items-center justify-center font-mono disabled:opacity-40"
+            className="h-14 sm:h-16 rounded-none bg-input hover:bg-subtle active:bg-emerald-500/15 border border-main hover:border-hover active:border-emerald-500/40 text-xl sm:text-2xl font-bold text-main transition-all active:scale-[0.96] cursor-pointer flex items-center justify-center font-mono disabled:opacity-40 touch-manipulation select-none"
           >
             0
           </button>
@@ -193,15 +232,16 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
             type="button"
             disabled={lockoutSeconds !== null || isVerifying}
             onClick={handleBackspace}
-            className="h-12 rounded-none bg-input hover:bg-subtle border border-main text-sub hover:text-rose-500 transition-all active:scale-95 cursor-pointer flex items-center justify-center font-mono disabled:opacity-40"
+            className="h-14 sm:h-16 rounded-none bg-input hover:bg-subtle active:bg-rose-500/15 border border-main hover:border-hover text-sub hover:text-rose-500 active:border-rose-500/40 transition-all active:scale-[0.96] cursor-pointer flex items-center justify-center font-mono disabled:opacity-40 touch-manipulation select-none"
             title="Backspace"
+            aria-label="Backspace"
           >
-            <Delete className="w-4 h-4" />
+            <Delete className="w-5 h-5 sm:w-6 sm:h-6" />
           </button>
         </div>
 
         {/* Footer Hint */}
-        <div className="pt-2 text-center text-[10px] text-muted-custom border-t border-subtle">
+        <div className="pt-2 text-center text-[10px] sm:text-[11px] text-muted-custom border-t border-subtle">
           TIP: ENTER PIN 1001 OR VISIT ?pin=1001 ONCE
         </div>
       </div>

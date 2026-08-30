@@ -19,7 +19,7 @@ export function ViewTabs({ activeTab, onTabChange }: ViewTabsProps) {
   ];
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 mb-6">
+    <div className="w-full max-w-4xl mx-auto px-3.5 sm:px-6 mb-4 sm:mb-6">
       <div className="flex items-center p-0.5 bg-card border border-main rounded-none max-w-md mx-auto sm:mx-0">
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -28,14 +28,14 @@ export function ViewTabs({ activeTab, onTabChange }: ViewTabsProps) {
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-none text-xs font-mono font-medium transition-all cursor-pointer ${
+              className={`flex-1 flex items-center justify-center gap-1 sm:gap-2 py-2 px-1 sm:px-3 rounded-none text-[10px] sm:text-xs font-mono font-medium transition-all cursor-pointer touch-manipulation select-none ${
                 isActive
                   ? 'bg-subtle text-main border border-main font-bold shadow-xs'
                   : 'text-sub hover:text-main hover:bg-subtle/50'
               }`}
             >
-              <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-500' : 'text-sub'}`} />
-              <span>{tab.label}</span>
+              <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-emerald-500' : 'text-sub'}`} />
+              <span className="truncate">{tab.label}</span>
             </button>
           );
         })}

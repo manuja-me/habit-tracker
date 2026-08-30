@@ -36,47 +36,49 @@ export function WeeklyGrid({
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6">
-      <div className="p-4 sm:p-5 rounded-none bg-card border border-main transition-colors">
+    <div className="w-full max-w-4xl mx-auto px-3.5 sm:px-6">
+      <div className="p-3.5 sm:p-5 rounded-none bg-card border border-main transition-colors">
         {/* Week Header & Navigation */}
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-5">
           <div>
-            <h2 className="text-sm font-bold font-mono uppercase text-main">WEEKLY TRACKER</h2>
-            <p className="text-xs text-sub font-mono">
+            <h2 className="text-xs sm:text-sm font-bold font-mono uppercase text-main">WEEKLY TRACKER</h2>
+            <p className="text-[11px] sm:text-xs text-sub font-mono">
               {formatShortDate(weekDays[0])} – {formatShortDate(weekDays[6])}
             </p>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-input p-0.5 rounded-none border border-subtle">
+          <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-input p-0.5 rounded-none border border-subtle">
             <button
               onClick={handlePrevWeek}
-              className="p-1 rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer"
+              className="p-1 sm:p-1.5 rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer touch-manipulation"
               title="Previous Week"
+              aria-label="Previous Week"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
             <button
               onClick={() => onSelectDate(todayStr)}
-              className="px-2 py-1 text-xs font-mono font-medium text-sub hover:text-main cursor-pointer"
+              className="px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-mono font-medium text-sub hover:text-main cursor-pointer touch-manipulation"
             >
               CURRENT WEEK
             </button>
             <button
               onClick={handleNextWeek}
-              className="p-1 rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer"
+              className="p-1 sm:p-1.5 rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer touch-manipulation"
               title="Next Week"
+              aria-label="Next Week"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
           </div>
         </div>
 
         {/* Responsive Table */}
-        <div className="overflow-x-auto pb-2">
-          <table className="w-full text-left border-collapse min-w-[580px]">
+        <div className="overflow-x-auto -mx-3.5 px-3.5 sm:mx-0 sm:px-0 pb-2">
+          <table className="w-full text-left border-collapse min-w-[540px]">
             <thead>
               <tr className="border-b border-subtle">
-                <th className="pb-3 text-xs font-bold font-mono text-sub uppercase tracking-wider w-1/3">
+                <th className="pb-3 text-[11px] sm:text-xs font-bold font-mono text-sub uppercase tracking-wider sticky left-0 bg-card z-10 pr-3">
                   HABIT
                 </th>
                 {weekDays.map((dStr) => {
@@ -86,12 +88,12 @@ export function WeeklyGrid({
                     <th
                       key={dStr}
                       onClick={() => onSelectDate(dStr)}
-                      className={`pb-3 text-center cursor-pointer transition-colors ${
+                      className={`pb-3 text-center cursor-pointer transition-colors px-1 ${
                         isToday ? 'text-emerald-500 font-bold' : isSelected ? 'text-main font-bold' : 'text-sub'
                       }`}
                     >
                       <div className="text-[10px] font-mono uppercase">{formatDayName(dStr)}</div>
-                      <div className={`text-xs font-mono mt-0.5 inline-block px-1.5 py-0.5 rounded-none ${
+                      <div className={`text-[11px] sm:text-xs font-mono mt-0.5 inline-block px-1 sm:px-1.5 py-0.5 rounded-none ${
                         isToday ? 'bg-emerald-500/15 text-emerald-500 font-bold border border-emerald-500/30' : ''
                       }`}>
                         {formatShortDate(dStr).split(' ')[1]}
@@ -108,9 +110,9 @@ export function WeeklyGrid({
 
                 return (
                   <tr key={habit.id} className="hover:bg-subtle/40 transition-colors">
-                    {/* Habit Info */}
-                    <td className="py-3 pr-4">
-                      <div className="flex items-center gap-2.5">
+                    {/* Habit Info (Sticky on scroll) */}
+                    <td className="py-2.5 sm:py-3 pr-3 sticky left-0 bg-card z-10">
+                      <div className="flex items-center gap-2 sm:gap-2.5 max-w-[140px] sm:max-w-[200px]">
                         <div 
                           className="w-6 h-6 rounded-none flex items-center justify-center flex-shrink-0 border border-subtle"
                           style={{ backgroundColor: colorConfig.bg, color: colorConfig.hex }}
@@ -131,17 +133,17 @@ export function WeeklyGrid({
 
                       if (!isDue) {
                         return (
-                          <td key={dStr} className="py-3 text-center">
+                          <td key={dStr} className="py-2.5 sm:py-3 text-center px-1">
                             <span className="inline-block w-2 h-2 rounded-none bg-subtle" title="Not scheduled" />
                           </td>
                         );
                       }
 
                       return (
-                        <td key={dStr} className="py-3 text-center">
+                        <td key={dStr} className="py-2.5 sm:py-3 text-center px-1">
                           <button
                             onClick={() => onToggle(habit.id, dStr, !isCompleted, !isCompleted ? habit.target_value : 0)}
-                            className={`w-6 h-6 rounded-none inline-flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer ${
+                            className={`w-7 h-7 sm:w-6 sm:h-6 rounded-none inline-flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation ${
                               isCompleted
                                 ? 'bg-emerald-500 text-black border border-emerald-400'
                                 : 'border border-subtle hover:border-main bg-input text-transparent'
