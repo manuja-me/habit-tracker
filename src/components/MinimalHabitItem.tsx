@@ -8,10 +8,12 @@ import {
   Trash2, 
   Plus, 
   Minus,
-  AlertCircle
+  AlertCircle,
+  GripVertical
 } from 'lucide-react';
 import { Habit, HabitLog, HabitStats } from '../lib/types';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
+import { playCheckSound, playUncheckSound } from '../lib/utils/sound';
 import { Progress } from './ui/progress';
 
 interface MinimalHabitItemProps {
@@ -19,9 +21,15 @@ interface MinimalHabitItemProps {
   log?: HabitLog;
   stats: HabitStats;
   dateStr: string;
+  isFocused?: boolean;
+  isDraggable?: boolean;
   onToggle: (habitId: string, dateStr: string, completed?: boolean, value?: number) => void;
   onEdit: (habit: Habit) => void;
   onDelete: (habitId: string) => void;
+  onDragStart?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragOver?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDrop?: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd?: () => void;
 }
 
 export function MinimalHabitItem({
@@ -29,9 +37,15 @@ export function MinimalHabitItem({
   log,
   stats,
   dateStr,
+  isFocused = false,
+  isDraggable = true,
   onToggle,
   onEdit,
   onDelete,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
 }: MinimalHabitItemProps) {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
@@ -43,14 +57,25 @@ export function MinimalHabitItem({
 
   const handleCheckboxClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onToggle(habit.id, dateStr, !isCompleted, !isCompleted ? habit.target_value : 0);
+    const nextCompleted = !isCompleted;
+    if (nextCompleted) {
+      playCheckSound();
+    } else {
+      playUncheckSound();
+    }
+    onToggle(habit.id, dateStr, nextCompleted, nextCompleted ? habit.target_value : 0);
   };
 
   const handleIncrement = (e: React.MouseEvent, amount: number) => {
     e.stopPropagation();
     const nextVal = Math.max(0, currentValue + amount);
-    const completed = nextVal >= habit.target_value;
-    onToggle(habit.id, dateStr, completed, nextVal);
+    const nextCompleted = nextVal >= habit.target_value;
+    if (nextCompleted && !isCompleted) {
+      playCheckSound();
+    } else if (!nextCompleted && isCompleted) {
+      playUncheckSound();
+    }
+    onToggle(habit.id, dateStr, nextCompleted, nextVal);
   };
 
   const stepAmount = habit.target_value >= 1000 ? 250 : habit.target_value >= 50 ? 10 : habit.target_value >= 20 ? 5 : 1;
@@ -60,16 +85,30 @@ export function MinimalHabitItem({
 
   return (
     <div
+      draggable={isDraggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
       className={`group relative flex flex-col p-3 sm:p-3.5 rounded-none transition-all duration-150 border font-mono ${
+        isFocused ? 'border-l-4 border-l-emerald-500 bg-card/90 ring-1 ring-emerald-500/30' : ''
+      } ${
         isCompleted
           ? 'bg-card/50 border-emerald-500/30'
           : 'bg-card border-main hover:border-emerald-500/40'
       }`}
     >
       {/* Main Row: Checkbox, Title & Streak, Action Buttons */}
-      <div className="flex items-center justify-between gap-2.5 sm:gap-3">
-        {/* Left Side: Checkbox + Icon + Title */}
-        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+      <div className="flex items-center justify-between gap-2 sm:gap-3">
+        {/* Left Side: Drag handle + Checkbox + Icon + Title */}
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
+          {/* Drag Handle */}
+          <div 
+            className="cursor-grab active:cursor-grabbing text-sub/40 hover:text-main transition-colors flex items-center justify-center p-0.5"
+            title="Drag to reorder"
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </div>
           {/* Tactile Checkbox */}
           <button
             onClick={handleCheckboxClick}

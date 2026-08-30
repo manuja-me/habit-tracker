@@ -148,3 +148,33 @@ export function generateHeatmapData(
 
   return heatmap;
 }
+
+export interface MilestoneBadge {
+  id: string;
+  days: number;
+  title: string;
+  subtitle: string;
+  iconName: string;
+  color: string;
+  unlocked: boolean;
+  progressPercent: number;
+}
+
+export const MILESTONE_DEFINITIONS = [
+  { id: 'm-7', days: 7, title: 'IGNITION', subtitle: '7 Consecutive Days', iconName: 'Flame', color: '#F59E0B' },
+  { id: 'm-30', days: 30, title: 'IRON HABIT', subtitle: '30 Consecutive Days', iconName: 'ShieldCheck', color: '#10B981' },
+  { id: 'm-100', days: 100, title: 'CENTURY', subtitle: '100 Consecutive Days', iconName: 'Zap', color: '#6366F1' },
+  { id: 'm-365', days: 365, title: 'LEGEND', subtitle: '365 Consecutive Days', iconName: 'Crown', color: '#EC4899' },
+];
+
+export function calculateMilestones(bestStreak: number): MilestoneBadge[] {
+  return MILESTONE_DEFINITIONS.map((m) => {
+    const unlocked = bestStreak >= m.days;
+    const progressPercent = Math.min(100, Math.round((bestStreak / m.days) * 100));
+    return {
+      ...m,
+      unlocked,
+      progressPercent,
+    };
+  });
+}

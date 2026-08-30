@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useHabitStore } from '../lib/store';
 import { Habit } from '../lib/types';
 import { calculateHabitStats } from '../lib/utils/streaks';
 import { getTodayDateString, isHabitDueOnDate } from '../lib/utils/date';
 import { triggerDailyCelebration } from '../lib/utils/confetti';
+import { playCheckSound, playUncheckSound, playMilestoneSound, isSoundEnabled, setSoundEnabled } from '../lib/utils/sound';
 import { checkSessionAction, lockSessionAction } from '../lib/server/auth';
 import { Header } from '../components/Header';
 import { ViewTabs, ActiveTab } from '../components/ViewTabs';
@@ -15,6 +16,9 @@ import { MinimalHeatmap } from '../components/MinimalHeatmap';
 import { AnalyticsView } from '../components/AnalyticsView';
 import { HabitModal } from '../components/HabitModal';
 import { SyncSettingsModal } from '../components/SyncSettingsModal';
+import { ShortcutsModal } from '../components/ShortcutsModal';
+import { ShareStreakModal } from '../components/ShareStreakModal';
+import { NotificationModal } from '../components/NotificationModal';
 import { PinLockScreen } from '../components/PinLockScreen';
 import { Plus, Sparkles } from 'lucide-react';
 
@@ -29,6 +33,7 @@ export default function HabitTrackerPage() {
     addHabit,
     updateHabit,
     deleteHabit,
+    reorderHabits,
     syncWithCloud,
   } = useHabitStore();
 
@@ -38,6 +43,12 @@ export default function HabitTrackerPage() {
   const [isHabitModalOpen, setIsHabitModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+
+  const [focusedIndex, setFocusedIndex] = useState<number>(0);
+  const [draggedHabitId, setDraggedHabitId] = useState<string | null>(null);
 
   const prevCompletionRef = useRef<boolean>(false);
 
@@ -93,6 +104,7 @@ export default function HabitTrackerPage() {
     const isAllDone = totalCount > 0 && completedCount === totalCount;
     if (isAllDone && !prevCompletionRef.current) {
       triggerDailyCelebration();
+      playMilestoneSound();
     }
     prevCompletionRef.current = isAllDone;
   }, [completedCount, totalCount]);
@@ -109,6 +121,150 @@ export default function HabitTrackerPage() {
       return h.category === filterCategory;
     });
   }, [dueHabits, filterCategory, logs, selectedDate]);
+
+  // Keep focusedIndex clamped within range
+  useEffect(() => {
+    if (focusedIndex >= displayedDailyHabits.length) {
+      setFocusedIndex(Math.max(0, displayedDailyHabits.length - 1));
+    }
+  }, [displayedDailyHabits.length, focusedIndex]);
+
+  // Keyboard Shortcuts (Vim / IDE style)
+  useEffect(() => {
+    if (!isUnlocked) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts if typing inside an input or textarea
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      // Don't trigger if modals are open (except closing them with Esc)
+      const hasOpenModal = isHabitModalOpen || isSyncModalOpen || isShortcutsModalOpen || isShareModalOpen || isNotificationModalOpen;
+      if (hasOpenModal) return;
+
+      const key = e.key.toLowerCase();
+
+      // Navigation: j / Down, k / Up
+      if (key === 'j' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        setFocusedIndex((prev) => Math.min(displayedDailyHabits.length - 1, prev + 1));
+      } else if (key === 'k' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setFocusedIndex((prev) => Math.max(0, prev - 1));
+      } 
+      // Toggle: Space or x
+      else if (e.key === ' ' || key === 'x') {
+        e.preventDefault();
+        const focusedHabit = displayedDailyHabits[focusedIndex];
+        if (focusedHabit) {
+          const isDone = Boolean(logs[`${focusedHabit.id}_${selectedDate}`]?.completed);
+          if (!isDone) playCheckSound();
+          else playUncheckSound();
+          toggleHabit(focusedHabit.id, selectedDate, !isDone, !isDone ? focusedHabit.target_value : 0);
+        }
+      }
+      // Stepper: + / -
+      else if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        const focusedHabit = displayedDailyHabits[focusedIndex];
+        if (focusedHabit && focusedHabit.type === 'number') {
+          const curVal = logs[`${focusedHabit.id}_${selectedDate}`]?.value ?? 0;
+          const step = focusedHabit.target_value >= 1000 ? 250 : focusedHabit.target_value >= 50 ? 10 : 5;
+          const nextVal = curVal + step;
+          const nextCompleted = nextVal >= focusedHabit.target_value;
+          if (nextCompleted && curVal < focusedHabit.target_value) playCheckSound();
+          toggleHabit(focusedHabit.id, selectedDate, nextCompleted, nextVal);
+        }
+      } else if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        const focusedHabit = displayedDailyHabits[focusedIndex];
+        if (focusedHabit && focusedHabit.type === 'number') {
+          const curVal = logs[`${focusedHabit.id}_${selectedDate}`]?.value ?? 0;
+          const step = focusedHabit.target_value >= 1000 ? 250 : focusedHabit.target_value >= 50 ? 10 : 5;
+          const nextVal = Math.max(0, curVal - step);
+          const nextCompleted = nextVal >= focusedHabit.target_value;
+          if (!nextCompleted && curVal >= focusedHabit.target_value) playUncheckSound();
+          toggleHabit(focusedHabit.id, selectedDate, nextCompleted, nextVal);
+        }
+      }
+      // New Habit: n
+      else if (key === 'n') {
+        e.preventDefault();
+        handleOpenAddModal();
+      }
+      // Jump to Today: t
+      else if (key === 't') {
+        e.preventDefault();
+        setSelectedDate(getTodayDateString());
+      }
+      // Switch tabs: 1, 2, 3, 4
+      else if (e.key === '1') {
+        e.preventDefault();
+        setActiveTab('today');
+      } else if (e.key === '2') {
+        e.preventDefault();
+        setActiveTab('week');
+      } else if (e.key === '3') {
+        e.preventDefault();
+        setActiveTab('heatmap');
+      } else if (e.key === '4') {
+        e.preventDefault();
+        setActiveTab('analytics');
+      }
+      // Toggle Shortcuts modal: ?
+      else if (e.key === '?') {
+        e.preventDefault();
+        setIsShortcutsModalOpen(true);
+      }
+      // Toggle sound: m
+      else if (key === 'm') {
+        e.preventDefault();
+        const current = isSoundEnabled();
+        setSoundEnabled(!current);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isUnlocked,
+    displayedDailyHabits,
+    focusedIndex,
+    logs,
+    selectedDate,
+    toggleHabit,
+    isHabitModalOpen,
+    isSyncModalOpen,
+    isShortcutsModalOpen,
+    isShareModalOpen,
+    isNotificationModalOpen
+  ]);
+
+  // Drag & Drop Reordering handlers
+  const handleDragStart = (habitId: string) => {
+    setDraggedHabitId(habitId);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (targetHabitId: string) => {
+    if (!draggedHabitId || draggedHabitId === targetHabitId) return;
+
+    const updated = [...habits];
+    const fromIndex = updated.findIndex((h) => h.id === draggedHabitId);
+    const toIndex = updated.findIndex((h) => h.id === targetHabitId);
+
+    if (fromIndex !== -1 && toIndex !== -1) {
+      const [movedItem] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, movedItem);
+      reorderHabits(updated);
+    }
+    setDraggedHabitId(null);
+  };
 
   const handleOpenAddModal = () => {
     setEditingHabit(null);
@@ -162,6 +318,9 @@ export default function HabitTrackerPage() {
         onSelectDate={setSelectedDate}
         onOpenAddModal={handleOpenAddModal}
         onOpenSyncModal={() => setIsSyncModalOpen(true)}
+        onOpenShortcutsModal={() => setIsShortcutsModalOpen(true)}
+        onOpenShareModal={() => setIsShareModalOpen(true)}
+        onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
         onLockApp={handleLockApp}
         completedCount={completedCount}
         totalCount={totalCount}
@@ -231,7 +390,7 @@ export default function HabitTrackerPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-2.5 sm:gap-2">
-                {displayedDailyHabits.map((habit) => (
+                {displayedDailyHabits.map((habit, idx) => (
                   <MinimalHabitItem
                     key={habit.id}
                     habit={habit}
@@ -245,9 +404,15 @@ export default function HabitTrackerPage() {
                       todayValue: 0,
                     }}
                     dateStr={selectedDate}
+                    isFocused={idx === focusedIndex}
+                    isDraggable={true}
                     onToggle={toggleHabit}
                     onEdit={handleEditHabit}
                     onDelete={deleteHabit}
+                    onDragStart={() => handleDragStart(habit.id)}
+                    onDragOver={handleDragOver}
+                    onDrop={() => handleDrop(habit.id)}
+                    onDragEnd={() => setDraggedHabitId(null)}
                   />
                 ))}
               </div>
@@ -286,6 +451,26 @@ export default function HabitTrackerPage() {
       <SyncSettingsModal
         isOpen={isSyncModalOpen}
         onClose={() => setIsSyncModalOpen(false)}
+      />
+
+      {/* Keyboard Shortcuts Modal */}
+      <ShortcutsModal
+        isOpen={isShortcutsModalOpen}
+        onClose={() => setIsShortcutsModalOpen(false)}
+      />
+
+      {/* Share Streak & Stats Modal */}
+      <ShareStreakModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        habits={habits}
+        logs={logs}
+      />
+
+      {/* Daily Reminder Notification Modal */}
+      <NotificationModal
+        isOpen={isNotificationModalOpen}
+        onClose={() => setIsNotificationModalOpen(false)}
       />
     </div>
   );

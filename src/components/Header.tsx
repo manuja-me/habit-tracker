@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Flame, 
   Plus, 
@@ -11,10 +11,16 @@ import {
   Moon, 
   ChevronLeft, 
   ChevronRight,
-  Lock
+  Lock,
+  Keyboard,
+  Share2,
+  Bell,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { useHabitStore } from '../lib/store';
 import { useTheme } from '../lib/theme';
+import { isSoundEnabled, setSoundEnabled } from '../lib/utils/sound';
 import { formatDisplayDate, getTodayDateString, formatDate, parseDate } from '../lib/utils/date';
 import { addDays, subDays } from 'date-fns';
 import { Progress } from './ui/progress';
@@ -24,6 +30,9 @@ interface HeaderProps {
   onSelectDate: (date: string) => void;
   onOpenAddModal: () => void;
   onOpenSyncModal: () => void;
+  onOpenShortcutsModal?: () => void;
+  onOpenShareModal?: () => void;
+  onOpenNotificationModal?: () => void;
   onLockApp: () => void;
   completedCount: number;
   totalCount: number;
@@ -34,12 +43,26 @@ export function Header({
   onSelectDate,
   onOpenAddModal,
   onOpenSyncModal,
+  onOpenShortcutsModal,
+  onOpenShareModal,
+  onOpenNotificationModal,
   onLockApp,
   completedCount,
   totalCount,
 }: HeaderProps) {
   const { isSyncing, isCloudReady } = useHabitStore();
   const { theme, toggleTheme } = useTheme();
+  const [soundOn, setSoundOn] = useState(true);
+
+  useEffect(() => {
+    setSoundOn(isSoundEnabled());
+  }, []);
+
+  const handleToggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    setSoundEnabled(next);
+  };
 
   const todayStr = getTodayDateString();
   const isToday = selectedDate === todayStr;
@@ -71,12 +94,12 @@ export function Header({
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0 flex-wrap justify-end">
           {/* Cloud Sync Status */}
           <button
             onClick={onOpenSyncModal}
             title={isCloudReady ? 'Cloud Synced — Click for details' : 'Local Storage Mode'}
-            className="flex items-center gap-1.5 p-1.5 sm:px-3 sm:py-1.5 rounded-none text-xs font-mono bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all cursor-pointer touch-manipulation"
+            className="flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 rounded-none text-xs font-mono bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all cursor-pointer touch-manipulation"
           >
             {isSyncing ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-500" />
@@ -90,11 +113,61 @@ export function Header({
             </span>
           </button>
 
+          {/* Sound Toggle */}
+          <button
+            onClick={handleToggleSound}
+            className="p-1.5 sm:p-2 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation"
+            title={soundOn ? 'Sound: ON (Click to mute)' : 'Sound: MUTED (Click to enable)'}
+            aria-label="Toggle Sound"
+          >
+            {soundOn ? (
+              <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500" />
+            ) : (
+              <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sub" />
+            )}
+          </button>
+
+          {/* Shortcuts Modal */}
+          {onOpenShortcutsModal && (
+            <button
+              onClick={onOpenShortcutsModal}
+              className="p-1.5 sm:p-2 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation"
+              title="Keyboard Shortcuts (Press ?)"
+              aria-label="Keyboard Shortcuts"
+            >
+              <Keyboard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
+          )}
+
+          {/* Share Modal */}
+          {onOpenShareModal && (
+            <button
+              onClick={onOpenShareModal}
+              className="p-1.5 sm:p-2 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation"
+              title="Share Streak & Stats Card"
+              aria-label="Share Stats"
+            >
+              <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
+          )}
+
+          {/* Reminder Notifications */}
+          {onOpenNotificationModal && (
+            <button
+              onClick={onOpenNotificationModal}
+              className="p-1.5 sm:p-2 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation"
+              title="Daily Check-in Reminder"
+              aria-label="Daily Reminder"
+            >
+              <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
+          )}
+
           {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
             className="p-1.5 sm:p-2 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation"
-            title={`Theme: ${theme.toUpperCase()} (Click to toggle Light / Dark / OLED)`}
+            title={`Theme: ${theme.toUpperCase()}`}
             aria-label="Toggle Theme"
           >
             {theme === 'light' ? (
@@ -119,7 +192,7 @@ export function Header({
           {/* Add Habit Button */}
           <button
             onClick={onOpenAddModal}
-            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-none text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-400 shadow-xs transition-all active:scale-95 cursor-pointer touch-manipulation"
+            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-none text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-400 shadow-xs transition-all active:scale-95 cursor-pointer touch-manipulation"
           >
             <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[3]" />
             <span className="hidden xs:inline sm:inline">NEW </span><span>HABIT</span>

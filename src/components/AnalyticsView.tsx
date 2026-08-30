@@ -2,14 +2,19 @@
 
 import React, { useMemo } from 'react';
 import { Habit, HabitLog } from '../lib/types';
-import { calculateHabitStats } from '../lib/utils/streaks';
+import { calculateHabitStats, calculateMilestones } from '../lib/utils/streaks';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
 import { 
   Flame, 
   TrendingUp, 
   CheckCircle2, 
   BarChart3, 
-  Calendar
+  Calendar,
+  Award,
+  ShieldCheck,
+  Zap,
+  Crown,
+  Lock
 } from 'lucide-react';
 import { subDays, format, getDay } from 'date-fns';
 import { Progress } from './ui/progress';
@@ -34,6 +39,10 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
   const bestStreak = useMemo(() => {
     return Math.max(0, ...statsList.map((s) => s.stats.longestStreak));
   }, [statsList]);
+
+  const milestones = useMemo(() => {
+    return calculateMilestones(bestStreak);
+  }, [bestStreak]);
 
   const avg30DayRate = useMemo(() => {
     if (statsList.length === 0) return 0;
@@ -65,6 +74,16 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
       return { day: name, rate };
     });
   }, [habits, logs]);
+
+  const getMilestoneIcon = (iconName: string) => {
+    switch (iconName) {
+      case 'Flame': return Flame;
+      case 'ShieldCheck': return ShieldCheck;
+      case 'Zap': return Zap;
+      case 'Crown': return Crown;
+      default: return Award;
+    }
+  };
 
   return (
     <div className="w-full max-w-4xl mx-auto px-3.5 sm:px-6 space-y-4 sm:space-y-6">
@@ -122,6 +141,71 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
             </span>
             <span className="text-xs font-mono text-sub">check-ins</span>
           </div>
+        </div>
+      </div>
+
+      {/* Target Milestone Badges */}
+      <div className="p-4 sm:p-5 rounded-none bg-card border border-main space-y-3 sm:space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold font-mono uppercase text-main flex items-center gap-2">
+            <Award className="w-4 h-4 text-amber-500" />
+            TARGET MILESTONES & ACHIEVEMENTS
+          </h3>
+          <span className="text-[10px] font-mono text-sub">
+            {milestones.filter(m => m.unlocked).length} OF {milestones.length} UNLOCKED
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+          {milestones.map((m) => {
+            const IconComp = getMilestoneIcon(m.iconName);
+            return (
+              <div 
+                key={m.id}
+                className={`p-3 rounded-none border transition-all ${
+                  m.unlocked 
+                    ? 'bg-input border-emerald-500/40 shadow-xs' 
+                    : 'bg-input/40 border-subtle opacity-65'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div 
+                    className="w-7 h-7 flex items-center justify-center rounded-none border"
+                    style={{ 
+                      backgroundColor: m.unlocked ? `${m.color}20` : 'transparent',
+                      borderColor: m.unlocked ? `${m.color}60` : 'var(--border-subtle)',
+                      color: m.unlocked ? m.color : 'var(--text-sub)'
+                    }}
+                  >
+                    <IconComp className="w-3.5 h-3.5" />
+                  </div>
+                  {m.unlocked ? (
+                    <span className="text-[9px] font-bold text-emerald-500 border border-emerald-500/30 px-1 py-0.2 bg-emerald-500/10">
+                      UNLOCKED
+                    </span>
+                  ) : (
+                    <span className="text-[9px] text-sub flex items-center gap-0.5">
+                      <Lock className="w-2.5 h-2.5" /> {m.days}D
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-[11px] font-bold text-main truncate">{m.title}</div>
+                  <div className="text-[9px] text-sub truncate">{m.subtitle}</div>
+                </div>
+
+                <div className="mt-2">
+                  <Progress 
+                    value={m.progressPercent} 
+                    max={100} 
+                    size="sm" 
+                    indicatorColor={m.unlocked ? m.color : '#64748B'} 
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
