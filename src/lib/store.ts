@@ -247,12 +247,12 @@ export function useHabitStore() {
     loadLocalData();
     syncWithCloud();
 
-    // 1. Periodic background polling every 8s when window is visible
+    // 1. Periodic background polling every 4s when window is visible
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         syncWithCloud(true);
       }
-    }, 8000);
+    }, 4000);
 
     // 2. Immediate sync on window focus (e.g. switching back to this device/tab)
     const handleFocus = () => {

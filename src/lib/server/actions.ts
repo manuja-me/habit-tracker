@@ -64,10 +64,11 @@ export async function getHabitsAndLogsAction(): Promise<{
       return { success: true, isConfigured: false, habits: [], logs: {} };
     }
 
-    // 1. Fetch habits
+    // 1. Fetch habits (only active, non-archived habits)
     const { data: habitsData, error: habitsErr } = await supabase
       .from('habits')
       .select('*')
+      .eq('archived', false)
       .order('sort_order', { ascending: true });
 
     if (habitsErr) throw habitsErr;
@@ -144,7 +145,7 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
       target_unit: habit.target_unit || '',
       frequency: habit.frequency,
       custom_days: habit.custom_days || [],
-      archived: habit.archived,
+      archived: Boolean(habit.archived),
       sort_order: habit.order,
       updated_at: new Date().toISOString(),
     });
@@ -165,13 +166,21 @@ export async function deleteHabitAction(habitId: string): Promise<{ success: boo
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
-    // Delete associated logs first to prevent foreign key errors
+    // 1. Delete associated logs first to prevent foreign key errors
     await supabase.from('habit_logs').delete().eq('habit_id', habitId);
 
-    const { error } = await supabase.from('habits').delete().eq('id', habitId);
-    if (error) throw error;
+    // 2. Delete the habit from the database
+    const { error: deleteErr } = await supabase.from('habits').delete().eq('id', habitId);
+
+    // 3. If hard delete is restricted by DB policies/triggers, fallback to soft delete (archived = true)
+    if (deleteErr) {
+      const { error: archiveErr } = await supabase.from('habits').update({ archived: true }).eq('id', habitId);
+      if (archiveErr) throw deleteErr;
+    }
+
     return { success: true };
   } catch (err: any) {
+    console.error('deleteHabitAction error:', err);
     return { success: false, error: err?.message };
   }
 }
