@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useHabitStore } from '../lib/store';
 import { Habit } from '../lib/types';
-import { calculateHabitStats } from '../lib/utils/streaks';
+import { calculateHabitStats, isDaySuccessful } from '../lib/utils/streaks';
 import { getTodayDateString, isHabitDueOnDate } from '../lib/utils/date';
 import { triggerDailyCelebration } from '../lib/utils/confetti';
 import { playCheckSound, playUncheckSound, playMilestoneSound, isSoundEnabled, setSoundEnabled } from '../lib/utils/sound';
@@ -21,7 +21,7 @@ import { ShareStreakModal } from '../components/ShareStreakModal';
 import { NotificationModal } from '../components/NotificationModal';
 import { PinLockScreen } from '../components/PinLockScreen';
 import { LoadingScreen } from '../components/LoadingScreen';
-import { Plus, Sparkles } from 'lucide-react';
+import { Plus, Sparkles, ShieldOff } from 'lucide-react';
 
 export default function HabitTrackerPage() {
   const [isUnlocked, setIsUnlocked] = useState<boolean | null>(null);
@@ -95,8 +95,7 @@ export default function HabitTrackerPage() {
   const { completedCount, totalCount } = useMemo(() => {
     const total = dueHabits.length;
     const completed = dueHabits.filter((h) => {
-      const log = logs[`${h.id}_${selectedDate}`];
-      return Boolean(log?.completed);
+      return isDaySuccessful(h, selectedDate, logs);
     }).length;
     return { completedCount: completed, totalCount: total };
   }, [dueHabits, logs, selectedDate]);
@@ -114,14 +113,22 @@ export default function HabitTrackerPage() {
     return dueHabits.filter((h) => {
       if (filterCategory === 'all') return true;
       if (filterCategory === 'completed') {
-        return Boolean(logs[`${h.id}_${selectedDate}`]?.completed);
+        return isDaySuccessful(h, selectedDate, logs);
       }
       if (filterCategory === 'pending') {
-        return !logs[`${h.id}_${selectedDate}`]?.completed;
+        return !isDaySuccessful(h, selectedDate, logs);
       }
       return h.category === filterCategory;
     });
   }, [dueHabits, filterCategory, logs, selectedDate]);
+
+  const doHabits = useMemo(() => {
+    return displayedDailyHabits.filter((h) => h.nature !== 'dont');
+  }, [displayedDailyHabits]);
+
+  const dontHabits = useMemo(() => {
+    return displayedDailyHabits.filter((h) => h.nature === 'dont');
+  }, [displayedDailyHabits]);
 
   // Keep focusedIndex clamped within range
   useEffect(() => {
@@ -357,7 +364,7 @@ export default function HabitTrackerPage() {
               </span>
             </div>
 
-            {/* Habit List */}
+            {/* Habit Lists: DO Routines and DONT Routines with Divider */}
             {displayedDailyHabits.length === 0 ? (
               <div className="p-8 sm:p-12 text-center rounded-none bg-card border border-main transition-colors">
                 <div className="w-10 h-10 rounded-none bg-subtle text-emerald-500 border border-subtle flex items-center justify-center mx-auto mb-4">
@@ -372,7 +379,7 @@ export default function HabitTrackerPage() {
                 </h3>
                 <p className="text-[11px] sm:text-xs font-mono text-sub max-w-sm mx-auto mb-6">
                   {filterCategory === 'all'
-                    ? 'Start building your daily routines by creating your first custom habit.'
+                    ? 'Start building your daily routines or tracking addictions to quit.'
                     : 'Consistency maintained.'}
                 </p>
                 {filterCategory === 'all' && (
@@ -381,37 +388,115 @@ export default function HabitTrackerPage() {
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-none text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-400 active:scale-95 transition-all cursor-pointer touch-manipulation"
                   >
                     <Plus className="w-4 h-4 stroke-[3]" />
-                    <span>ADD HABIT</span>
+                    <span>ADD ROUTINE</span>
                   </button>
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-2.5 sm:gap-2">
-                {displayedDailyHabits.map((habit, idx) => (
-                  <MinimalHabitItem
-                    key={habit.id}
-                    habit={habit}
-                    log={logs[`${habit.id}_${selectedDate}`]}
-                    stats={statsMap[habit.id] || {
-                      currentStreak: 0,
-                      longestStreak: 0,
-                      totalCompletions: 0,
-                      completionRate30Days: 0,
-                      isCompletedToday: false,
-                      todayValue: 0,
-                    }}
-                    dateStr={selectedDate}
-                    isFocused={idx === focusedIndex}
-                    isDraggable={true}
-                    onToggle={toggleHabit}
-                    onEdit={handleEditHabit}
-                    onDelete={deleteHabit}
-                    onDragStart={() => handleDragStart(habit.id)}
-                    onDragOver={handleDragOver}
-                    onDrop={() => handleDrop(habit.id)}
-                    onDragEnd={() => setDraggedHabitId(null)}
-                  />
-                ))}
+              <div className="space-y-5">
+                {/* 1. DO ROUTINES (BUILD) */}
+                {doHabits.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-[11px] font-bold font-mono text-emerald-500 uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles className="w-3 h-3" /> DO ROUTINES ({doHabits.length})
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2.5 sm:gap-2">
+                      {doHabits.map((habit) => {
+                        const globalIdx = displayedDailyHabits.findIndex((h) => h.id === habit.id);
+                        return (
+                          <MinimalHabitItem
+                            key={habit.id}
+                            habit={habit}
+                            log={logs[`${habit.id}_${selectedDate}`]}
+                            stats={statsMap[habit.id] || {
+                              currentStreak: 0,
+                              longestStreak: 0,
+                              totalCompletions: 0,
+                              completionRate30Days: 0,
+                              isCompletedToday: false,
+                              todayValue: 0,
+                            }}
+                            dateStr={selectedDate}
+                            isFocused={globalIdx === focusedIndex}
+                            isDraggable={true}
+                            onToggle={toggleHabit}
+                            onEdit={handleEditHabit}
+                            onDelete={deleteHabit}
+                            onDragStart={() => handleDragStart(habit.id)}
+                            onDragOver={handleDragOver}
+                            onDrop={() => handleDrop(habit.id)}
+                            onDragEnd={() => setDraggedHabitId(null)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. DIVIDER & DON'T ROUTINES (QUIT & BREAK ADDICTIONS) */}
+                <div className="pt-3 border-t border-subtle space-y-2.5">
+                  <div className="flex items-center justify-between gap-2 flex-wrap px-1">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-4 h-4 bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center justify-center">
+                        <ShieldOff className="w-2.5 h-2.5" />
+                      </div>
+                      <span className="text-[11px] font-bold font-mono text-rose-400 uppercase tracking-wider">
+                        DON'T ROUTINES — QUIT & BREAK ADDICTIONS ({dontHabits.length})
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.2">
+                      AUTO-CLEAN DAILY (ONLY LOG SLIP-UPS)
+                    </span>
+                  </div>
+
+                  {dontHabits.length === 0 ? (
+                    <div className="p-4 rounded-none bg-card/60 border border-dashed border-subtle text-center space-y-2">
+                      <p className="text-[11px] font-mono text-sub">
+                        No addictions or habits to stop tracked yet.
+                      </p>
+                      <button
+                        onClick={handleOpenAddModal}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-mono font-bold bg-input hover:bg-rose-500/10 hover:border-rose-500/40 border border-main text-rose-400 transition-colors cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>TRACK ADDICTION / QUIT HABIT</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-2.5 sm:gap-2">
+                      {dontHabits.map((habit) => {
+                        const globalIdx = displayedDailyHabits.findIndex((h) => h.id === habit.id);
+                        return (
+                          <MinimalHabitItem
+                            key={habit.id}
+                            habit={habit}
+                            log={logs[`${habit.id}_${selectedDate}`]}
+                            stats={statsMap[habit.id] || {
+                              currentStreak: 0,
+                              longestStreak: 0,
+                              totalCompletions: 0,
+                              completionRate30Days: 0,
+                              isCompletedToday: false,
+                              todayValue: 0,
+                            }}
+                            dateStr={selectedDate}
+                            isFocused={globalIdx === focusedIndex}
+                            isDraggable={true}
+                            onToggle={toggleHabit}
+                            onEdit={handleEditHabit}
+                            onDelete={deleteHabit}
+                            onDragStart={() => handleDragStart(habit.id)}
+                            onDragOver={handleDragOver}
+                            onDrop={() => handleDrop(habit.id)}
+                            onDragEnd={() => setDraggedHabitId(null)}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

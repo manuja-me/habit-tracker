@@ -22,6 +22,14 @@ import {
   TrendingUp,
   Award,
   Calendar,
+  Ban,
+  Cigarette,
+  Wine,
+  Smartphone,
+  Cookie,
+  Skull,
+  ShieldAlert,
+  ShieldOff,
   LucideIcon
 } from 'lucide-react';
 
@@ -48,6 +56,14 @@ export const AVAILABLE_ICONS: Record<string, LucideIcon> = {
   TrendingUp,
   Award,
   Calendar,
+  Ban,
+  Cigarette,
+  Wine,
+  Smartphone,
+  Cookie,
+  Skull,
+  ShieldAlert,
+  ShieldOff,
 };
 
 export const COLOR_PALETTES = [

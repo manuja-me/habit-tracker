@@ -7,9 +7,12 @@ import {
   Edit3, 
   Trash2, 
   Plus, 
-  Minus,
-  AlertCircle,
-  GripVertical
+  Minus, 
+  AlertCircle, 
+  GripVertical,
+  ShieldCheck,
+  ShieldAlert,
+  RotateCcw
 } from 'lucide-react';
 import { Habit, HabitLog, HabitStats } from '../lib/types';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
@@ -49,7 +52,11 @@ export function MinimalHabitItem({
 }: MinimalHabitItemProps) {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
-  const isCompleted = Boolean(log?.completed);
+  const isDont = habit.nature === 'dont';
+  // For 'dont' habits, clean by default unless explicitly marked completed: false (slip-up)
+  const isSlippedUp = isDont && log !== undefined && log.completed === false;
+  const isCompleted = isDont ? !isSlippedUp : Boolean(log?.completed);
+
   const currentValue = log?.value ?? (isCompleted ? habit.target_value : 0);
   const IconComponent = getHabitIcon(habit.icon);
 
@@ -57,13 +64,24 @@ export function MinimalHabitItem({
 
   const handleCheckboxClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const nextCompleted = !isCompleted;
-    if (nextCompleted) {
-      playCheckSound();
+    if (isDont) {
+      // Toggle between Clean (completed: true) and Slipped Up (completed: false)
+      const nextCompleted = isSlippedUp; // if slipped up, make clean (true); if clean, make slip-up (false)
+      if (nextCompleted) {
+        playCheckSound();
+      } else {
+        playUncheckSound();
+      }
+      onToggle(habit.id, dateStr, nextCompleted, nextCompleted ? 0 : 1);
     } else {
-      playUncheckSound();
+      const nextCompleted = !isCompleted;
+      if (nextCompleted) {
+        playCheckSound();
+      } else {
+        playUncheckSound();
+      }
+      onToggle(habit.id, dateStr, nextCompleted, nextCompleted ? habit.target_value : 0);
     }
-    onToggle(habit.id, dateStr, nextCompleted, nextCompleted ? habit.target_value : 0);
   };
 
   const handleIncrement = (e: React.MouseEvent, amount: number) => {
@@ -93,14 +111,18 @@ export function MinimalHabitItem({
       className={`group relative flex flex-col p-3 sm:p-3.5 rounded-none transition-all duration-150 border font-mono ${
         isFocused ? 'border-l-4 border-l-emerald-500 bg-card/90 ring-1 ring-emerald-500/30' : ''
       } ${
-        isCompleted
+        isDont
+          ? isSlippedUp
+            ? 'bg-rose-500/10 border-rose-500/40'
+            : 'bg-card border-emerald-500/20 hover:border-emerald-500/40'
+          : isCompleted
           ? 'bg-card/50 border-emerald-500/30'
           : 'bg-card border-main hover:border-emerald-500/40'
       }`}
     >
-      {/* Main Row: Checkbox, Title & Streak, Action Buttons */}
+      {/* Main Row: Checkbox/Toggle, Title & Streak, Action Buttons */}
       <div className="flex items-center justify-between gap-2 sm:gap-3">
-        {/* Left Side: Drag handle + Checkbox + Icon + Title */}
+        {/* Left Side: Drag handle + Checkbox/Status + Icon + Title */}
         <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
           {/* Drag Handle */}
           <div 
@@ -109,27 +131,51 @@ export function MinimalHabitItem({
           >
             <GripVertical className="w-3.5 h-3.5" />
           </div>
-          {/* Tactile Checkbox */}
-          <button
-            onClick={handleCheckboxClick}
-            className={`relative flex-shrink-0 w-6 h-6 sm:w-7 sm:h-7 rounded-none flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation ${
-              isCompleted
-                ? 'bg-emerald-500 text-black border border-emerald-400 shadow-sm'
-                : 'border border-main hover:border-emerald-500 bg-input/70'
-            }`}
-            aria-label={isCompleted ? 'Mark incomplete' : 'Mark complete'}
-          >
-            {isCompleted && (
-              <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[3]" />
-            )}
-          </button>
+
+          {/* Tactile Status Button */}
+          {isDont ? (
+            <button
+              onClick={handleCheckboxClick}
+              className={`relative flex-shrink-0 w-6 h-6 sm:w-7 sm:h-7 rounded-none flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation border ${
+                isSlippedUp
+                  ? 'bg-rose-500 text-black border-rose-400 shadow-sm'
+                  : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25'
+              }`}
+              title={isSlippedUp ? 'Click to undo slip-up' : 'Auto-clean. Click if you indulged today'}
+              aria-label={isSlippedUp ? 'Slipped up' : 'Clean'}
+            >
+              {isSlippedUp ? (
+                <ShieldAlert className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+              ) : (
+                <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={handleCheckboxClick}
+              className={`relative flex-shrink-0 w-6 h-6 sm:w-7 sm:h-7 rounded-none flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation ${
+                isCompleted
+                  ? 'bg-emerald-500 text-black border border-emerald-400 shadow-sm'
+                  : 'border border-main hover:border-emerald-500 bg-input/70'
+              }`}
+              aria-label={isCompleted ? 'Mark incomplete' : 'Mark complete'}
+            >
+              {isCompleted && (
+                <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[3]" />
+              )}
+            </button>
+          )}
 
           {/* Minimal Category Icon */}
           <div 
             className="flex-shrink-0 w-6 h-6 sm:w-7 sm:h-7 rounded-none flex items-center justify-center border border-subtle"
             style={{ 
-              backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.12)' : colorConfig.bg,
-              color: isCompleted ? '#10B981' : colorConfig.hex 
+              backgroundColor: isDont 
+                ? isSlippedUp ? 'rgba(244, 63, 94, 0.15)' : 'rgba(16, 185, 129, 0.12)'
+                : isCompleted ? 'rgba(16, 185, 129, 0.12)' : colorConfig.bg,
+              color: isDont
+                ? isSlippedUp ? '#F43F5E' : '#10B981'
+                : isCompleted ? '#10B981' : colorConfig.hex 
             }}
           >
             <IconComponent className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
@@ -141,17 +187,30 @@ export function MinimalHabitItem({
               <span 
                 onClick={handleCheckboxClick}
                 className={`text-xs sm:text-sm font-bold tracking-tight truncate cursor-pointer select-none transition-colors ${
-                  isCompleted ? 'text-sub line-through opacity-80' : 'text-main'
+                  isDont
+                    ? isSlippedUp ? 'text-rose-400 line-through' : 'text-main'
+                    : isCompleted ? 'text-sub line-through opacity-80' : 'text-main'
                 }`}
               >
                 {habit.title}
               </span>
+
+              {/* DON'T Habit Status Badge */}
+              {isDont && (
+                <span className={`inline-flex items-center gap-1 px-1.5 py-0.2 text-[9px] font-bold border ${
+                  isSlippedUp 
+                    ? 'bg-rose-500/20 text-rose-400 border-rose-500/40' 
+                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                }`}>
+                  {isSlippedUp ? 'SLIPPED UP' : 'CLEAN TODAY'}
+                </span>
+              )}
               
               {/* Clean Streak Tag */}
               {stats.currentStreak > 0 && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
                   <Flame className="w-2.5 h-2.5 fill-amber-500" />
-                  {stats.currentStreak}d
+                  {stats.currentStreak}d {isDont ? 'clean' : ''}
                 </span>
               )}
             </div>

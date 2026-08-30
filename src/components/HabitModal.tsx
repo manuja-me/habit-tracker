@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Habit, HabitCategory, HabitFrequency, HabitType } from '../lib/types';
+import { Habit, HabitCategory, HabitFrequency, HabitType, HabitNature } from '../lib/types';
 import { AVAILABLE_ICONS, COLOR_PALETTES } from '../lib/utils/icons';
-import { X, Check } from 'lucide-react';
+import { X, Check, ShieldAlert, Sparkles, ShieldOff } from 'lucide-react';
 
 interface HabitModalProps {
   isOpen: boolean;
@@ -12,12 +12,20 @@ interface HabitModalProps {
   editingHabit?: Habit | null;
 }
 
-const TEMPLATES = [
+const DO_TEMPLATES = [
   { title: 'Deep Work (90m)', category: 'productivity' as HabitCategory, icon: 'Focus', color: '#6366F1', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'weekdays' as HabitFrequency },
   { title: 'Drink Water (2.5L)', category: 'health' as HabitCategory, icon: 'Droplets', color: '#06B6D4', type: 'number' as HabitType, targetValue: 2500, targetUnit: 'ml', frequency: 'daily' as HabitFrequency },
   { title: 'Daily Workout', category: 'fitness' as HabitCategory, icon: 'Dumbbell', color: '#10B981', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'daily' as HabitFrequency },
   { title: 'Read Books', category: 'learning' as HabitCategory, icon: 'BookOpen', color: '#F59E0B', type: 'number' as HabitType, targetValue: 20, targetUnit: 'pages', frequency: 'daily' as HabitFrequency },
   { title: 'Meditation & Journal', category: 'mindfulness' as HabitCategory, icon: 'Sparkles', color: '#EC4899', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'daily' as HabitFrequency },
+];
+
+const DONT_TEMPLATES = [
+  { title: 'No Smoking (Cigarettes)', category: 'health' as HabitCategory, icon: 'Cigarette', color: '#F43F5E', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'daily' as HabitFrequency },
+  { title: 'No Junk Food / Sugar', category: 'health' as HabitCategory, icon: 'Cookie', color: '#F59E0B', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'daily' as HabitFrequency },
+  { title: 'Zero Alcohol', category: 'lifestyle' as HabitCategory, icon: 'Wine', color: '#8B5CF6', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'daily' as HabitFrequency },
+  { title: 'No Late Night Scrolling', category: 'productivity' as HabitCategory, icon: 'Smartphone', color: '#6366F1', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'daily' as HabitFrequency },
+  { title: 'Stop Nail Biting', category: 'health' as HabitCategory, icon: 'ShieldOff', color: '#EC4899', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'daily' as HabitFrequency },
 ];
 
 const CATEGORIES: { id: HabitCategory; label: string }[] = [
@@ -46,6 +54,7 @@ export function HabitModal({
   onSave,
   editingHabit,
 }: HabitModalProps) {
+  const [nature, setNature] = useState<HabitNature>('do');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<HabitCategory>('productivity');
@@ -70,6 +79,7 @@ export function HabitModal({
 
   useEffect(() => {
     if (editingHabit) {
+      setNature(editingHabit.nature || 'do');
       setTitle(editingHabit.title);
       setDescription(editingHabit.description || '');
       setCategory(editingHabit.category);
@@ -81,6 +91,7 @@ export function HabitModal({
       setFrequency(editingHabit.frequency);
       setCustomDays(editingHabit.custom_days || [1, 2, 3, 4, 5]);
     } else {
+      setNature('do');
       setTitle('');
       setDescription('');
       setCategory('productivity');
@@ -94,7 +105,7 @@ export function HabitModal({
     }
   }, [editingHabit, isOpen]);
 
-  const applyTemplate = (t: typeof TEMPLATES[0]) => {
+  const applyTemplate = (t: typeof DO_TEMPLATES[0]) => {
     setTitle(t.title);
     setCategory(t.category);
     setIcon(t.icon);
@@ -112,6 +123,7 @@ export function HabitModal({
     if (!title.trim()) return;
 
     onSave({
+      nature,
       title: title.trim(),
       description: description.trim(),
       category,
@@ -134,6 +146,8 @@ export function HabitModal({
     }
   };
 
+  const currentTemplates = nature === 'do' ? DO_TEMPLATES : DONT_TEMPLATES;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-100 font-mono">
       <div className="w-full max-w-lg rounded-none bg-card border border-main p-4 sm:p-6 shadow-2xl overflow-y-auto max-h-[88vh] sm:max-h-[90vh]">
@@ -151,14 +165,63 @@ export function HabitModal({
           </button>
         </div>
 
+        {/* Nature Switcher: DO vs DON'T */}
+        <div className="pt-3 pb-2 border-b border-subtle space-y-2">
+          <div className="text-[10px] font-bold text-sub uppercase">ROUTINE TYPE</div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setNature('do');
+                if (color === '#F43F5E') setColor(COLOR_PALETTES[0].hex);
+              }}
+              className={`p-2.5 text-left border transition-all cursor-pointer ${
+                nature === 'do'
+                  ? 'bg-emerald-500/15 border-emerald-500 text-emerald-400'
+                  : 'bg-input border-subtle text-sub hover:border-main'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 text-xs font-bold font-mono uppercase">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                DO (BUILD)
+              </div>
+              <p className="text-[10px] text-sub mt-0.5 leading-tight">
+                Positive routine to perform and check off daily.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setNature('dont');
+                setColor('#F43F5E');
+                setIcon('ShieldOff');
+              }}
+              className={`p-2.5 text-left border transition-all cursor-pointer ${
+                nature === 'dont'
+                  ? 'bg-rose-500/15 border-rose-500 text-rose-400'
+                  : 'bg-input border-subtle text-sub hover:border-main'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 text-xs font-bold font-mono uppercase">
+                <ShieldOff className="w-3.5 h-3.5 text-rose-400" />
+                DON'T (QUIT)
+              </div>
+              <p className="text-[10px] text-sub mt-0.5 leading-tight">
+                Addiction to avoid. Auto-clean daily unless you slip up.
+              </p>
+            </button>
+          </div>
+        </div>
+
         {/* Quick 1-Click Templates (New Habits Only) */}
         {!editingHabit && (
-          <div className="pt-3 pb-1 border-b border-subtle">
+          <div className="pt-2.5 pb-1 border-b border-subtle">
             <span className="text-[10px] font-bold text-sub uppercase block mb-1.5">
-              QUICK TEMPLATES
+              {nature === 'do' ? 'POPULAR BUILD TEMPLATES' : 'POPULAR QUIT & REDUCTION TEMPLATES'}
             </span>
             <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none">
-              {TEMPLATES.map((t, idx) => (
+              {currentTemplates.map((t, idx) => (
                 <button
                   type="button"
                   key={idx}
@@ -176,7 +239,7 @@ export function HabitModal({
           {/* Title */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-sub mb-1.5">
-              HABIT NAME *
+              {nature === 'do' ? 'HABIT NAME *' : 'ADDICTION / HABIT TO STOP *'}
             </label>
             <input
               type="text"
@@ -184,7 +247,7 @@ export function HabitModal({
               autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Read 20 Pages, Morning Workout"
+              placeholder={nature === 'do' ? 'e.g. Read 20 Pages, Morning Workout' : 'e.g. Smoking Cigarettes, Junk Food, Late Night Phone'}
               className="w-full px-3 py-2 sm:py-2.5 rounded-none bg-input border border-main text-xs sm:text-sm text-main placeholder-muted-custom focus:outline-none focus:border-emerald-500 transition-colors font-mono"
             />
           </div>

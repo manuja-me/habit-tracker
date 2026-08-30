@@ -11,6 +11,8 @@ export type HabitFrequency = 'daily' | 'weekdays' | 'weekends' | 'custom';
 
 export type HabitType = 'boolean' | 'number';
 
+export type HabitNature = 'do' | 'dont';
+
 export interface Habit {
   id: string;
   title: string;
@@ -19,6 +21,7 @@ export interface Habit {
   color: string;
   icon: string;
   type: HabitType;
+  nature?: HabitNature; // 'do' for build habits, 'dont' for quit/addiction habits
   target_value: number;
   target_unit?: string;
   frequency: HabitFrequency;

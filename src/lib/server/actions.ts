@@ -81,23 +81,30 @@ export async function getHabitsAndLogsAction(): Promise<{
 
     if (logsErr) throw logsErr;
 
-    const formattedHabits: Habit[] = (habitsData || []).map((h: any) => ({
-      id: h.id,
-      title: h.title,
-      description: h.description || '',
-      category: h.category,
-      color: h.color,
-      icon: h.icon,
-      type: h.type,
-      target_value: Number(h.target_value) || 1,
-      target_unit: h.target_unit || '',
-      frequency: h.frequency,
-      custom_days: h.custom_days || [],
-      archived: Boolean(h.archived),
-      order: h.sort_order || 0,
-      created_at: h.created_at,
-      updated_at: h.updated_at,
-    }));
+    const formattedHabits: Habit[] = (habitsData || []).map((h: any) => {
+      const rawDesc = h.description || '';
+      const isDont = rawDesc.includes('[NATURE:DONT]');
+      const cleanDesc = rawDesc.replace(/\s*\[NATURE:DONT\]/g, '').trim();
+
+      return {
+        id: h.id,
+        title: h.title,
+        description: cleanDesc,
+        category: h.category,
+        color: h.color,
+        icon: h.icon,
+        type: h.type,
+        nature: (isDont ? 'dont' : 'do') as Habit['nature'],
+        target_value: Number(h.target_value) || 1,
+        target_unit: h.target_unit || '',
+        frequency: h.frequency,
+        custom_days: h.custom_days || [],
+        archived: Boolean(h.archived),
+        order: h.sort_order || 0,
+        created_at: h.created_at,
+        updated_at: h.updated_at,
+      };
+    });
 
     const mappedLogs: Record<string, HabitLog> = {};
     (logsData || []).forEach((l: any) => {
@@ -133,10 +140,15 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
+    const rawDesc = habit.description || '';
+    const storedDesc = habit.nature === 'dont'
+      ? (rawDesc ? `${rawDesc} [NATURE:DONT]` : '[NATURE:DONT]')
+      : rawDesc.replace(/\s*\[NATURE:DONT\]/g, '').trim();
+
     const { error } = await supabase.from('habits').upsert({
       id: habit.id,
       title: habit.title,
-      description: habit.description || '',
+      description: storedDesc,
       category: habit.category,
       color: habit.color,
       icon: habit.icon,

@@ -3,19 +3,33 @@ import { Habit, HabitLog, HabitStats, HeatmapDay } from '../types';
 import { getTodayDateString, isHabitDueOnDate } from './date';
 
 /**
+ * Checks if a habit was successful (clean/completed) on a specific date.
+ * For 'do' habits: requires log?.completed === true.
+ * For 'dont' (addiction/quit) habits: clean by default unless explicitly logged as a slip-up (completed === false).
+ */
+export function isDaySuccessful(habit: Habit, dateStr: string, logs: Record<string, HabitLog>): boolean {
+  const log = logs[`${habit.id}_${dateStr}`];
+  if (habit.nature === 'dont') {
+    if (log === undefined) return true;
+    return Boolean(log.completed);
+  }
+  return Boolean(log?.completed);
+}
+
+/**
  * Calculates current streak, longest streak, and completion rate for a given habit.
  */
 export function calculateHabitStats(habit: Habit, logs: Record<string, HabitLog>): HabitStats {
   const todayStr = getTodayDateString();
   const todayLog = logs[`${habit.id}_${todayStr}`];
-  const isCompletedToday = Boolean(todayLog?.completed);
+  const isCompletedToday = isDaySuccessful(habit, todayStr, logs);
   const todayValue = todayLog?.value ?? 0;
 
   // Filter logs for this habit
-  const habitLogs = Object.values(logs).filter(
-    (l) => l.habit_id === habit.id && l.completed
-  );
-  const totalCompletions = habitLogs.length;
+  const habitLogs = Object.values(logs).filter((l) => l.habit_id === habit.id);
+  const totalCompletions = habit.nature === 'dont'
+    ? habitLogs.filter((l) => l.completed).length
+    : habitLogs.filter((l) => l.completed).length;
 
   // Calculate current streak
   let currentStreak = 0;
@@ -26,18 +40,18 @@ export function calculateHabitStats(habit: Habit, logs: Record<string, HabitLog>
     checkDate = subDays(checkDate, 1);
   }
 
-  // Iterate backwards day by day to count consecutive completed scheduled days
+  // Iterate backwards day by day to count consecutive completed/clean scheduled days
   let daysChecked = 0;
   while (daysChecked < 365) {
     const dateStr = format(checkDate, 'yyyy-MM-dd');
     const isDue = isHabitDueOnDate(habit, dateStr);
 
     if (isDue) {
-      const log = logs[`${habit.id}_${dateStr}`];
-      if (log?.completed) {
+      const isPassed = isDaySuccessful(habit, dateStr, logs);
+      if (isPassed) {
         currentStreak++;
       } else {
-        // Streak broken
+        // Streak broken (missed habit or slipped up on quit habit)
         break;
       }
     }
@@ -55,8 +69,8 @@ export function calculateHabitStats(habit: Habit, logs: Record<string, HabitLog>
     const isDue = isHabitDueOnDate(habit, dateStr);
 
     if (isDue) {
-      const log = logs[`${habit.id}_${dateStr}`];
-      if (log?.completed) {
+      const isPassed = isDaySuccessful(habit, dateStr, logs);
+      if (isPassed) {
         tempStreak++;
         if (tempStreak > longestStreak) {
           longestStreak = tempStreak;
@@ -75,7 +89,7 @@ export function calculateHabitStats(habit: Habit, logs: Record<string, HabitLog>
     const dStr = format(subDays(new Date(), i), 'yyyy-MM-dd');
     if (isHabitDueOnDate(habit, dStr)) {
       dueDaysCount30++;
-      if (logs[`${habit.id}_${dStr}`]?.completed) {
+      if (isDaySuccessful(habit, dStr, logs)) {
         completedDaysCount30++;
       }
     }
@@ -120,8 +134,7 @@ export function generateHeatmapData(
 
     const completedHabits: string[] = [];
     dueHabits.forEach(h => {
-      const log = logs[`${h.id}_${dateStr}`];
-      if (log?.completed) {
+      if (isDaySuccessful(h, dateStr, logs)) {
         completedHabits.push(h.title);
       }
     });

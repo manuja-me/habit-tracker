@@ -4,7 +4,8 @@ import React from 'react';
 import { Habit, HabitLog } from '../lib/types';
 import { getWeekDays, formatDayName, formatShortDate, getTodayDateString, isHabitDueOnDate } from '../lib/utils/date';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
-import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { isDaySuccessful } from '../lib/utils/streaks';
+import { Check, ChevronLeft, ChevronRight, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { addDays, subDays } from 'date-fns';
 
 interface WeeklyGridProps {
@@ -105,6 +106,7 @@ export function WeeklyGrid({
             </thead>
             <tbody className="divide-y divide-subtle">
               {habits.map((habit) => {
+                const isDont = habit.nature === 'dont';
                 const IconComponent = getHabitIcon(habit.icon);
                 const colorConfig = COLOR_PALETTES.find(c => c.hex.toLowerCase() === habit.color.toLowerCase()) || COLOR_PALETTES[0];
 
@@ -115,7 +117,10 @@ export function WeeklyGrid({
                       <div className="flex items-center gap-2 sm:gap-2.5 max-w-[140px] sm:max-w-[200px]">
                         <div 
                           className="w-6 h-6 rounded-none flex items-center justify-center flex-shrink-0 border border-subtle"
-                          style={{ backgroundColor: colorConfig.bg, color: colorConfig.hex }}
+                          style={{ 
+                            backgroundColor: isDont ? 'rgba(244, 63, 94, 0.15)' : colorConfig.bg, 
+                            color: isDont ? '#F43F5E' : colorConfig.hex 
+                          }}
                         >
                           <IconComponent className="w-3.5 h-3.5" />
                         </div>
@@ -127,9 +132,9 @@ export function WeeklyGrid({
 
                     {/* Weekday Checkboxes */}
                     {weekDays.map((dStr) => {
-                      const log = logs[`${habit.id}_${dStr}`];
-                      const isCompleted = Boolean(log?.completed);
                       const isDue = isHabitDueOnDate(habit, dStr);
+                      const log = logs[`${habit.id}_${dStr}`];
+                      const isPassed = isDaySuccessful(habit, dStr, logs);
 
                       if (!isDue) {
                         return (
@@ -139,6 +144,31 @@ export function WeeklyGrid({
                         );
                       }
 
+                      if (isDont) {
+                        const isSlippedUp = log !== undefined && log.completed === false;
+                        return (
+                          <td key={dStr} className="py-2.5 sm:py-3 text-center px-1">
+                            <button
+                              onClick={() => onToggle(habit.id, dStr, isSlippedUp, isSlippedUp ? 0 : 1)}
+                              className={`w-7 h-7 sm:w-6 sm:h-6 rounded-none inline-flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation border ${
+                                isSlippedUp
+                                  ? 'bg-rose-500 text-black border-rose-400'
+                                  : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'
+                              }`}
+                              title={isSlippedUp ? 'Slipped up (Click to mark clean)' : 'Clean (Click if you indulged)'}
+                              aria-label={`Toggle ${habit.title} for ${dStr}`}
+                            >
+                              {isSlippedUp ? (
+                                <ShieldAlert className="w-3.5 h-3.5 stroke-[2.5]" />
+                              ) : (
+                                <ShieldCheck className="w-3.5 h-3.5 stroke-[2.5]" />
+                              )}
+                            </button>
+                          </td>
+                        );
+                      }
+
+                      const isCompleted = Boolean(log?.completed);
                       return (
                         <td key={dStr} className="py-2.5 sm:py-3 text-center px-1">
                           <button
