@@ -14,7 +14,12 @@ import {
   ShieldCheck,
   Zap,
   Crown,
-  Lock
+  Lock,
+  Star,
+  Medal,
+  Trophy,
+  Sparkles,
+  Activity
 } from 'lucide-react';
 import { subDays, format, getDay } from 'date-fns';
 import { Progress } from './ui/progress';
@@ -77,10 +82,16 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
 
   const getMilestoneIcon = (iconName: string) => {
     switch (iconName) {
-      case 'Flame': return Flame;
-      case 'ShieldCheck': return ShieldCheck;
       case 'Zap': return Zap;
+      case 'Flame': return Flame;
+      case 'TrendingUp': return TrendingUp;
+      case 'Activity': return Activity;
+      case 'ShieldCheck': return ShieldCheck;
+      case 'Sparkles': return Sparkles;
+      case 'Trophy': return Trophy;
+      case 'Star': return Star;
       case 'Crown': return Crown;
+      case 'Medal': return Medal;
       default: return Award;
     }
   };
