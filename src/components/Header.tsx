@@ -65,14 +65,9 @@ export function Header({
           <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-none bg-emerald-500 flex items-center justify-center text-black font-bold border border-emerald-400">
             <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-black" />
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <h1 className="text-sm sm:text-base font-bold tracking-tight text-main font-mono uppercase">
-              Zenith
-            </h1>
-            <span className="text-[9px] sm:text-[10px] font-mono font-bold tracking-widest px-1 sm:px-1.5 py-0.5 rounded-none bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
-              PRO
-            </span>
-          </div>
+          <h1 className="text-sm sm:text-base font-bold tracking-tight text-main font-mono uppercase">
+            Zenith
+          </h1>
         </div>
 
         {/* Action Controls */}
