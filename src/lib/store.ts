@@ -89,10 +89,19 @@ const INITIAL_DEFAULT_HABITS: Habit[] = [
   },
 ];
 
+// Global in-memory state
 let globalHabits: Habit[] = [];
 let globalLogs: Record<string, HabitLog> = {};
 let globalIsCloudReady = true;
+let globalIsSyncing = false;
+let globalSyncError: string | null = null;
+let isStorageLoaded = false;
 let listeners: Array<() => void> = [];
+
+// Mutation Safety Trackers (Prevents split-second disappear/reappear race conditions)
+const pendingDeletedHabitIds = new Set<string>();
+const pendingAddedHabits = new Map<string, Habit>();
+let lastLocalMutationTime = 0;
 
 function emitChange() {
   for (const listener of listeners) {
@@ -116,9 +125,7 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         emitChange();
       }
     };
-  } catch (e) {
-    // Unsupported or restricted environment
-  }
+  } catch (e) {}
 }
 
 function broadcastLocalUpdate() {
@@ -144,167 +151,181 @@ export function generateId(): string {
   });
 }
 
-export function useHabitStore() {
-  const [habits, setHabits] = useState<Habit[]>(globalHabits);
-  const [logs, setLogs] = useState<Record<string, HabitLog>>(globalLogs);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const [isCloudReady, setIsCloudReady] = useState<boolean>(globalIsCloudReady);
+function persistLocally(newHabits: Habit[], newLogs: Record<string, HabitLog>) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(HABITS_STORAGE_KEY, JSON.stringify(newHabits));
+    localStorage.setItem(LOGS_STORAGE_KEY, JSON.stringify(newLogs));
+  } catch (e) {
+    console.error('Failed to save to localStorage', e);
+  }
+}
 
-  const persistLocally = (newHabits: Habit[], newLogs: Record<string, HabitLog>) => {
-    try {
-      localStorage.setItem(HABITS_STORAGE_KEY, JSON.stringify(newHabits));
-      localStorage.setItem(LOGS_STORAGE_KEY, JSON.stringify(newLogs));
-    } catch (e) {
-      console.error('Failed to save to localStorage', e);
+function loadLocalDataFromStorage() {
+  if (typeof window === 'undefined' || isStorageLoaded) return;
+  try {
+    const storedHabits = localStorage.getItem(HABITS_STORAGE_KEY);
+    const storedLogs = localStorage.getItem(LOGS_STORAGE_KEY);
+
+    if (storedHabits) {
+      globalHabits = JSON.parse(storedHabits);
+    } else {
+      globalHabits = INITIAL_DEFAULT_HABITS;
+      localStorage.setItem(HABITS_STORAGE_KEY, JSON.stringify(INITIAL_DEFAULT_HABITS));
     }
-  };
 
-  // Sync with Server (Protected Server Action Proxy)
-  const syncWithCloud = useCallback(async (isBackground = false) => {
-    if (!isBackground) setIsSyncing(true);
-    setSyncError(null);
+    if (storedLogs) {
+      globalLogs = JSON.parse(storedLogs);
+    } else {
+      globalLogs = {};
+    }
 
-    try {
-      const res = await getHabitsAndLogsAction();
-      if (!res.success) {
-        if (res.error) setSyncError(res.error);
+    isStorageLoaded = true;
+    emitChange();
+  } catch (e) {
+    console.error('Failed to read from localStorage', e);
+  }
+}
+
+// Unified Single Cloud Sync Executor
+async function executeCloudSync(isBackground = false) {
+  const requestStartTime = Date.now();
+  if (!isBackground) {
+    globalIsSyncing = true;
+    emitChange();
+  }
+
+  try {
+    const res = await getHabitsAndLogsAction();
+    if (!res.success) {
+      if (res.error) globalSyncError = res.error;
+      return;
+    }
+
+    globalIsCloudReady = Boolean(res.isConfigured);
+    globalSyncError = null;
+
+    if (res.isConfigured) {
+      // Stale response guard: If a local action happened while this request was flying, ignore outdated response
+      if (requestStartTime < lastLocalMutationTime) {
         return;
       }
 
-      globalIsCloudReady = Boolean(res.isConfigured);
-      setIsCloudReady(globalIsCloudReady);
+      let serverHabits = (res.habits || []).filter((h) => !h.archived);
+      const serverLogs = res.logs || {};
 
-      if (res.isConfigured) {
-        const serverHabits = res.habits || [];
-        const serverLogs = res.logs || {};
+      // 1. Guard against in-flight delete race: never resurrect a habit that is pending deletion
+      serverHabits = serverHabits.filter((h) => !pendingDeletedHabitIds.has(h.id));
 
-        const hasBeenInitialized = typeof window !== 'undefined' && localStorage.getItem(INITIALIZED_KEY) === 'true';
+      // 2. Guard against in-flight add race: retain any newly added habit that hasn't landed in this server snapshot yet
+      pendingAddedHabits.forEach((pendingHabit, id) => {
+        if (!serverHabits.some((h) => h.id === id) && !pendingDeletedHabitIds.has(id)) {
+          serverHabits.push(pendingHabit);
+        }
+      });
 
-        if (!hasBeenInitialized && serverHabits.length === 0 && globalHabits.length > 0) {
-          // First time ever running with empty cloud DB: seed defaults
-          for (const h of globalHabits) {
-            await saveHabitAction(h);
-          }
-          if (typeof window !== 'undefined') {
-            localStorage.setItem(INITIALIZED_KEY, 'true');
-          }
-        } else {
-          if (typeof window !== 'undefined') {
-            localStorage.setItem(INITIALIZED_KEY, 'true');
-          }
+      // 3. Clean logs for deleted habits
+      const cleanLogs: Record<string, HabitLog> = {};
+      Object.entries(serverLogs).forEach(([key, log]) => {
+        if (!pendingDeletedHabitIds.has(log.habit_id)) {
+          cleanLogs[key] = log;
+        }
+      });
 
-          // Check if data actually changed before updating state to avoid UI jitter
-          const habitsChanged = JSON.stringify(serverHabits) !== JSON.stringify(globalHabits);
-          const logsChanged = JSON.stringify(serverLogs) !== JSON.stringify(globalLogs);
+      const hasBeenInitialized = typeof window !== 'undefined' && localStorage.getItem(INITIALIZED_KEY) === 'true';
 
-          if (habitsChanged || logsChanged) {
-            globalHabits = serverHabits;
-            globalLogs = serverLogs;
-            setHabits([...serverHabits]);
-            setLogs({ ...serverLogs });
-            persistLocally(globalHabits, globalLogs);
-            emitChange();
-            broadcastLocalUpdate();
-          }
+      if (!hasBeenInitialized && serverHabits.length === 0 && globalHabits.length > 0) {
+        for (const h of globalHabits) {
+          await saveHabitAction(h);
+        }
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(INITIALIZED_KEY, 'true');
+        }
+      } else {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(INITIALIZED_KEY, 'true');
+        }
+
+        const habitsChanged = JSON.stringify(serverHabits) !== JSON.stringify(globalHabits);
+        const logsChanged = JSON.stringify(cleanLogs) !== JSON.stringify(globalLogs);
+
+        if (habitsChanged || logsChanged) {
+          globalHabits = serverHabits;
+          globalLogs = cleanLogs;
+          persistLocally(globalHabits, globalLogs);
+          emitChange();
+          broadcastLocalUpdate();
         }
       }
-    } catch (err: any) {
-      console.warn('Server sync notice:', err?.message || err);
-      setSyncError(err?.message || 'Sync failed');
-    } finally {
-      if (!isBackground) setIsSyncing(false);
     }
-  }, []);
-
-  // Load from local storage initially
-  const loadLocalData = useCallback(() => {
-    try {
-      const storedHabits = localStorage.getItem(HABITS_STORAGE_KEY);
-      const storedLogs = localStorage.getItem(LOGS_STORAGE_KEY);
-
-      if (storedHabits) {
-        globalHabits = JSON.parse(storedHabits);
-      } else {
-        globalHabits = INITIAL_DEFAULT_HABITS;
-        localStorage.setItem(HABITS_STORAGE_KEY, JSON.stringify(INITIAL_DEFAULT_HABITS));
-      }
-
-      if (storedLogs) {
-        globalLogs = JSON.parse(storedLogs);
-      } else {
-        globalLogs = {};
-      }
-
-      setHabits(globalHabits);
-      setLogs(globalLogs);
-    } catch (e) {
-      console.error('Failed to read from localStorage', e);
-    } finally {
-      setIsLoading(false);
+  } catch (err: any) {
+    console.warn('Server sync notice:', err?.message || err);
+    globalSyncError = err?.message || 'Sync failed';
+  } finally {
+    if (!isBackground) {
+      globalIsSyncing = false;
+      emitChange();
     }
-  }, []);
+  }
+}
+
+// Singleton Sync Loop (Runs once across all components)
+let hasStartedSyncLoop = false;
+function initGlobalSyncCoordinator() {
+  if (typeof window === 'undefined' || hasStartedSyncLoop) return;
+  hasStartedSyncLoop = true;
+
+  loadLocalDataFromStorage();
+  executeCloudSync();
+
+  // Background polling every 5s when tab is active
+  setInterval(() => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      executeCloudSync(true);
+    }
+  }, 5000);
+
+  // Sync immediately when switching tabs or focusing window
+  window.addEventListener('focus', () => executeCloudSync(true));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      executeCloudSync(true);
+    }
+  });
+
+  window.addEventListener('storage', (e: StorageEvent) => {
+    if (e.key === HABITS_STORAGE_KEY && e.newValue) {
+      try {
+        globalHabits = JSON.parse(e.newValue);
+        emitChange();
+      } catch (err) {}
+    }
+    if (e.key === LOGS_STORAGE_KEY && e.newValue) {
+      try {
+        globalLogs = JSON.parse(e.newValue);
+        emitChange();
+      } catch (err) {}
+    }
+  });
+}
+
+export function useHabitStore() {
+  const [habits, setHabits] = useState<Habit[]>(globalHabits);
+  const [logs, setLogs] = useState<Record<string, HabitLog>>(globalLogs);
+  const [isLoading, setIsLoading] = useState<boolean>(!isStorageLoaded);
+  const [isSyncing, setIsSyncing] = useState<boolean>(globalIsSyncing);
+  const [syncError, setSyncError] = useState<string | null>(globalSyncError);
+  const [isCloudReady, setIsCloudReady] = useState<boolean>(globalIsCloudReady);
 
   useEffect(() => {
-    loadLocalData();
-    syncWithCloud();
+    initGlobalSyncCoordinator();
 
-    // 1. Periodic background polling every 4s when window is visible
-    const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        syncWithCloud(true);
-      }
-    }, 4000);
-
-    // 2. Immediate sync on window focus (e.g. switching back to this device/tab)
-    const handleFocus = () => {
-      syncWithCloud(true);
-    };
-
-    // 3. Immediate sync on visibility change (e.g. unlocking phone or switching browser tab)
-    const handleVisibilityChange = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        syncWithCloud(true);
-      }
-    };
-
-    // 4. Cross-tab storage event
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === HABITS_STORAGE_KEY && e.newValue) {
-        try {
-          globalHabits = JSON.parse(e.newValue);
-          emitChange();
-        } catch (err) {}
-      }
-      if (e.key === LOGS_STORAGE_KEY && e.newValue) {
-        try {
-          globalLogs = JSON.parse(e.newValue);
-          emitChange();
-        } catch (err) {}
-      }
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('focus', handleFocus);
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      window.addEventListener('storage', handleStorage);
-    }
-
-    return () => {
-      clearInterval(interval);
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('focus', handleFocus);
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        window.removeEventListener('storage', handleStorage);
-      }
-    };
-  }, [loadLocalData, syncWithCloud]);
-
-  useEffect(() => {
     const handleUpdate = () => {
       setHabits([...globalHabits]);
       setLogs({ ...globalLogs });
+      setIsLoading(!isStorageLoaded);
+      setIsSyncing(globalIsSyncing);
+      setSyncError(globalSyncError);
       setIsCloudReady(globalIsCloudReady);
     };
 
@@ -314,15 +335,20 @@ export function useHabitStore() {
     };
   }, []);
 
+  const syncWithCloud = useCallback((isBackground = false) => {
+    return executeCloudSync(isBackground);
+  }, []);
+
   // 1. Instant Optimistic Toggle Habit Log (0ms UI latency) + Async Server Action
   const toggleHabit = async (habitId: string, dateStr: string, completed?: boolean, value?: number) => {
+    lastLocalMutationTime = Date.now();
     const key = `${habitId}_${dateStr}`;
     const currentLog = globalLogs[key];
 
     const newCompleted = completed !== undefined ? completed : !currentLog?.completed;
-    const habit = globalHabits.find(h => h.id === habitId);
+    const habit = globalHabits.find((h) => h.id === habitId);
     
-    let newValue = value !== undefined 
+    const newValue = value !== undefined 
       ? value 
       : (newCompleted ? (habit?.target_value || 1) : 0);
 
@@ -352,8 +378,9 @@ export function useHabitStore() {
     });
   };
 
-  // 2. Add New Habit (Optimistic + Server Action)
+  // 2. Add New Habit (Optimistic 0ms + Protected In-flight Tracking)
   const addHabit = async (habitData: Omit<Habit, 'id' | 'created_at' | 'order' | 'archived'>) => {
+    lastLocalMutationTime = Date.now();
     const newHabit: Habit = {
       ...habitData,
       id: generateId(),
@@ -362,20 +389,36 @@ export function useHabitStore() {
       created_at: new Date().toISOString(),
     };
 
+    pendingAddedHabits.set(newHabit.id, newHabit);
+
     globalHabits = [...globalHabits, newHabit];
     persistLocally(globalHabits, globalLogs);
     emitChange();
     broadcastLocalUpdate();
 
-    saveHabitAction(newHabit).catch((e) => {
-      console.error('Background server habit add error:', e);
-    });
+    saveHabitAction(newHabit)
+      .then((res) => {
+        if (!res.success && res.error) {
+          console.error('Server habit add error:', res.error);
+          globalSyncError = res.error;
+        }
+      })
+      .catch((e) => {
+        console.error('Background server habit add error:', e);
+      })
+      .finally(() => {
+        // Keep in tracking map for 4s so any in-flight GET query doesn't remove it prematurely
+        setTimeout(() => {
+          pendingAddedHabits.delete(newHabit.id);
+        }, 4000);
+      });
 
     return newHabit;
   };
 
   // 3. Update Existing Habit
   const updateHabit = async (habitId: string, updates: Partial<Habit>) => {
+    lastLocalMutationTime = Date.now();
     let updatedHabitObj: Habit | undefined;
     globalHabits = globalHabits.map((h) => {
       if (h.id === habitId) {
@@ -396,12 +439,16 @@ export function useHabitStore() {
     }
   };
 
-  // 4. Delete Habit (Optimistic + Server Action + Cascade Logs cleanup)
+  // 4. Delete Habit (0ms Optimistic + Guaranteed Anti-Reappearance Protection)
   const deleteHabit = async (habitId: string) => {
-    // Remove habit from memory
+    lastLocalMutationTime = Date.now();
+    pendingDeletedHabitIds.add(habitId);
+    pendingAddedHabits.delete(habitId);
+
+    // 1. Remove habit from memory immediately
     globalHabits = globalHabits.filter((h) => h.id !== habitId);
     
-    // Remove all associated logs
+    // 2. Remove associated logs
     const newLogs: Record<string, HabitLog> = {};
     Object.entries(globalLogs).forEach(([key, log]) => {
       if (log.habit_id !== habitId) {
@@ -410,26 +457,32 @@ export function useHabitStore() {
     });
     globalLogs = newLogs;
 
-    // Persist to localStorage and notify other open tabs
+    // 3. Persist and notify other open tabs
     persistLocally(globalHabits, globalLogs);
     emitChange();
     broadcastLocalUpdate();
 
-    // Delete on the server cloud database
+    // 4. Delete on the server cloud database
     try {
       const res = await deleteHabitAction(habitId);
       if (!res.success && res.error) {
         console.error('Server habit delete error:', res.error);
-        setSyncError(res.error);
+        globalSyncError = res.error;
       }
     } catch (e: any) {
       console.error('Background server habit delete error:', e);
-      setSyncError(e?.message || 'Failed to delete on server');
+      globalSyncError = e?.message || 'Failed to delete on server';
+    } finally {
+      // Keep in protection set for 5s so any in-flight response arriving shortly can NEVER revive it
+      setTimeout(() => {
+        pendingDeletedHabitIds.delete(habitId);
+      }, 5000);
     }
   };
 
   // 5. Reorder Habits
   const reorderHabits = async (orderedHabits: Habit[]) => {
+    lastLocalMutationTime = Date.now();
     const updated = orderedHabits.map((h, index) => ({ ...h, order: index }));
     globalHabits = updated;
     persistLocally(globalHabits, globalLogs);
@@ -442,7 +495,7 @@ export function useHabitStore() {
   };
 
   return {
-    habits: habits.filter(h => !h.archived).sort((a, b) => a.order - b.order),
+    habits: habits.filter((h) => !h.archived).sort((a, b) => a.order - b.order),
     allHabits: habits,
     logs,
     isLoading,
