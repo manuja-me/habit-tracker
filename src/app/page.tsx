@@ -50,6 +50,7 @@ export default function HabitTrackerPage() {
 
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
   const [draggedHabitId, setDraggedHabitId] = useState<string | null>(null);
+  const [modalInitialNature, setModalInitialNature] = useState<'do' | 'dont'>('do');
 
   const prevCompletionRef = useRef<boolean>(false);
 
@@ -274,8 +275,9 @@ export default function HabitTrackerPage() {
     setDraggedHabitId(null);
   };
 
-  const handleOpenAddModal = () => {
+  const handleOpenAddModal = (nature: 'do' | 'dont' = 'do') => {
     setEditingHabit(null);
+    setModalInitialNature(nature);
     setIsHabitModalOpen(true);
   };
 
@@ -384,7 +386,7 @@ export default function HabitTrackerPage() {
                 </p>
                 {filterCategory === 'all' && (
                   <button
-                    onClick={handleOpenAddModal}
+                    onClick={() => handleOpenAddModal('do')}
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-none text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-400 active:scale-95 transition-all cursor-pointer touch-manipulation"
                   >
                     <Plus className="w-4 h-4 stroke-[3]" />
@@ -458,7 +460,7 @@ export default function HabitTrackerPage() {
                         No addictions or habits to stop tracked yet.
                       </p>
                       <button
-                        onClick={handleOpenAddModal}
+                        onClick={() => handleOpenAddModal('dont')}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-mono font-bold bg-input hover:bg-rose-500/10 hover:border-rose-500/40 border border-main text-rose-400 transition-colors cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
@@ -529,6 +531,7 @@ export default function HabitTrackerPage() {
         onClose={() => setIsHabitModalOpen(false)}
         onSave={handleSaveHabit}
         editingHabit={editingHabit}
+        initialNature={modalInitialNature}
       />
 
       {/* Sync Status Modal */}

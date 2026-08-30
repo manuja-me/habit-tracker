@@ -10,6 +10,7 @@ interface HabitModalProps {
   onClose: () => void;
   onSave: (habitData: any) => void;
   editingHabit?: Habit | null;
+  initialNature?: HabitNature;
 }
 
 const CATEGORIES: { id: HabitCategory; label: string }[] = [
@@ -37,8 +38,9 @@ export function HabitModal({
   onClose,
   onSave,
   editingHabit,
+  initialNature = 'do',
 }: HabitModalProps) {
-  const [nature, setNature] = useState<HabitNature>('do');
+  const [nature, setNature] = useState<HabitNature>(initialNature);
   const [weaningProtocol, setWeaningProtocol] = useState<'exponential' | 'linear' | 'rapid' | 'none'>('exponential');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -77,20 +79,21 @@ export function HabitModal({
       setFrequency(editingHabit.frequency);
       setCustomDays(editingHabit.custom_days || [1, 2, 3, 4, 5]);
     } else {
-      setNature('do');
+      const defaultNat = initialNature || 'do';
+      setNature(defaultNat);
       setWeaningProtocol('exponential');
       setTitle('');
       setDescription('');
-      setCategory('productivity');
-      setColor(COLOR_PALETTES[0].hex);
-      setIcon('Flame');
+      setCategory(defaultNat === 'dont' ? 'health' : 'productivity');
+      setColor(defaultNat === 'dont' ? '#F43F5E' : COLOR_PALETTES[0].hex);
+      setIcon(defaultNat === 'dont' ? 'ShieldOff' : 'Flame');
       setType('boolean');
       setTargetValue(1);
       setTargetUnit('');
       setFrequency('daily');
       setCustomDays([1, 2, 3, 4, 5]);
     }
-  }, [editingHabit, isOpen]);
+  }, [editingHabit, isOpen, initialNature]);
 
   if (!isOpen) return null;
 
