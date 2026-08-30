@@ -20,6 +20,7 @@ import { ShortcutsModal } from '../components/ShortcutsModal';
 import { ShareStreakModal } from '../components/ShareStreakModal';
 import { NotificationModal } from '../components/NotificationModal';
 import { PinLockScreen } from '../components/PinLockScreen';
+import { LoadingScreen } from '../components/LoadingScreen';
 import { Plus, Sparkles } from 'lucide-react';
 
 export default function HabitTrackerPage() {
@@ -286,12 +287,10 @@ export default function HabitTrackerPage() {
 
   if (isUnlocked === null) {
     return (
-      <div className="min-h-screen bg-main flex items-center justify-center font-mono">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent animate-spin" />
-          <span className="text-xs font-mono text-sub">VALIDATING SECURE SESSION...</span>
-        </div>
-      </div>
+      <LoadingScreen
+        message="VALIDATING SECURE SESSION..."
+        statusText="ZENITH // AUTH GATE"
+      />
     );
   }
 
@@ -301,12 +300,10 @@ export default function HabitTrackerPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-main flex items-center justify-center font-mono">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent animate-spin" />
-          <span className="text-xs font-mono text-sub">LOADING ZENITH...</span>
-        </div>
-      </div>
+      <LoadingScreen
+        message="LOADING HABIT VAULT..."
+        statusText="ZENITH // ENGINE BOOT"
+      />
     );
   }
 

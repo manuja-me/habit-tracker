@@ -127,3 +127,19 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-hover);
 }
+
+@keyframes laserScan {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(120%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+
+.animate-laser {
+  animation: laserScan 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
