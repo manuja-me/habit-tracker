@@ -16,6 +16,7 @@ import { useHabitStore } from '../lib/store';
 import { useTheme } from '../lib/theme';
 import { formatDisplayDate, getTodayDateString, formatDate, parseDate } from '../lib/utils/date';
 import { addDays, subDays } from 'date-fns';
+import { Progress } from './ui/progress';
 
 interface HeaderProps {
   selectedDate: string;
@@ -77,7 +78,7 @@ export function Header({
           <button
             onClick={onOpenSyncModal}
             title={isCloudReady ? 'Cloud Synced — Click for details' : 'Local Storage Mode'}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all cursor-pointer"
           >
             {isSyncing ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-500" />
@@ -94,7 +95,7 @@ export function Header({
           {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
-            className="p-2 rounded-lg bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center"
+            className="p-2 rounded-lg bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer"
             title={`Theme: ${theme.toUpperCase()} (Click to toggle Light / Dark / OLED)`}
           >
             {theme === 'light' ? (
@@ -118,13 +119,13 @@ export function Header({
       </div>
 
       {/* Date & Progress Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-card border border-main backdrop-blur-md transition-colors">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl bg-card border border-main backdrop-blur-md shadow-xs transition-colors">
         {/* Date Selector */}
         <div className="flex items-center gap-3">
           <div className="flex items-center bg-input rounded-xl p-1 border border-subtle">
             <button
               onClick={handlePrevDay}
-              className="p-1.5 rounded-lg hover:bg-subtle text-sub hover:text-main transition-colors"
+              className="p-1.5 rounded-lg hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer"
               title="Previous Day"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -132,7 +133,7 @@ export function Header({
             
             <button
               onClick={() => onSelectDate(todayStr)}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
                 isToday
                   ? 'bg-subtle text-main font-semibold shadow-xs'
                   : 'text-sub hover:text-main'
@@ -143,7 +144,7 @@ export function Header({
 
             <button
               onClick={handleNextDay}
-              className="p-1.5 rounded-lg hover:bg-subtle text-sub hover:text-main transition-colors"
+              className="p-1.5 rounded-lg hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer"
               title="Next Day"
             >
               <ChevronRight className="w-4 h-4" />
@@ -157,22 +158,20 @@ export function Header({
             <div className="text-xs text-sub">
               {totalCount === 0 
                 ? 'No habits scheduled for this day' 
-                : `${completedCount} of ${totalCount} habits completed (${percentage}%)`}
+                : `${completedCount} of ${totalCount} completed`}
             </div>
           </div>
         </div>
 
-        {/* Progress Bar & Ring */}
-        <div className="flex items-center gap-3 sm:self-center">
-          <div className="w-full sm:w-32 bg-input h-2.5 rounded-full overflow-hidden border border-subtle">
-            <div
-              className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500 ease-out rounded-full"
-              style={{ width: `${percentage}%` }}
-            />
-          </div>
-          <span className="text-xs font-mono font-semibold text-emerald-500 w-10 text-right">
-            {percentage}%
-          </span>
+        {/* Prominent Daily Progress Bar */}
+        <div className="flex items-center gap-3 w-full sm:w-56 flex-shrink-0">
+          <Progress
+            value={completedCount}
+            max={totalCount || 1}
+            size="md"
+            indicatorColor="#10B981"
+            showLabel
+          />
         </div>
       </div>
     </header>

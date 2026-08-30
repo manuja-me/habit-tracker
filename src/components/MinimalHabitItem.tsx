@@ -8,10 +8,12 @@ import {
   Edit3, 
   Trash2, 
   Plus, 
-  Minus 
+  Minus,
+  CheckCircle2
 } from 'lucide-react';
 import { Habit, HabitLog, HabitStats } from '../lib/types';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
+import { Progress } from './ui/progress';
 
 interface MinimalHabitItemProps {
   habit: Habit;
@@ -54,29 +56,39 @@ export function MinimalHabitItem({
   };
 
   // Step increments for numeric habits
-  const stepAmount = habit.target_value > 100 ? 250 : habit.target_value > 20 ? 5 : 1;
+  const stepAmount = habit.target_value >= 1000 ? 250 : habit.target_value >= 50 ? 10 : habit.target_value >= 20 ? 5 : 1;
   const progressPercent = habit.type === 'number' 
     ? Math.min(100, Math.round((currentValue / habit.target_value) * 100))
     : (isCompleted ? 100 : 0);
 
+  // Quick preset chips for measurable habits
+  const presetSteps = habit.target_value >= 1000 
+    ? [250, 500, 1000] 
+    : habit.target_value >= 50 
+    ? [5, 10, 25] 
+    : habit.target_value >= 10 
+    ? [1, 2, 5] 
+    : [1];
+
   return (
     <div
       onMouseLeave={() => setShowMenu(false)}
-      className={`group relative flex flex-col p-4 rounded-2xl transition-all duration-150 border ${
+      className={`group relative flex flex-col p-4 sm:p-5 rounded-2xl transition-all duration-150 border ${
         isCompleted
-          ? 'bg-card/50 border-subtle opacity-85'
+          ? 'bg-card/70 border-emerald-500/30 shadow-xs'
           : 'bg-card border-main hover:border-hover shadow-xs'
       }`}
     >
+      {/* Top Row: Checkbox, Title, Quick Actions */}
       <div className="flex items-center justify-between gap-3">
-        {/* Left: Icon & Info */}
+        {/* Left: Checkbox + Icon + Title */}
         <div className="flex items-center gap-3.5 min-w-0 flex-1">
           {/* Custom Checkbox */}
           <button
             onClick={handleCheckboxClick}
             className={`relative flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 cursor-pointer ${
               isCompleted
-                ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/25 ring-2 ring-emerald-500/20'
+                ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/25 ring-2 ring-emerald-500/30'
                 : 'border-2 border-subtle hover:border-main bg-input'
             }`}
             aria-label={isCompleted ? 'Mark incomplete' : 'Mark complete'}
@@ -90,33 +102,40 @@ export function MinimalHabitItem({
           <div 
             className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-transform group-hover:scale-105"
             style={{ 
-              backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.12)' : colorConfig.bg,
+              backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.15)' : colorConfig.bg,
               color: isCompleted ? '#10B981' : colorConfig.hex 
             }}
           >
             <IconComponent className="w-4 h-4" />
           </div>
 
-          {/* Title & Frequency info */}
+          {/* Title & Description */}
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h3 className={`text-sm font-medium tracking-tight truncate transition-colors ${
-                isCompleted ? 'text-muted-custom line-through' : 'text-main'
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className={`text-sm font-semibold tracking-tight truncate transition-colors ${
+                isCompleted ? 'text-main' : 'text-main'
               }`}>
                 {habit.title}
               </h3>
               
               {/* Streak Badge */}
               {stats.currentStreak > 0 && (
-                <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-amber-500/15 text-amber-500 border border-amber-500/30">
                   <Flame className="w-3 h-3 fill-amber-500" />
-                  {stats.currentStreak}d
+                  {stats.currentStreak}d streak
+                </span>
+              )}
+
+              {isCompleted && (
+                <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
+                  <CheckCircle2 className="w-3 h-3" />
+                  Done
                 </span>
               )}
             </div>
 
             {habit.description && (
-              <p className="text-xs text-sub truncate mt-0.5 font-light">
+              <p className="text-xs text-sub truncate mt-0.5 font-normal">
                 {habit.description}
               </p>
             )}
@@ -125,31 +144,6 @@ export function MinimalHabitItem({
 
         {/* Right Controls */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Numeric Target Controls */}
-          {habit.type === 'number' && (
-            <div className="flex items-center gap-1.5 bg-input p-1 rounded-xl border border-subtle">
-              <button
-                onClick={(e) => handleIncrement(e, -stepAmount)}
-                className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer"
-                title={`Minus ${stepAmount} ${habit.target_unit || ''}`}
-              >
-                <Minus className="w-3 h-3" />
-              </button>
-
-              <span className="text-xs font-mono font-medium px-1 min-w-[3.5rem] text-center text-main">
-                {currentValue} / {habit.target_value} {habit.target_unit || ''}
-              </span>
-
-              <button
-                onClick={(e) => handleIncrement(e, stepAmount)}
-                className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer"
-                title={`Add ${stepAmount} ${habit.target_unit || ''}`}
-              >
-                <Plus className="w-3 h-3" />
-              </button>
-            </div>
-          )}
-
           {/* Quick Menu Button */}
           <div className="relative">
             <button
@@ -189,15 +183,56 @@ export function MinimalHabitItem({
         </div>
       </div>
 
-      {/* Numeric Progress Bar */}
+      {/* Measurable Progress Section */}
       {habit.type === 'number' && (
-        <div className="w-full mt-3 bg-input h-1 rounded-full overflow-hidden border border-subtle/50">
-          <div 
-            className="h-full transition-all duration-300 rounded-full"
-            style={{ 
-              width: `${progressPercent}%`,
-              backgroundColor: isCompleted ? '#10B981' : habit.color
-            }}
+        <div className="mt-3.5 pt-3 border-t border-subtle/80 space-y-2">
+          {/* Status Label & Stepper Controls */}
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-main font-mono text-xs sm:text-sm">
+                {currentValue.toLocaleString()} <span className="text-sub font-normal">/ {habit.target_value.toLocaleString()} {habit.target_unit}</span>
+              </span>
+              <span className="px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold bg-subtle text-sub border border-main">
+                {progressPercent}%
+              </span>
+            </div>
+
+            {/* Quick Add Presets & Steppers */}
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={(e) => handleIncrement(e, -stepAmount)}
+                className="w-7 h-7 rounded-lg flex items-center justify-center bg-input hover:bg-subtle border border-main text-sub hover:text-main transition-colors cursor-pointer"
+                title={`Subtract ${stepAmount}`}
+              >
+                <Minus className="w-3.5 h-3.5" />
+              </button>
+
+              {presetSteps.map((amt) => (
+                <button
+                  key={amt}
+                  onClick={(e) => handleIncrement(e, amt)}
+                  className="px-2 py-1 rounded-lg text-[11px] font-mono font-medium bg-input hover:bg-subtle border border-main text-sub hover:text-main transition-colors cursor-pointer"
+                >
+                  +{amt}
+                </button>
+              ))}
+
+              <button
+                onClick={(e) => handleIncrement(e, stepAmount)}
+                className="w-7 h-7 rounded-lg flex items-center justify-center bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-500 font-bold transition-colors cursor-pointer"
+                title={`Add ${stepAmount}`}
+              >
+                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+              </button>
+            </div>
+          </div>
+
+          {/* High-Contrast Visual Progress Bar */}
+          <Progress
+            value={currentValue}
+            max={habit.target_value}
+            size="md"
+            indicatorColor={isCompleted ? '#10B981' : habit.color}
           />
         </div>
       )}

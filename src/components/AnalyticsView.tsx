@@ -12,6 +12,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { subDays, format, getDay } from 'date-fns';
+import { Progress } from './ui/progress';
 
 interface AnalyticsViewProps {
   habits: Habit[];
@@ -133,14 +134,14 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
             Habit Performance Breakdown
           </h3>
 
-          <div className="space-y-3">
+          <div className="space-y-3.5">
             {statsList.map(({ habit, stats }) => {
               const IconComp = getHabitIcon(habit.icon);
               const color = COLOR_PALETTES.find(c => c.hex.toLowerCase() === habit.color.toLowerCase()) || COLOR_PALETTES[0];
 
               return (
-                <div key={habit.id} className="p-3 rounded-xl bg-input border border-subtle">
-                  <div className="flex items-center justify-between mb-2">
+                <div key={habit.id} className="p-3.5 rounded-xl bg-input border border-subtle space-y-2.5">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div 
                         className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
@@ -148,7 +149,7 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
                       >
                         <IconComp className="w-3.5 h-3.5" />
                       </div>
-                      <span className="text-xs font-medium text-main truncate">
+                      <span className="text-xs font-semibold text-main truncate">
                         {habit.title}
                       </span>
                     </div>
@@ -158,19 +159,16 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
                         <Flame className="w-3 h-3 fill-amber-500" /> {stats.currentStreak}d
                       </span>
                       <span className="text-sub">|</span>
-                      <span className="text-main font-semibold">{stats.completionRate30Days}%</span>
+                      <span className="text-main font-bold">{stats.completionRate30Days}%</span>
                     </div>
                   </div>
 
-                  <div className="w-full bg-subtle h-1.5 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{ 
-                        width: `${stats.completionRate30Days}%`,
-                        backgroundColor: habit.color 
-                      }}
-                    />
-                  </div>
+                  <Progress
+                    value={stats.completionRate30Days}
+                    max={100}
+                    size="sm"
+                    indicatorColor={habit.color}
+                  />
                 </div>
               );
             })}
@@ -194,7 +192,7 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
               <div key={item.day} className="flex flex-col items-center gap-2 h-full justify-end">
                 <span className="text-[10px] font-mono text-sub">{item.rate}%</span>
                 <div 
-                  className="w-full max-w-[28px] rounded-t-md bg-gradient-to-t from-emerald-600 to-teal-400 transition-all duration-500"
+                  className="w-full max-w-[28px] rounded-t-md bg-gradient-to-t from-emerald-600 to-teal-400 transition-all duration-500 shadow-xs"
                   style={{ height: `${Math.max(8, item.rate)}%` }}
                 />
                 <span className="text-[11px] font-medium text-main">{item.day}</span>
