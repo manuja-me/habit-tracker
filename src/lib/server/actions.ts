@@ -84,7 +84,20 @@ export async function getHabitsAndLogsAction(): Promise<{
     const formattedHabits: Habit[] = (habitsData || []).map((h: any) => {
       const rawDesc = h.description || '';
       const isDont = rawDesc.includes('[NATURE:DONT]');
-      const cleanDesc = rawDesc.replace(/\s*\[NATURE:DONT\]/g, '').trim();
+      
+      // Parse weaning config if present
+      let weaningConfig = undefined;
+      const weaningMatch = rawDesc.match(/\[WEANING:(.*?)\]/);
+      if (weaningMatch && weaningMatch[1]) {
+        try {
+          weaningConfig = JSON.parse(weaningMatch[1]);
+        } catch {}
+      }
+
+      const cleanDesc = rawDesc
+        .replace(/\s*\[NATURE:DONT\]/g, '')
+        .replace(/\s*\[WEANING:.*?\]/g, '')
+        .trim();
 
       return {
         id: h.id,
@@ -95,6 +108,7 @@ export async function getHabitsAndLogsAction(): Promise<{
         icon: h.icon,
         type: h.type,
         nature: (isDont ? 'dont' : 'do') as Habit['nature'],
+        weaning: weaningConfig || (isDont ? { enabled: true, protocol: 'exponential' } : undefined),
         target_value: Number(h.target_value) || 1,
         target_unit: h.target_unit || '',
         frequency: h.frequency,
@@ -141,9 +155,17 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
     if (!supabase) return { success: true };
 
     const rawDesc = habit.description || '';
-    const storedDesc = habit.nature === 'dont'
-      ? (rawDesc ? `${rawDesc} [NATURE:DONT]` : '[NATURE:DONT]')
-      : rawDesc.replace(/\s*\[NATURE:DONT\]/g, '').trim();
+    let storedDesc = rawDesc
+      .replace(/\s*\[NATURE:DONT\]/g, '')
+      .replace(/\s*\[WEANING:.*?\]/g, '')
+      .trim();
+
+    if (habit.nature === 'dont') {
+      storedDesc = storedDesc ? `${storedDesc} [NATURE:DONT]` : '[NATURE:DONT]';
+      if (habit.weaning?.enabled) {
+        storedDesc += ` [WEANING:${JSON.stringify(habit.weaning)}]`;
+      }
+    }
 
     const { error } = await supabase.from('habits').upsert({
       id: habit.id,

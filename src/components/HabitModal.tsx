@@ -55,6 +55,7 @@ export function HabitModal({
   editingHabit,
 }: HabitModalProps) {
   const [nature, setNature] = useState<HabitNature>('do');
+  const [weaningProtocol, setWeaningProtocol] = useState<'exponential' | 'linear' | 'rapid' | 'none'>('exponential');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<HabitCategory>('productivity');
@@ -80,6 +81,7 @@ export function HabitModal({
   useEffect(() => {
     if (editingHabit) {
       setNature(editingHabit.nature || 'do');
+      setWeaningProtocol(editingHabit.weaning?.enabled ? (editingHabit.weaning.protocol as any) : 'exponential');
       setTitle(editingHabit.title);
       setDescription(editingHabit.description || '');
       setCategory(editingHabit.category);
@@ -92,6 +94,7 @@ export function HabitModal({
       setCustomDays(editingHabit.custom_days || [1, 2, 3, 4, 5]);
     } else {
       setNature('do');
+      setWeaningProtocol('exponential');
       setTitle('');
       setDescription('');
       setCategory('productivity');
@@ -124,6 +127,10 @@ export function HabitModal({
 
     onSave({
       nature,
+      weaning: nature === 'dont' ? {
+        enabled: weaningProtocol !== 'none',
+        protocol: weaningProtocol,
+      } : undefined,
       title: title.trim(),
       description: description.trim(),
       category,
@@ -265,6 +272,44 @@ export function HabitModal({
               className="w-full px-3 py-2 sm:py-2.5 rounded-none bg-input border border-main text-xs sm:text-sm text-main placeholder-muted-custom focus:outline-none focus:border-emerald-500 transition-colors font-mono"
             />
           </div>
+
+          {/* Weaning / Spacing Protocol (DON'T habits only) */}
+          {nature === 'dont' && (
+            <div className="p-3 bg-input border border-rose-500/30 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  GRADUAL WEANING & TAPERING SCHEDULE
+                </label>
+                <span className="text-[10px] text-sub font-mono">SCIENTIFIC FADING</span>
+              </div>
+              <p className="text-[10px] text-sub leading-tight">
+                Instead of quitting cold turkey, expand clean days between indulgences to smoothly rewire dopamine pathways.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                {[
+                  { id: 'exponential', title: 'EXPONENTIAL (RECOMMENDED)', desc: '1d → 2d → 4d → 7d → 14d → 21d → 30d' },
+                  { id: 'linear', title: 'LINEAR STEP (+1 DAY)', desc: '1d → 2d → 3d → 4d → 5d → 6d...' },
+                  { id: 'rapid', title: 'RAPID FADING', desc: '2d → 5d → 10d → 20d → 30d' },
+                  { id: 'none', title: 'STRICT / COLD TURKEY', desc: '100% clean every day, no tapering' },
+                ].map((p) => (
+                  <button
+                    type="button"
+                    key={p.id}
+                    onClick={() => setWeaningProtocol(p.id as any)}
+                    className={`p-2 text-left border transition-all cursor-pointer ${
+                      weaningProtocol === p.id
+                        ? 'bg-rose-500/15 border-rose-500 text-rose-400'
+                        : 'bg-card border-subtle text-sub hover:border-main'
+                    }`}
+                  >
+                    <div className="text-[10px] font-bold font-mono">{p.title}</div>
+                    <div className="text-[9px] text-sub truncate mt-0.5">{p.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Category */}
           <div>

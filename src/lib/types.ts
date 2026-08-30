@@ -13,6 +13,12 @@ export type HabitType = 'boolean' | 'number';
 
 export type HabitNature = 'do' | 'dont';
 
+export interface WeaningConfig {
+  enabled: boolean;
+  protocol: 'exponential' | 'linear' | 'rapid' | 'custom' | 'none';
+  customIntervals?: number[];
+}
+
 export interface Habit {
   id: string;
   title: string;
@@ -22,6 +28,7 @@ export interface Habit {
   icon: string;
   type: HabitType;
   nature?: HabitNature; // 'do' for build habits, 'dont' for quit/addiction habits
+  weaning?: WeaningConfig; // addiction tapering / spaced interval configuration
   target_value: number;
   target_unit?: string;
   frequency: HabitFrequency;

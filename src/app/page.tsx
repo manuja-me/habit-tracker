@@ -410,6 +410,7 @@ export default function HabitTrackerPage() {
                             key={habit.id}
                             habit={habit}
                             log={logs[`${habit.id}_${selectedDate}`]}
+                            allLogs={logs}
                             stats={statsMap[habit.id] || {
                               currentStreak: 0,
                               longestStreak: 0,
@@ -473,6 +474,7 @@ export default function HabitTrackerPage() {
                             key={habit.id}
                             habit={habit}
                             log={logs[`${habit.id}_${selectedDate}`]}
+                            allLogs={logs}
                             stats={statsMap[habit.id] || {
                               currentStreak: 0,
                               longestStreak: 0,

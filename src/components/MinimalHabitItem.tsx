@@ -17,12 +17,14 @@ import {
 import { Habit, HabitLog, HabitStats } from '../lib/types';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
 import { playCheckSound, playUncheckSound } from '../lib/utils/sound';
+import { calculateWeaningStatus } from '../lib/utils/tapering';
 import { Progress } from './ui/progress';
 
 interface MinimalHabitItemProps {
   habit: Habit;
   log?: HabitLog;
   stats: HabitStats;
+  allLogs?: Record<string, HabitLog>;
   dateStr: string;
   isFocused?: boolean;
   isDraggable?: boolean;
@@ -39,6 +41,7 @@ export function MinimalHabitItem({
   habit,
   log,
   stats,
+  allLogs = {},
   dateStr,
   isFocused = false,
   isDraggable = true,
@@ -56,6 +59,8 @@ export function MinimalHabitItem({
   // For 'dont' habits, clean by default unless explicitly marked completed: false (slip-up)
   const isSlippedUp = isDont && log !== undefined && log.completed === false;
   const isCompleted = isDont ? !isSlippedUp : Boolean(log?.completed);
+
+  const weaningStatus = calculateWeaningStatus(habit, allLogs);
 
   const currentValue = log?.value ?? (isCompleted ? habit.target_value : 0);
   const IconComponent = getHabitIcon(habit.icon);
@@ -309,6 +314,47 @@ export function MinimalHabitItem({
             size="sm"
             indicatorColor={isCompleted ? '#10B981' : habit.color}
           />
+        </div>
+      )}
+
+      {/* Weaning & Addiction Tapering Bar */}
+      {isDont && weaningStatus.enabled && (
+        <div className="mt-2.5 pt-2 border-t border-subtle/60 space-y-1.5">
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-mono">
+              <span className="font-bold text-rose-400">
+                STAGE {weaningStatus.currentLevel}/{weaningStatus.totalLevels}:
+              </span>
+              <span className="text-main">
+                {weaningStatus.daysClean} / {weaningStatus.targetDaysClean}d Clean
+              </span>
+              <span className="text-[9px] font-bold text-sub px-1 py-0.2 border border-subtle bg-subtle/50">
+                {weaningStatus.progressPercent}%
+              </span>
+            </div>
+
+            <div className="text-[10px] font-mono font-bold">
+              {weaningStatus.isGoalReached ? (
+                <span className="text-emerald-400">🎯 STAGE COMPLETE</span>
+              ) : (
+                <span className="text-sub">{weaningStatus.targetDaysClean - weaningStatus.daysClean}D TO NEXT STAGE</span>
+              )}
+            </div>
+          </div>
+
+          <Progress
+            value={weaningStatus.daysClean}
+            max={weaningStatus.targetDaysClean}
+            size="sm"
+            indicatorColor={weaningStatus.isGoalReached ? '#10B981' : '#F43F5E'}
+          />
+
+          <div className="flex items-center justify-between text-[9px] text-sub font-mono">
+            <span className="uppercase">Protocol: {habit.weaning?.protocol || 'EXPONENTIAL'} FADING</span>
+            <span>
+              {weaningStatus.nextLevelTarget ? `Next Goal: ${weaningStatus.nextLevelTarget}d Clean` : 'Freedom'}
+            </span>
+          </div>
         </div>
       )}
     </div>
