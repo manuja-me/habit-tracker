@@ -11,25 +11,23 @@ export default function Icon() {
     (
       <div
         style={{
-          fontSize: 240,
-          background: 'linear-gradient(135deg, #090A0F 0%, #171923 100%)',
           width: '100%',
           height: '100%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          borderRadius: '120px',
-          border: '12px solid #10B981',
-          boxShadow: '0 0 80px rgba(16, 185, 129, 0.4)',
+          backgroundColor: '#10B981',
+          border: '24px solid #34D399',
+          borderRadius: '0px',
         }}
       >
         <svg
-          width="260"
-          height="260"
+          width="320"
+          height="320"
           viewBox="0 0 24 24"
-          fill="none"
-          stroke="#10B981"
-          strokeWidth="2"
+          fill="#000000"
+          stroke="#000000"
+          strokeWidth="0.5"
           strokeLinecap="round"
           strokeLinejoin="round"
         >
