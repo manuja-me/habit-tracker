@@ -1,9 +1,9 @@
 -- ==========================================================
--- ZENITH HABIT TRACKER — SINGLE USER SUPABASE SCHEMA
--- Streamlined, Fast, No-Account Personal Database Schema
+-- ZENITH HABIT TRACKER — SECURE SERVER-ONLY SUPABASE SCHEMA
+-- Completely Protected from Public Browser/Anon Access
 -- ==========================================================
 
--- 1. Create HABITS table (No user_id required)
+-- 1. Create HABITS table
 CREATE TABLE IF NOT EXISTS public.habits (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT NOT NULL,
@@ -41,20 +41,28 @@ CREATE INDEX IF NOT EXISTS idx_habits_order ON public.habits(sort_order);
 CREATE INDEX IF NOT EXISTS idx_habit_logs_habit_date ON public.habit_logs(habit_id, date);
 CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON public.habit_logs(date);
 
--- 4. Enable Row Level Security (RLS) with Single-User Direct Access
+-- 4. Enable Row Level Security (RLS)
 ALTER TABLE public.habits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.habit_logs ENABLE ROW LEVEL SECURITY;
 
--- 5. Open Single-User Policies for the app's Anon Key
+-- 5. Strict Server Access Policy (Public 'anon' is blocked; Server Actions bypass via service_role)
 DROP POLICY IF EXISTS "Single user full access habits" ON public.habits;
-CREATE POLICY "Single user full access habits"
-    ON public.habits FOR ALL
+DROP POLICY IF EXISTS "Single user full access habit_logs" ON public.habit_logs;
+DROP POLICY IF EXISTS "Allow service role only habits" ON public.habits;
+DROP POLICY IF EXISTS "Allow service role only habit_logs" ON public.habit_logs;
+
+-- Policies allowing access only via authenticated service role / backend
+CREATE POLICY "Allow service role only habits"
+    ON public.habits
+    FOR ALL
+    TO service_role
     USING (true)
     WITH CHECK (true);
 
-DROP POLICY IF EXISTS "Single user full access habit_logs" ON public.habit_logs;
-CREATE POLICY "Single user full access habit_logs"
-    ON public.habit_logs FOR ALL
+CREATE POLICY "Allow service role only habit_logs"
+    ON public.habit_logs
+    FOR ALL
+    TO service_role
     USING (true)
     WITH CHECK (true);
 

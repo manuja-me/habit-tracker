@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { verifyPin, setDeviceUnlocked } from '../lib/auth/pin';
-import { Lock, Unlock, ShieldAlert, Delete, Flame } from 'lucide-react';
+import { verifyPinAction } from '../lib/server/auth';
+import { Lock, ShieldAlert, Delete, Flame, Clock } from 'lucide-react';
 
 interface PinLockScreenProps {
   onUnlock: () => void;
@@ -10,46 +10,61 @@ interface PinLockScreenProps {
 
 export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   const [pin, setPin] = useState<string>('');
-  const [error, setError] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-focus input on mount & check URL for ?pin=
+  // Auto check URL query string ?pin= on mount
   useEffect(() => {
-    inputRef.current?.focus();
-
-    // Check if PIN is supplied in URL query string (e.g. ?pin=1001)
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const urlPin = params.get('pin');
-      if (urlPin) {
+      if (urlPin && urlPin.length === 4) {
         verifyAndSubmit(urlPin);
       }
     }
   }, []);
 
-  const verifyAndSubmit = async (enteredPin: string) => {
-    if (enteredPin.length !== 4) return;
-    setIsVerifying(true);
-    setError(false);
+  // Lockout countdown timer
+  useEffect(() => {
+    if (lockoutSeconds !== null && lockoutSeconds > 0) {
+      const timer = setInterval(() => {
+        setLockoutSeconds((prev) => (prev !== null && prev > 1 ? prev - 1 : null));
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [lockoutSeconds]);
 
-    const isValid = await verifyPin(enteredPin);
-    if (isValid) {
-      setDeviceUnlocked();
-      // Clean query param if present
-      if (typeof window !== 'undefined' && window.location.search.includes('pin=')) {
-        window.history.replaceState({}, document.title, window.location.pathname);
+  const verifyAndSubmit = async (enteredPin: string) => {
+    if (enteredPin.length !== 4 || isVerifying || lockoutSeconds !== null) return;
+    setIsVerifying(true);
+    setErrorMsg(null);
+
+    try {
+      const result = await verifyPinAction(enteredPin);
+      if (result.success) {
+        // Clean URL if ?pin= was used
+        if (typeof window !== 'undefined' && window.location.search.includes('pin=')) {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+        onUnlock();
+      } else {
+        setErrorMsg(result.error || 'Access Denied.');
+        if (result.waitSeconds) {
+          setLockoutSeconds(result.waitSeconds);
+        }
+        setPin('');
       }
-      onUnlock();
-    } else {
-      setError(true);
+    } catch (err: any) {
+      setErrorMsg('Server verification failed.');
       setPin('');
+    } finally {
       setIsVerifying(false);
-      inputRef.current?.focus();
     }
   };
 
   const handleDigitPress = (digit: string) => {
+    if (lockoutSeconds !== null) return;
     if (pin.length < 4 && !isVerifying) {
       const nextPin = pin + digit;
       setPin(nextPin);
@@ -60,11 +75,13 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   };
 
   const handleBackspace = () => {
+    if (lockoutSeconds !== null) return;
     setPin((prev) => prev.slice(0, -1));
-    setError(false);
+    setErrorMsg(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (lockoutSeconds !== null) return;
     if (e.key >= '0' && e.key <= '9') {
       handleDigitPress(e.key);
     } else if (e.key === 'Backspace') {
@@ -92,11 +109,11 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
             </div>
             <div className="flex items-center gap-1.5 text-[10px] text-emerald-500 font-bold border border-emerald-500/30 px-1.5 py-0.5 bg-emerald-500/10">
               <Lock className="w-3 h-3" />
-              LOCKED
+              PROTECTED
             </div>
           </div>
           <p className="text-[11px] text-sub">
-            Authorization required to access personal habit logs.
+            Server-authenticated session required.
           </p>
         </div>
 
@@ -109,8 +126,8 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
                 <div
                   key={index}
                   className={`w-11 h-12 rounded-none flex items-center justify-center border text-lg font-bold transition-all duration-100 ${
-                    error
-                      ? 'border-rose-500 bg-rose-500/10 text-rose-500 animate-shake'
+                    errorMsg
+                      ? 'border-rose-500 bg-rose-500/10 text-rose-500'
                       : isFilled
                       ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500'
                       : 'border-main bg-input text-sub'
@@ -122,50 +139,61 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
             })}
           </div>
 
-          {error && (
-            <div className="flex items-center justify-center gap-1.5 text-xs text-rose-500 font-bold animate-in fade-in">
-              <ShieldAlert className="w-3.5 h-3.5" />
-              <span>ACCESS DENIED // INVALID PIN</span>
+          {errorMsg && (
+            <div className="flex items-center justify-center gap-1.5 text-xs text-rose-500 font-bold text-center animate-in fade-in">
+              <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {lockoutSeconds !== null && (
+            <div className="flex items-center justify-center gap-1.5 text-xs text-amber-500 font-bold text-center">
+              <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>LOCKOUT ACTIVE: {lockoutSeconds}s REMAINING</span>
             </div>
           )}
 
           {isVerifying && (
             <div className="text-center text-xs text-emerald-500 animate-pulse font-bold">
-              AUTHENTICATING...
+              VERIFYING WITH SERVER...
             </div>
           )}
         </div>
 
-        {/* Numeric Keypad (Optimized for Mobile and Desktop) */}
+        {/* Numeric Keypad */}
         <div className="grid grid-cols-3 gap-2 pt-2">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
             <button
               key={digit}
               type="button"
+              disabled={lockoutSeconds !== null || isVerifying}
               onClick={() => handleDigitPress(digit)}
-              className="h-12 rounded-none bg-input hover:bg-subtle border border-main text-sm font-bold text-main transition-all active:scale-95 cursor-pointer flex items-center justify-center font-mono"
+              className="h-12 rounded-none bg-input hover:bg-subtle border border-main text-sm font-bold text-main transition-all active:scale-95 cursor-pointer flex items-center justify-center font-mono disabled:opacity-40"
             >
               {digit}
             </button>
           ))}
           <button
             type="button"
-            onClick={() => setPin('')}
-            className="h-12 rounded-none bg-input hover:bg-subtle border border-main text-[11px] font-bold text-sub hover:text-main transition-all active:scale-95 cursor-pointer flex items-center justify-center font-mono"
+            disabled={lockoutSeconds !== null || isVerifying}
+            onClick={() => { setPin(''); setErrorMsg(null); }}
+            className="h-12 rounded-none bg-input hover:bg-subtle border border-main text-[11px] font-bold text-sub hover:text-main transition-all active:scale-95 cursor-pointer flex items-center justify-center font-mono disabled:opacity-40"
           >
             CLEAR
           </button>
           <button
             type="button"
+            disabled={lockoutSeconds !== null || isVerifying}
             onClick={() => handleDigitPress('0')}
-            className="h-12 rounded-none bg-input hover:bg-subtle border border-main text-sm font-bold text-main transition-all active:scale-95 cursor-pointer flex items-center justify-center font-mono"
+            className="h-12 rounded-none bg-input hover:bg-subtle border border-main text-sm font-bold text-main transition-all active:scale-95 cursor-pointer flex items-center justify-center font-mono disabled:opacity-40"
           >
             0
           </button>
           <button
             type="button"
+            disabled={lockoutSeconds !== null || isVerifying}
             onClick={handleBackspace}
-            className="h-12 rounded-none bg-input hover:bg-subtle border border-main text-sub hover:text-rose-500 transition-all active:scale-95 cursor-pointer flex items-center justify-center font-mono"
+            className="h-12 rounded-none bg-input hover:bg-subtle border border-main text-sub hover:text-rose-500 transition-all active:scale-95 cursor-pointer flex items-center justify-center font-mono disabled:opacity-40"
             title="Backspace"
           >
             <Delete className="w-4 h-4" />
@@ -174,7 +202,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
 
         {/* Footer Hint */}
         <div className="pt-2 text-center text-[10px] text-muted-custom border-t border-subtle">
-          TIP: TYPE ON KEYBOARD OR ADD ?pin=1001 TO BOOKMARK URL
+          TIP: ENTER PIN 1001 OR VISIT ?pin=1001 ONCE
         </div>
       </div>
     </div>
