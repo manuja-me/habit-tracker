@@ -15,9 +15,9 @@ export const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
     const percentage = Math.min(100, Math.max(0, Math.round(((value || 0) / max) * 100)));
 
     const heightClass = {
-      sm: 'h-1.5',
-      md: 'h-2.5',
-      lg: 'h-3.5',
+      sm: 'h-2',
+      md: 'h-3',
+      lg: 'h-4',
     }[size];
 
     return (
@@ -27,10 +27,10 @@ export const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
           aria-valuenow={value}
           aria-valuemin={0}
           aria-valuemax={max}
-          className={`relative w-full ${heightClass} overflow-hidden rounded-full bg-subtle border border-main shadow-inner`}
+          className={`relative w-full ${heightClass} overflow-hidden rounded-none bg-subtle border border-main`}
         >
           <div
-            className="h-full rounded-full transition-all duration-300 ease-out"
+            className="h-full rounded-none transition-all duration-200 ease-out"
             style={{
               width: `${percentage}%`,
               backgroundColor: indicatorColor || '#10B981',
@@ -39,7 +39,7 @@ export const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
           />
         </div>
         {showLabel && (
-          <span className="text-xs font-mono font-semibold text-main min-w-[2.5rem] text-right">
+          <span className="text-xs font-mono font-bold text-main min-w-[2.5rem] text-right">
             {percentage}%
           </span>
         )}

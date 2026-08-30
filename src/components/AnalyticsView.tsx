@@ -59,7 +59,7 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
       });
     }
 
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
     return dayNames.map((name, idx) => {
       const rate = dayTotals[idx] > 0 ? Math.round((dayCounts[idx] / dayTotals[idx]) * 100) : 0;
       return { day: name, rate };
@@ -71,12 +71,12 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
       {/* Top 3 KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Consistency */}
-        <div className="p-5 rounded-2xl bg-card border border-main backdrop-blur-md shadow-xs transition-colors">
+        <div className="p-5 rounded-none bg-card border border-main transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-sub">
-              30-Day Adherence
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-sub">
+              30D ADHERENCE
             </span>
-            <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-500">
+            <div className="p-1.5 rounded-none bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
@@ -84,17 +84,17 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
             <span className="text-3xl font-bold font-mono tracking-tight text-main">
               {avg30DayRate}%
             </span>
-            <span className="text-xs text-emerald-500">overall score</span>
+            <span className="text-xs font-mono text-emerald-500">score</span>
           </div>
         </div>
 
         {/* Best Streak */}
-        <div className="p-5 rounded-2xl bg-card border border-main backdrop-blur-md shadow-xs transition-colors">
+        <div className="p-5 rounded-none bg-card border border-main transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-sub">
-              Longest Streak
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-sub">
+              BEST STREAK
             </span>
-            <div className="p-2 rounded-xl bg-amber-500/15 text-amber-500">
+            <div className="p-1.5 rounded-none bg-amber-500/15 text-amber-500 border border-amber-500/30">
               <Flame className="w-4 h-4 fill-amber-500" />
             </div>
           </div>
@@ -102,17 +102,17 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
             <span className="text-3xl font-bold font-mono tracking-tight text-main">
               {bestStreak}
             </span>
-            <span className="text-xs text-sub">consecutive days</span>
+            <span className="text-xs font-mono text-sub">days</span>
           </div>
         </div>
 
         {/* Total Check-ins */}
-        <div className="p-5 rounded-2xl bg-card border border-main backdrop-blur-md shadow-xs transition-colors">
+        <div className="p-5 rounded-none bg-card border border-main transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-sub">
-              Total Completions
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-sub">
+              TOTAL LOGS
             </span>
-            <div className="p-2 rounded-xl bg-indigo-500/15 text-indigo-500">
+            <div className="p-1.5 rounded-none bg-indigo-500/15 text-indigo-500 border border-indigo-500/30">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
@@ -120,7 +120,7 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
             <span className="text-3xl font-bold font-mono tracking-tight text-main">
               {totalCompletions}
             </span>
-            <span className="text-xs text-sub">habits logged</span>
+            <span className="text-xs font-mono text-sub">check-ins</span>
           </div>
         </div>
       </div>
@@ -128,35 +128,35 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
       {/* Habit Breakdown & Weekday Adherence */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Habit Ranking */}
-        <div className="p-5 rounded-2xl bg-card border border-main backdrop-blur-md shadow-xs transition-colors">
-          <h3 className="text-sm font-semibold text-main mb-4 flex items-center gap-2">
+        <div className="p-5 rounded-none bg-card border border-main transition-colors">
+          <h3 className="text-xs font-bold font-mono uppercase text-main mb-4 flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-emerald-500" />
-            Habit Performance Breakdown
+            HABIT BREAKDOWN
           </h3>
 
-          <div className="space-y-3.5">
+          <div className="space-y-3">
             {statsList.map(({ habit, stats }) => {
               const IconComp = getHabitIcon(habit.icon);
               const color = COLOR_PALETTES.find(c => c.hex.toLowerCase() === habit.color.toLowerCase()) || COLOR_PALETTES[0];
 
               return (
-                <div key={habit.id} className="p-3.5 rounded-xl bg-input border border-subtle space-y-2.5">
+                <div key={habit.id} className="p-3 rounded-none bg-input border border-subtle space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
                       <div 
-                        className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
+                        className="w-5 h-5 rounded-none flex items-center justify-center flex-shrink-0 border border-subtle"
                         style={{ backgroundColor: color.bg, color: color.hex }}
                       >
-                        <IconComp className="w-3.5 h-3.5" />
+                        <IconComp className="w-3 h-3" />
                       </div>
-                      <span className="text-xs font-semibold text-main truncate">
+                      <span className="text-xs font-bold font-mono text-main truncate">
                         {habit.title}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-2 text-xs font-mono">
-                      <span className="text-amber-500 flex items-center gap-1 font-semibold">
-                        <Flame className="w-3 h-3 fill-amber-500" /> {stats.currentStreak}d
+                      <span className="text-amber-500 flex items-center gap-1 font-bold">
+                        <Flame className="w-3 h-3 fill-amber-500" /> {stats.currentStreak}D
                       </span>
                       <span className="text-sub">|</span>
                       <span className="text-main font-bold">{stats.completionRate30Days}%</span>
@@ -176,14 +176,14 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
         </div>
 
         {/* Day of Week Adherence */}
-        <div className="p-5 rounded-2xl bg-card border border-main backdrop-blur-md shadow-xs transition-colors flex flex-col justify-between">
+        <div className="p-5 rounded-none bg-card border border-main transition-colors flex flex-col justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-main mb-4 flex items-center gap-2">
+            <h3 className="text-xs font-bold font-mono uppercase text-main mb-3 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-emerald-500" />
-              Day of Week Consistency (Past 90 Days)
+              WEEKDAY CONSISTENCY (90D)
             </h3>
-            <p className="text-xs text-sub mb-6">
-              Identify which days of the week you are most consistent.
+            <p className="text-xs font-mono text-sub mb-6">
+              Activity breakdown by day of the week.
             </p>
           </div>
 
@@ -192,10 +192,10 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
               <div key={item.day} className="flex flex-col items-center gap-2 h-full justify-end">
                 <span className="text-[10px] font-mono text-sub">{item.rate}%</span>
                 <div 
-                  className="w-full max-w-[28px] rounded-t-md bg-gradient-to-t from-emerald-600 to-teal-400 transition-all duration-500 shadow-xs"
+                  className="w-full max-w-[28px] rounded-none bg-gradient-to-t from-emerald-600 to-teal-400 transition-all duration-300"
                   style={{ height: `${Math.max(8, item.rate)}%` }}
                 />
-                <span className="text-[11px] font-medium text-main">{item.day}</span>
+                <span className="text-[10px] font-mono font-bold text-main">{item.day}</span>
               </div>
             ))}
           </div>

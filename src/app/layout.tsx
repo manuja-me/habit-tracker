@@ -1,21 +1,17 @@
 import type { Metadata, Viewport } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { ThemeProvider } from '../lib/theme';
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+const jetbrainsMono = JetBrains_Mono({
+  variable: '--font-jetbrains-mono',
   subsets: ['latin'],
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
   title: 'Zenith — Minimal Habit Tracker',
-  description: 'Ultra-fast, reliable, and minimally beautiful personal habit tracker.',
+  description: 'Ultra-fast, reliable, and sharp JetBrains IDE-style personal habit tracker.',
   applicationName: 'Zenith',
   appleWebApp: {
     capable: true,
@@ -47,10 +43,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-main text-main font-sans">
+      <body className="min-h-full flex flex-col bg-main text-main font-mono">
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

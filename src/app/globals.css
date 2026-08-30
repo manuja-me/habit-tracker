@@ -14,6 +14,7 @@
   --accent: #10B981;
   --accent-glow: rgba(16, 185, 129, 0.15);
   --heatmap-empty: #141622;
+  --font-family-mono: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 [data-theme="light"] {
@@ -48,15 +49,18 @@
   --heatmap-empty: #121212;
 }
 
-* {
+/* Sharp Rounded-0 Rule Across Everything */
+*, *::before, *::after {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
+  border-radius: 0px !important;
 }
 
 body {
   background-color: var(--bg-main);
   color: var(--text-main);
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  font-family: var(--font-family-mono);
+  font-feature-settings: "liga" on, "calt" on, "zero" on;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -105,10 +109,10 @@ body {
   color: var(--text-muted);
 }
 
-/* Minimal sleek scrollbars */
+/* Sharp Minimal Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -116,10 +120,10 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(120, 120, 128, 0.2);
-  border-radius: 9999px;
+  background: var(--border-main);
+  border-radius: 0px !important;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(120, 120, 128, 0.4);
+  background: var(--border-hover);
 }

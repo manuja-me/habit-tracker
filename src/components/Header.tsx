@@ -56,17 +56,17 @@ export function Header({
   return (
     <header className="w-full max-w-4xl mx-auto pt-6 pb-4 px-4 sm:px-6">
       {/* Top Navbar */}
-      <div className="flex items-center justify-between gap-4 mb-6">
+      <div className="flex items-center justify-between gap-4 mb-5">
         {/* Brand */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-black font-bold">
-            <Flame className="w-5 h-5 fill-black" />
+          <div className="w-8 h-8 rounded-none bg-emerald-500 flex items-center justify-center text-black font-bold border border-emerald-400">
+            <Flame className="w-4 h-4 fill-black" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold tracking-tight text-main flex items-center gap-2">
+            <h1 className="text-base font-bold tracking-tight text-main flex items-center gap-2 font-mono uppercase">
               Zenith
-              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                PRO
+              <span className="text-[10px] font-mono font-bold tracking-widest px-1.5 py-0.5 rounded-none bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
+                IDE
               </span>
             </h1>
           </div>
@@ -78,7 +78,7 @@ export function Header({
           <button
             onClick={onOpenSyncModal}
             title={isCloudReady ? 'Cloud Synced — Click for details' : 'Local Storage Mode'}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-none text-xs font-mono bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all cursor-pointer"
           >
             {isSyncing ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-500" />
@@ -88,14 +88,14 @@ export function Header({
               <CloudOff className="w-3.5 h-3.5 text-muted-custom" />
             )}
             <span className="hidden sm:inline">
-              {isSyncing ? 'Syncing...' : isCloudReady ? 'Cloud Synced' : 'Local Mode'}
+              {isSyncing ? 'SYNCING...' : isCloudReady ? 'SYNCED' : 'LOCAL'}
             </span>
           </button>
 
           {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
-            className="p-2 rounded-lg bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer"
+            className="p-2 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer"
             title={`Theme: ${theme.toUpperCase()} (Click to toggle Light / Dark / OLED)`}
           >
             {theme === 'light' ? (
@@ -110,22 +110,22 @@ export function Header({
           {/* Add Habit Button */}
           <button
             onClick={onOpenAddModal}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black shadow-md shadow-emerald-500/20 transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-none text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-400 shadow-xs transition-all active:translate-y-0.5 cursor-pointer"
           >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>New Habit</span>
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>NEW HABIT</span>
           </button>
         </div>
       </div>
 
       {/* Date & Progress Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl bg-card border border-main backdrop-blur-md shadow-xs transition-colors">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-none bg-card border border-main transition-colors">
         {/* Date Selector */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center bg-input rounded-xl p-1 border border-subtle">
+          <div className="flex items-center bg-input rounded-none p-0.5 border border-subtle">
             <button
               onClick={handlePrevDay}
-              className="p-1.5 rounded-lg hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer"
+              className="p-1 rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer"
               title="Previous Day"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -133,18 +133,18 @@ export function Header({
             
             <button
               onClick={() => onSelectDate(todayStr)}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
+              className={`px-2.5 py-1 text-xs font-mono font-medium rounded-none transition-all cursor-pointer ${
                 isToday
-                  ? 'bg-subtle text-main font-semibold shadow-xs'
+                  ? 'bg-subtle text-main font-bold border border-main'
                   : 'text-sub hover:text-main'
               }`}
             >
-              {isToday ? 'Today' : 'Back to Today'}
+              {isToday ? 'TODAY' : 'GO TO TODAY'}
             </button>
 
             <button
               onClick={handleNextDay}
-              className="p-1.5 rounded-lg hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer"
+              className="p-1 rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer"
               title="Next Day"
             >
               <ChevronRight className="w-4 h-4" />
@@ -152,13 +152,13 @@ export function Header({
           </div>
 
           <div>
-            <div className="text-sm sm:text-base font-semibold text-main tracking-tight">
+            <div className="text-sm font-bold text-main tracking-tight font-mono">
               {formatDisplayDate(selectedDate)}
             </div>
-            <div className="text-xs text-sub">
+            <div className="text-xs text-sub font-mono">
               {totalCount === 0 
-                ? 'No habits scheduled for this day' 
-                : `${completedCount} of ${totalCount} completed`}
+                ? 'No habits scheduled' 
+                : `${completedCount}/${totalCount} completed`}
             </div>
           </div>
         </div>

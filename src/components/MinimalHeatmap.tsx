@@ -20,7 +20,6 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
     completedHabits: string[];
   } | null>(null);
 
-  // Generate 52 weeks (364 days)
   const heatmapData = useMemo(() => {
     return generateHeatmapData(
       habits,
@@ -30,7 +29,6 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
     );
   }, [habits, logs, selectedHabitId]);
 
-  // Group into 52 columns of 7 days
   const weeks = useMemo(() => {
     const cols: typeof heatmapData[] = [];
     for (let i = 0; i < heatmapData.length; i += 7) {
@@ -51,7 +49,7 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
       case 3:
         return 'bg-emerald-500 border-emerald-400';
       case 4:
-        return 'bg-emerald-400 border-emerald-300 shadow-xs shadow-emerald-400/30';
+        return 'bg-emerald-400 border-emerald-300';
       default:
         return 'bg-[var(--heatmap-empty)] border-subtle hover:border-main';
     }
@@ -59,29 +57,28 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
 
   return (
     <div className="w-full max-w-4xl mx-auto px-4 sm:px-6">
-      <div className="p-4 sm:p-6 rounded-2xl bg-card border border-main backdrop-blur-md shadow-xs transition-colors">
+      <div className="p-4 sm:p-5 rounded-none bg-card border border-main transition-colors">
         {/* Header & Filter */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
           <div>
             <div className="flex items-center gap-2">
               <Activity className="w-4 h-4 text-emerald-500" />
-              <h2 className="text-base font-semibold text-main">Consistency Heatmap</h2>
+              <h2 className="text-sm font-bold font-mono uppercase text-main">CONSISTENCY HEATMAP</h2>
             </div>
-            <p className="text-xs text-sub mt-0.5">
-              {totalCheckins} check-ins across {activeDays} active days in the past year
+            <p className="text-xs text-sub font-mono mt-0.5">
+              {totalCheckins} logs across {activeDays} active days in past 364 days
             </p>
           </div>
 
-          {/* Habit filter selector */}
           <select
             value={selectedHabitId}
             onChange={(e) => setSelectedHabitId(e.target.value)}
-            className="text-xs font-medium bg-input text-main border border-main rounded-xl px-3 py-1.5 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
+            className="text-xs font-mono font-medium bg-input text-main border border-main rounded-none px-3 py-1.5 focus:outline-none focus:border-emerald-500 transition-colors cursor-pointer"
           >
-            <option value="all">All Habits Combined</option>
+            <option value="all">ALL HABITS</option>
             {habits.map((h) => (
               <option key={h.id} value={h.id}>
-                {h.title}
+                {h.title.toUpperCase()}
               </option>
             ))}
           </select>
@@ -97,7 +94,7 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
                     key={day.date}
                     onMouseEnter={() => setHoveredDay(day)}
                     onMouseLeave={() => setHoveredDay(null)}
-                    className={`w-3 h-3 rounded-[3px] border transition-all duration-100 cursor-pointer ${getLevelStyle(
+                    className={`w-3 h-3 rounded-none border transition-all duration-100 cursor-pointer ${getLevelStyle(
                       day.level
                     )}`}
                   />
@@ -108,12 +105,11 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
         </div>
 
         {/* Footer: Legend & Tooltip detail */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-4 pt-3 border-t border-subtle text-xs">
-          {/* Active Hover Tooltip */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-4 pt-3 border-t border-subtle text-xs font-mono">
           <div className="text-main min-h-[1.5rem] flex items-center gap-2">
             {hoveredDay ? (
               <div className="flex items-center gap-2 animate-in fade-in duration-100">
-                <span className="font-semibold text-main">
+                <span className="font-bold text-main">
                   {formatDisplayDate(hoveredDay.date)}:
                 </span>
                 <span>
@@ -127,20 +123,19 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
               </div>
             ) : (
               <span className="text-sub flex items-center gap-1.5">
-                <Info className="w-3.5 h-3.5" /> Hover or tap any cell to view day details
+                <Info className="w-3.5 h-3.5" /> Hover or tap any cell for details
               </span>
             )}
           </div>
 
-          {/* Shading Legend */}
           <div className="flex items-center gap-1.5 text-sub text-[11px]">
-            <span>Less</span>
-            <div className="w-2.5 h-2.5 rounded-[2px] bg-[var(--heatmap-empty)] border border-subtle" />
-            <div className="w-2.5 h-2.5 rounded-[2px] bg-emerald-900/60 border border-emerald-700/50" />
-            <div className="w-2.5 h-2.5 rounded-[2px] bg-emerald-700 border border-emerald-600" />
-            <div className="w-2.5 h-2.5 rounded-[2px] bg-emerald-500 border border-emerald-400" />
-            <div className="w-2.5 h-2.5 rounded-[2px] bg-emerald-400 border border-emerald-300" />
-            <span>More</span>
+            <span>LESS</span>
+            <div className="w-2.5 h-2.5 rounded-none bg-[var(--heatmap-empty)] border border-subtle" />
+            <div className="w-2.5 h-2.5 rounded-none bg-emerald-900/60 border border-emerald-700/50" />
+            <div className="w-2.5 h-2.5 rounded-none bg-emerald-700 border border-emerald-600" />
+            <div className="w-2.5 h-2.5 rounded-none bg-emerald-500 border border-emerald-400" />
+            <div className="w-2.5 h-2.5 rounded-none bg-emerald-400 border border-emerald-300" />
+            <span>MORE</span>
           </div>
         </div>
       </div>

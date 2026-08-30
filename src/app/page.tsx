@@ -34,15 +34,12 @@ export default function HabitTrackerPage() {
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
-  // Track previous completion state to trigger confetti only on completion milestone
   const prevCompletionRef = useRef<boolean>(false);
 
-  // Filter habits due on selectedDate
   const dueHabits = useMemo(() => {
     return habits.filter((h) => isHabitDueOnDate(h, selectedDate));
   }, [habits, selectedDate]);
 
-  // Compute habit stats map
   const statsMap = useMemo(() => {
     const map: Record<string, ReturnType<typeof calculateHabitStats>> = {};
     habits.forEach((h) => {
@@ -51,7 +48,6 @@ export default function HabitTrackerPage() {
     return map;
   }, [habits, logs]);
 
-  // Count completions on selectedDate
   const { completedCount, totalCount } = useMemo(() => {
     const total = dueHabits.length;
     const completed = dueHabits.filter((h) => {
@@ -61,7 +57,6 @@ export default function HabitTrackerPage() {
     return { completedCount: completed, totalCount: total };
   }, [dueHabits, logs, selectedDate]);
 
-  // Trigger confetti when 100% is reached
   useEffect(() => {
     const isAllDone = totalCount > 0 && completedCount === totalCount;
     if (isAllDone && !prevCompletionRef.current) {
@@ -70,7 +65,6 @@ export default function HabitTrackerPage() {
     prevCompletionRef.current = isAllDone;
   }, [completedCount, totalCount]);
 
-  // Filtered habits for the daily list view
   const displayedDailyHabits = useMemo(() => {
     return dueHabits.filter((h) => {
       if (filterCategory === 'all') return true;
@@ -104,17 +98,17 @@ export default function HabitTrackerPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-main flex items-center justify-center">
+      <div className="min-h-screen bg-main flex items-center justify-center font-mono">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
-          <span className="text-xs font-mono text-sub">Loading Zenith...</span>
+          <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent animate-spin" />
+          <span className="text-xs font-mono text-sub">LOADING ZENITH...</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-main text-main pb-20 selection:bg-emerald-500/30 selection:text-emerald-500 transition-colors">
+    <div className="min-h-screen bg-main text-main pb-20 selection:bg-emerald-500/30 selection:text-emerald-500 transition-colors font-mono">
       {/* Top Header */}
       <Header
         selectedDate={selectedDate}
@@ -134,18 +128,18 @@ export default function HabitTrackerPage() {
           <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 space-y-4">
             {/* Filter pills */}
             <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 text-xs">
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
                 {[
-                  { id: 'all', label: 'All Habits' },
-                  { id: 'pending', label: 'To Do' },
-                  { id: 'completed', label: 'Completed' },
+                  { id: 'all', label: 'ALL' },
+                  { id: 'pending', label: 'TO DO' },
+                  { id: 'completed', label: 'DONE' },
                 ].map((f) => (
                   <button
                     key={f.id}
                     onClick={() => setFilterCategory(f.id)}
-                    className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                    className={`px-3 py-1 rounded-none text-xs font-mono font-medium transition-all cursor-pointer ${
                       filterCategory === f.id
-                        ? 'bg-card text-main font-semibold border border-main shadow-xs'
+                        ? 'bg-card text-main font-bold border border-main'
                         : 'text-sub hover:text-main hover:bg-subtle/50'
                     }`}
                   >
@@ -155,40 +149,40 @@ export default function HabitTrackerPage() {
               </div>
 
               <span className="text-xs text-sub font-mono">
-                {displayedDailyHabits.length} items
+                {displayedDailyHabits.length} HABITS
               </span>
             </div>
 
             {/* Habit List */}
             {displayedDailyHabits.length === 0 ? (
-              <div className="p-12 text-center rounded-3xl bg-card border border-main shadow-xs backdrop-blur-md transition-colors">
-                <div className="w-12 h-12 rounded-2xl bg-subtle text-emerald-500 flex items-center justify-center mx-auto mb-4">
-                  <Sparkles className="w-6 h-6" />
+              <div className="p-12 text-center rounded-none bg-card border border-main transition-colors">
+                <div className="w-10 h-10 rounded-none bg-subtle text-emerald-500 border border-subtle flex items-center justify-center mx-auto mb-4">
+                  <Sparkles className="w-5 h-5" />
                 </div>
-                <h3 className="text-base font-semibold text-main mb-1">
+                <h3 className="text-sm font-bold font-mono uppercase text-main mb-1">
                   {filterCategory === 'completed'
                     ? 'No habits completed yet today'
                     : filterCategory === 'pending'
                     ? 'All clear! Everything is completed.'
                     : 'No habits scheduled for today'}
                 </h3>
-                <p className="text-xs text-sub max-w-sm mx-auto mb-6">
+                <p className="text-xs font-mono text-sub max-w-sm mx-auto mb-6">
                   {filterCategory === 'all'
                     ? 'Start building your daily routines by creating your first custom habit.'
-                    : 'Great job maintaining your consistency!'}
+                    : 'Consistency maintained.'}
                 </p>
                 {filterCategory === 'all' && (
                   <button
                     onClick={handleOpenAddModal}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-none text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-400 active:scale-95 transition-all cursor-pointer"
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>Add a Habit</span>
+                    <Plus className="w-4 h-4 stroke-[3]" />
+                    <span>ADD HABIT</span>
                   </button>
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-2.5">
+              <div className="grid grid-cols-1 gap-2">
                 {displayedDailyHabits.map((habit) => (
                   <MinimalHabitItem
                     key={habit.id}
