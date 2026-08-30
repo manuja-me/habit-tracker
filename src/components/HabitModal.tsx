@@ -12,22 +12,6 @@ interface HabitModalProps {
   editingHabit?: Habit | null;
 }
 
-const DO_TEMPLATES = [
-  { title: 'Deep Work (90m)', category: 'productivity' as HabitCategory, icon: 'Focus', color: '#6366F1', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'weekdays' as HabitFrequency },
-  { title: 'Drink Water (2.5L)', category: 'health' as HabitCategory, icon: 'Droplets', color: '#06B6D4', type: 'number' as HabitType, targetValue: 2500, targetUnit: 'ml', frequency: 'daily' as HabitFrequency },
-  { title: 'Daily Workout', category: 'fitness' as HabitCategory, icon: 'Dumbbell', color: '#10B981', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'daily' as HabitFrequency },
-  { title: 'Read Books', category: 'learning' as HabitCategory, icon: 'BookOpen', color: '#F59E0B', type: 'number' as HabitType, targetValue: 20, targetUnit: 'pages', frequency: 'daily' as HabitFrequency },
-  { title: 'Meditation & Journal', category: 'mindfulness' as HabitCategory, icon: 'Sparkles', color: '#EC4899', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'daily' as HabitFrequency },
-];
-
-const DONT_TEMPLATES = [
-  { title: 'No Smoking (Cigarettes)', category: 'health' as HabitCategory, icon: 'Cigarette', color: '#F43F5E', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'daily' as HabitFrequency },
-  { title: 'No Junk Food / Sugar', category: 'health' as HabitCategory, icon: 'Cookie', color: '#F59E0B', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'daily' as HabitFrequency },
-  { title: 'Zero Alcohol', category: 'lifestyle' as HabitCategory, icon: 'Wine', color: '#8B5CF6', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'daily' as HabitFrequency },
-  { title: 'No Late Night Scrolling', category: 'productivity' as HabitCategory, icon: 'Smartphone', color: '#6366F1', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'daily' as HabitFrequency },
-  { title: 'Stop Nail Biting', category: 'health' as HabitCategory, icon: 'ShieldOff', color: '#EC4899', type: 'boolean' as HabitType, targetValue: 1, targetUnit: '', frequency: 'daily' as HabitFrequency },
-];
-
 const CATEGORIES: { id: HabitCategory; label: string }[] = [
   { id: 'productivity', label: 'PRODUCTIVITY' },
   { id: 'health', label: 'HEALTH' },
@@ -108,17 +92,6 @@ export function HabitModal({
     }
   }, [editingHabit, isOpen]);
 
-  const applyTemplate = (t: typeof DO_TEMPLATES[0]) => {
-    setTitle(t.title);
-    setCategory(t.category);
-    setIcon(t.icon);
-    setColor(t.color);
-    setType(t.type);
-    setTargetValue(t.targetValue);
-    setTargetUnit(t.targetUnit);
-    setFrequency(t.frequency);
-  };
-
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -152,8 +125,6 @@ export function HabitModal({
       setCustomDays([...customDays, day]);
     }
   };
-
-  const currentTemplates = nature === 'do' ? DO_TEMPLATES : DONT_TEMPLATES;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-100 font-mono">
@@ -220,27 +191,6 @@ export function HabitModal({
             </button>
           </div>
         </div>
-
-        {/* Quick 1-Click Templates (New Habits Only) */}
-        {!editingHabit && (
-          <div className="pt-2.5 pb-1 border-b border-subtle">
-            <span className="text-[10px] font-bold text-sub uppercase block mb-1.5">
-              {nature === 'do' ? 'POPULAR BUILD TEMPLATES' : 'POPULAR QUIT & REDUCTION TEMPLATES'}
-            </span>
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none">
-              {currentTemplates.map((t, idx) => (
-                <button
-                  type="button"
-                  key={idx}
-                  onClick={() => applyTemplate(t)}
-                  className="px-2 py-1 text-[10px] font-medium bg-input hover:bg-emerald-500/10 hover:border-emerald-500/30 border border-main text-sub hover:text-emerald-500 transition-colors whitespace-nowrap cursor-pointer touch-manipulation"
-                >
-                  +{t.title}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5 pt-3 sm:pt-4">
           {/* Title */}
