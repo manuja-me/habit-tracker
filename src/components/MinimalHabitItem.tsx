@@ -7,11 +7,8 @@ import {
   MoreVertical, 
   Edit3, 
   Trash2, 
-  Archive, 
   Plus, 
-  Minus,
-  Sparkles,
-  TrendingUp
+  Minus 
 } from 'lucide-react';
 import { Habit, HabitLog, HabitStats } from '../lib/types';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
@@ -36,7 +33,6 @@ export function MinimalHabitItem({
   onDelete,
 }: MinimalHabitItemProps) {
   const [showMenu, setShowMenu] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
 
   const isCompleted = Boolean(log?.completed);
   const currentValue = log?.value ?? (isCompleted ? habit.target_value : 0);
@@ -65,15 +61,11 @@ export function MinimalHabitItem({
 
   return (
     <div
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => {
-        setIsHovered(false);
-        setShowMenu(false);
-      }}
-      className={`group relative flex flex-col p-4 rounded-2xl transition-all duration-200 border ${
+      onMouseLeave={() => setShowMenu(false)}
+      className={`group relative flex flex-col p-4 rounded-2xl transition-all duration-150 border ${
         isCompleted
-          ? 'bg-neutral-900/40 border-neutral-800/60'
-          : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700'
+          ? 'bg-card/50 border-subtle opacity-85'
+          : 'bg-card border-main hover:border-hover shadow-xs'
       }`}
     >
       <div className="flex items-center justify-between gap-3">
@@ -82,10 +74,10 @@ export function MinimalHabitItem({
           {/* Custom Checkbox */}
           <button
             onClick={handleCheckboxClick}
-            className={`relative flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${
+            className={`relative flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 cursor-pointer ${
               isCompleted
                 ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/25 ring-2 ring-emerald-500/20'
-                : 'border-2 border-neutral-700 hover:border-neutral-500 bg-neutral-950/60'
+                : 'border-2 border-subtle hover:border-main bg-input'
             }`}
             aria-label={isCompleted ? 'Mark incomplete' : 'Mark complete'}
           >
@@ -98,8 +90,8 @@ export function MinimalHabitItem({
           <div 
             className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-transform group-hover:scale-105"
             style={{ 
-              backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.1)' : colorConfig.bg,
-              color: isCompleted ? '#34D399' : colorConfig.text 
+              backgroundColor: isCompleted ? 'rgba(16, 185, 129, 0.12)' : colorConfig.bg,
+              color: isCompleted ? '#10B981' : colorConfig.hex 
             }}
           >
             <IconComponent className="w-4 h-4" />
@@ -109,22 +101,22 @@ export function MinimalHabitItem({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h3 className={`text-sm font-medium tracking-tight truncate transition-colors ${
-                isCompleted ? 'text-neutral-400 line-through' : 'text-neutral-100'
+                isCompleted ? 'text-muted-custom line-through' : 'text-main'
               }`}>
                 {habit.title}
               </h3>
               
               {/* Streak Badge */}
               {stats.currentStreak > 0 && (
-                <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                  <Flame className="w-3 h-3 fill-amber-400" />
+                <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                  <Flame className="w-3 h-3 fill-amber-500" />
                   {stats.currentStreak}d
                 </span>
               )}
             </div>
 
             {habit.description && (
-              <p className="text-xs text-neutral-500 truncate mt-0.5 font-light">
+              <p className="text-xs text-sub truncate mt-0.5 font-light">
                 {habit.description}
               </p>
             )}
@@ -135,22 +127,22 @@ export function MinimalHabitItem({
         <div className="flex items-center gap-2 flex-shrink-0">
           {/* Numeric Target Controls */}
           {habit.type === 'number' && (
-            <div className="flex items-center gap-1.5 bg-neutral-950 p-1 rounded-xl border border-neutral-800">
+            <div className="flex items-center gap-1.5 bg-input p-1 rounded-xl border border-subtle">
               <button
                 onClick={(e) => handleIncrement(e, -stepAmount)}
-                className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
+                className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer"
                 title={`Minus ${stepAmount} ${habit.target_unit || ''}`}
               >
                 <Minus className="w-3 h-3" />
               </button>
 
-              <span className="text-xs font-mono font-medium px-1 min-w-[3.5rem] text-center text-neutral-200">
+              <span className="text-xs font-mono font-medium px-1 min-w-[3.5rem] text-center text-main">
                 {currentValue} / {habit.target_value} {habit.target_unit || ''}
               </span>
 
               <button
                 onClick={(e) => handleIncrement(e, stepAmount)}
-                className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
+                className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer"
                 title={`Add ${stepAmount} ${habit.target_unit || ''}`}
               >
                 <Plus className="w-3 h-3" />
@@ -162,21 +154,21 @@ export function MinimalHabitItem({
           <div className="relative">
             <button
               onClick={() => setShowMenu(!showMenu)}
-              className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
+              className="p-1.5 rounded-lg text-sub hover:text-main hover:bg-subtle transition-colors cursor-pointer"
             >
               <MoreVertical className="w-4 h-4" />
             </button>
 
             {showMenu && (
               <div 
-                className="absolute right-0 top-8 z-30 w-36 rounded-xl bg-neutral-950 border border-neutral-800 p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
+                className="absolute right-0 top-8 z-30 w-36 rounded-xl bg-card border border-main p-1 shadow-xl animate-in fade-in zoom-in-95 duration-100"
               >
                 <button
                   onClick={() => {
                     setShowMenu(false);
                     onEdit(habit);
                   }}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-neutral-300 hover:text-white hover:bg-neutral-800 rounded-lg transition-colors"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-sub hover:text-main hover:bg-subtle rounded-lg transition-colors cursor-pointer"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                   Edit Habit
@@ -186,7 +178,7 @@ export function MinimalHabitItem({
                     setShowMenu(false);
                     onDelete(habit.id);
                   }}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   Delete
@@ -197,9 +189,9 @@ export function MinimalHabitItem({
         </div>
       </div>
 
-      {/* Numeric Progress Bar (if measurable habit) */}
+      {/* Numeric Progress Bar */}
       {habit.type === 'number' && (
-        <div className="w-full mt-3 bg-neutral-950 h-1 rounded-full overflow-hidden">
+        <div className="w-full mt-3 bg-input h-1 rounded-full overflow-hidden border border-subtle/50">
           <div 
             className="h-full transition-all duration-300 rounded-full"
             style={{ 

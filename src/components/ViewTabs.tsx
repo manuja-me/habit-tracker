@@ -20,7 +20,7 @@ export function ViewTabs({ activeTab, onTabChange }: ViewTabsProps) {
 
   return (
     <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 mb-6">
-      <div className="flex items-center p-1 bg-neutral-900/90 border border-neutral-800 rounded-xl max-w-md mx-auto sm:mx-0">
+      <div className="flex items-center p-1 bg-card border border-main rounded-xl max-w-md mx-auto sm:mx-0 shadow-xs">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -28,13 +28,13 @@ export function ViewTabs({ activeTab, onTabChange }: ViewTabsProps) {
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                 isActive
-                  ? 'bg-neutral-800 text-white shadow-sm font-semibold'
-                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40'
+                  ? 'bg-subtle text-main shadow-xs font-semibold'
+                  : 'text-sub hover:text-main hover:bg-subtle/50'
               }`}
             >
-              <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-neutral-400'}`} />
+              <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-500' : 'text-sub'}`} />
               <span>{tab.label}</span>
             </button>
           );

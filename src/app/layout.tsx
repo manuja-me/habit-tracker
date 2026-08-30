@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
+import { ThemeProvider } from '../lib/theme';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
   applicationName: 'Zenith',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'black-translucent',
+    statusBarStyle: 'default',
     title: 'Zenith',
   },
   formatDetection: {
@@ -27,7 +28,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#090A0F',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#F8FAFC' },
+    { media: '(prefers-color-scheme: dark)', color: '#090A0F' },
+  ],
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -44,10 +48,10 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-      data-theme="dark"
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-[#090A0F] text-[#F4F4F5] font-sans">
-        {children}
+      <body className="min-h-full flex flex-col bg-main text-main font-sans">
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

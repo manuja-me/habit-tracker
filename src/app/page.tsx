@@ -104,17 +104,17 @@ export default function HabitTrackerPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#090A0F] flex items-center justify-center">
+      <div className="min-h-screen bg-main flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin" />
-          <span className="text-xs font-mono text-neutral-400">Loading Zenith...</span>
+          <span className="text-xs font-mono text-sub">Loading Zenith...</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] pb-20 selection:bg-emerald-500/30 selection:text-emerald-300">
+    <div className="min-h-screen bg-main text-main pb-20 selection:bg-emerald-500/30 selection:text-emerald-500 transition-colors">
       {/* Top Header */}
       <Header
         selectedDate={selectedDate}
@@ -143,10 +143,10 @@ export default function HabitTrackerPage() {
                   <button
                     key={f.id}
                     onClick={() => setFilterCategory(f.id)}
-                    className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                    className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                       filterCategory === f.id
-                        ? 'bg-neutral-800 text-white font-semibold border border-neutral-700'
-                        : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900'
+                        ? 'bg-card text-main font-semibold border border-main shadow-xs'
+                        : 'text-sub hover:text-main hover:bg-subtle/50'
                     }`}
                   >
                     {f.label}
@@ -154,25 +154,25 @@ export default function HabitTrackerPage() {
                 ))}
               </div>
 
-              <span className="text-xs text-neutral-500 font-mono">
+              <span className="text-xs text-sub font-mono">
                 {displayedDailyHabits.length} items
               </span>
             </div>
 
             {/* Habit List */}
             {displayedDailyHabits.length === 0 ? (
-              <div className="p-12 text-center rounded-3xl bg-neutral-900/40 border border-neutral-800/60 backdrop-blur-md">
-                <div className="w-12 h-12 rounded-2xl bg-neutral-800/60 text-neutral-400 flex items-center justify-center mx-auto mb-4">
-                  <Sparkles className="w-6 h-6 text-emerald-400" />
+              <div className="p-12 text-center rounded-3xl bg-card border border-main shadow-xs backdrop-blur-md transition-colors">
+                <div className="w-12 h-12 rounded-2xl bg-subtle text-emerald-500 flex items-center justify-center mx-auto mb-4">
+                  <Sparkles className="w-6 h-6" />
                 </div>
-                <h3 className="text-base font-semibold text-white mb-1">
+                <h3 className="text-base font-semibold text-main mb-1">
                   {filterCategory === 'completed'
                     ? 'No habits completed yet today'
                     : filterCategory === 'pending'
                     ? 'All clear! Everything is completed.'
                     : 'No habits scheduled for today'}
                 </h3>
-                <p className="text-xs text-neutral-400 max-w-sm mx-auto mb-6">
+                <p className="text-xs text-sub max-w-sm mx-auto mb-6">
                   {filterCategory === 'all'
                     ? 'Start building your daily routines by creating your first custom habit.'
                     : 'Great job maintaining your consistency!'}
@@ -180,7 +180,7 @@ export default function HabitTrackerPage() {
                 {filterCategory === 'all' && (
                   <button
                     onClick={handleOpenAddModal}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20 transition-all"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Add a Habit</span>

@@ -6,11 +6,9 @@ import { calculateHabitStats } from '../lib/utils/streaks';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
 import { 
   Flame, 
-  Award, 
   TrendingUp, 
   CheckCircle2, 
   BarChart3, 
-  PieChart,
   Calendar
 } from 'lucide-react';
 import { subDays, format, getDay } from 'date-fns';
@@ -21,7 +19,6 @@ interface AnalyticsViewProps {
 }
 
 export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
-  // Compute habit stats
   const statsList = useMemo(() => {
     return habits.map((h) => ({
       habit: h,
@@ -29,7 +26,6 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
     }));
   }, [habits, logs]);
 
-  // Overall metrics
   const totalCompletions = useMemo(() => {
     return Object.values(logs).filter((l) => l.completed).length;
   }, [logs]);
@@ -44,9 +40,8 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
     return Math.round(sum / statsList.length);
   }, [statsList]);
 
-  // Day of week analysis (Mon=1, ..., Sun=0)
   const dayOfWeekPerformance = useMemo(() => {
-    const dayCounts = [0, 0, 0, 0, 0, 0, 0]; // 0=Sun, 1=Mon...
+    const dayCounts = [0, 0, 0, 0, 0, 0, 0];
     const dayTotals = [0, 0, 0, 0, 0, 0, 0];
 
     const today = new Date();
@@ -75,66 +70,66 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
       {/* Top 3 KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Consistency */}
-        <div className="p-5 rounded-2xl bg-neutral-900/60 border border-neutral-800 backdrop-blur-md">
+        <div className="p-5 rounded-2xl bg-card border border-main backdrop-blur-md shadow-xs transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
+            <span className="text-xs font-semibold uppercase tracking-wider text-sub">
               30-Day Adherence
             </span>
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
+            <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-500">
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-bold font-mono tracking-tight text-white">
+            <span className="text-3xl font-bold font-mono tracking-tight text-main">
               {avg30DayRate}%
             </span>
-            <span className="text-xs text-emerald-400">overall score</span>
+            <span className="text-xs text-emerald-500">overall score</span>
           </div>
         </div>
 
         {/* Best Streak */}
-        <div className="p-5 rounded-2xl bg-neutral-900/60 border border-neutral-800 backdrop-blur-md">
+        <div className="p-5 rounded-2xl bg-card border border-main backdrop-blur-md shadow-xs transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
+            <span className="text-xs font-semibold uppercase tracking-wider text-sub">
               Longest Streak
             </span>
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
-              <Flame className="w-4 h-4 fill-amber-400" />
+            <div className="p-2 rounded-xl bg-amber-500/15 text-amber-500">
+              <Flame className="w-4 h-4 fill-amber-500" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-bold font-mono tracking-tight text-white">
+            <span className="text-3xl font-bold font-mono tracking-tight text-main">
               {bestStreak}
             </span>
-            <span className="text-xs text-neutral-400">consecutive days</span>
+            <span className="text-xs text-sub">consecutive days</span>
           </div>
         </div>
 
         {/* Total Check-ins */}
-        <div className="p-5 rounded-2xl bg-neutral-900/60 border border-neutral-800 backdrop-blur-md">
+        <div className="p-5 rounded-2xl bg-card border border-main backdrop-blur-md shadow-xs transition-colors">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
+            <span className="text-xs font-semibold uppercase tracking-wider text-sub">
               Total Completions
             </span>
-            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400">
+            <div className="p-2 rounded-xl bg-indigo-500/15 text-indigo-500">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-bold font-mono tracking-tight text-white">
+            <span className="text-3xl font-bold font-mono tracking-tight text-main">
               {totalCompletions}
             </span>
-            <span className="text-xs text-neutral-400">habits logged</span>
+            <span className="text-xs text-sub">habits logged</span>
           </div>
         </div>
       </div>
 
-      {/* Habit by Habit Breakdown & Weekday Adherence */}
+      {/* Habit Breakdown & Weekday Adherence */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Habit Ranking by Streak & Consistency */}
-        <div className="p-5 rounded-2xl bg-neutral-900/60 border border-neutral-800 backdrop-blur-md">
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-emerald-400" />
+        {/* Habit Ranking */}
+        <div className="p-5 rounded-2xl bg-card border border-main backdrop-blur-md shadow-xs transition-colors">
+          <h3 className="text-sm font-semibold text-main mb-4 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-emerald-500" />
             Habit Performance Breakdown
           </h3>
 
@@ -144,30 +139,30 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
               const color = COLOR_PALETTES.find(c => c.hex.toLowerCase() === habit.color.toLowerCase()) || COLOR_PALETTES[0];
 
               return (
-                <div key={habit.id} className="p-3 rounded-xl bg-neutral-950/60 border border-neutral-800/80">
+                <div key={habit.id} className="p-3 rounded-xl bg-input border border-subtle">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div 
                         className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
-                        style={{ backgroundColor: color.bg, color: color.text }}
+                        style={{ backgroundColor: color.bg, color: color.hex }}
                       >
                         <IconComp className="w-3.5 h-3.5" />
                       </div>
-                      <span className="text-xs font-medium text-neutral-200 truncate">
+                      <span className="text-xs font-medium text-main truncate">
                         {habit.title}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-2 text-xs font-mono">
-                      <span className="text-amber-400 flex items-center gap-1 font-semibold">
-                        <Flame className="w-3 h-3 fill-amber-400" /> {stats.currentStreak}d
+                      <span className="text-amber-500 flex items-center gap-1 font-semibold">
+                        <Flame className="w-3 h-3 fill-amber-500" /> {stats.currentStreak}d
                       </span>
-                      <span className="text-neutral-500">|</span>
-                      <span className="text-neutral-300 font-semibold">{stats.completionRate30Days}%</span>
+                      <span className="text-sub">|</span>
+                      <span className="text-main font-semibold">{stats.completionRate30Days}%</span>
                     </div>
                   </div>
 
-                  <div className="w-full bg-neutral-900 h-1.5 rounded-full overflow-hidden">
+                  <div className="w-full bg-subtle h-1.5 rounded-full overflow-hidden">
                     <div 
                       className="h-full rounded-full transition-all duration-500"
                       style={{ 
@@ -182,27 +177,27 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
           </div>
         </div>
 
-        {/* Day of Week Adherence Chart */}
-        <div className="p-5 rounded-2xl bg-neutral-900/60 border border-neutral-800 backdrop-blur-md flex flex-col justify-between">
+        {/* Day of Week Adherence */}
+        <div className="p-5 rounded-2xl bg-card border border-main backdrop-blur-md shadow-xs transition-colors flex flex-col justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-emerald-400" />
+            <h3 className="text-sm font-semibold text-main mb-4 flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-emerald-500" />
               Day of Week Consistency (Past 90 Days)
             </h3>
-            <p className="text-xs text-neutral-400 mb-6">
+            <p className="text-xs text-sub mb-6">
               Identify which days of the week you are most consistent.
             </p>
           </div>
 
-          <div className="grid grid-cols-7 gap-2 items-end h-40 pt-4 pb-2 border-b border-neutral-800">
+          <div className="grid grid-cols-7 gap-2 items-end h-40 pt-4 pb-2 border-b border-subtle">
             {dayOfWeekPerformance.map((item) => (
               <div key={item.day} className="flex flex-col items-center gap-2 h-full justify-end">
-                <span className="text-[10px] font-mono text-neutral-400">{item.rate}%</span>
+                <span className="text-[10px] font-mono text-sub">{item.rate}%</span>
                 <div 
                   className="w-full max-w-[28px] rounded-t-md bg-gradient-to-t from-emerald-600 to-teal-400 transition-all duration-500"
                   style={{ height: `${Math.max(8, item.rate)}%` }}
                 />
-                <span className="text-[11px] font-medium text-neutral-300">{item.day}</span>
+                <span className="text-[11px] font-medium text-main">{item.day}</span>
               </div>
             ))}
           </div>

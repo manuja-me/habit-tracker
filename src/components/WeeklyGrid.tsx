@@ -4,7 +4,7 @@ import React from 'react';
 import { Habit, HabitLog } from '../lib/types';
 import { getWeekDays, formatDayName, formatShortDate, getTodayDateString, isHabitDueOnDate } from '../lib/utils/date';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
-import { Check, Flame, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { addDays, subDays } from 'date-fns';
 
 interface WeeklyGridProps {
@@ -37,33 +37,33 @@ export function WeeklyGrid({
 
   return (
     <div className="w-full max-w-4xl mx-auto px-4 sm:px-6">
-      <div className="p-4 sm:p-6 rounded-2xl bg-neutral-900/60 border border-neutral-800 backdrop-blur-md">
+      <div className="p-4 sm:p-6 rounded-2xl bg-card border border-main backdrop-blur-md shadow-xs transition-colors">
         {/* Week Header & Navigation */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-base font-semibold text-white">Weekly Tracker</h2>
-            <p className="text-xs text-neutral-400">
+            <h2 className="text-base font-semibold text-main">Weekly Tracker</h2>
+            <p className="text-xs text-sub">
               {formatShortDate(weekDays[0])} – {formatShortDate(weekDays[6])}
             </p>
           </div>
 
-          <div className="flex items-center gap-2 bg-neutral-950 p-1 rounded-xl border border-neutral-800">
+          <div className="flex items-center gap-2 bg-input p-1 rounded-xl border border-subtle">
             <button
               onClick={handlePrevWeek}
-              className="p-1.5 rounded-lg hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
+              className="p-1.5 rounded-lg hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer"
               title="Previous Week"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               onClick={() => onSelectDate(todayStr)}
-              className="px-2.5 py-1 text-xs font-medium text-neutral-300 hover:text-white"
+              className="px-2.5 py-1 text-xs font-medium text-sub hover:text-main cursor-pointer"
             >
               Current Week
             </button>
             <button
               onClick={handleNextWeek}
-              className="p-1.5 rounded-lg hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
+              className="p-1.5 rounded-lg hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer"
               title="Next Week"
             >
               <ChevronRight className="w-4 h-4" />
@@ -75,8 +75,8 @@ export function WeeklyGrid({
         <div className="overflow-x-auto pb-2">
           <table className="w-full text-left border-collapse min-w-[580px]">
             <thead>
-              <tr className="border-b border-neutral-800/80">
-                <th className="pb-3 text-xs font-semibold text-neutral-400 uppercase tracking-wider w-1/3">
+              <tr className="border-b border-subtle">
+                <th className="pb-3 text-xs font-semibold text-sub uppercase tracking-wider w-1/3">
                   Habit
                 </th>
                 {weekDays.map((dStr) => {
@@ -87,12 +87,12 @@ export function WeeklyGrid({
                       key={dStr}
                       onClick={() => onSelectDate(dStr)}
                       className={`pb-3 text-center cursor-pointer transition-colors ${
-                        isToday ? 'text-emerald-400 font-bold' : isSelected ? 'text-white' : 'text-neutral-400'
+                        isToday ? 'text-emerald-500 font-bold' : isSelected ? 'text-main font-semibold' : 'text-sub'
                       }`}
                     >
                       <div className="text-[11px] uppercase tracking-wider">{formatDayName(dStr)}</div>
                       <div className={`text-xs mt-0.5 inline-block px-1.5 py-0.5 rounded-md ${
-                        isToday ? 'bg-emerald-500/20 text-emerald-300 font-bold' : ''
+                        isToday ? 'bg-emerald-500/15 text-emerald-500 font-bold' : ''
                       }`}>
                         {formatShortDate(dStr).split(' ')[1]}
                       </div>
@@ -101,23 +101,23 @@ export function WeeklyGrid({
                 })}
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-800/40">
+            <tbody className="divide-y divide-subtle">
               {habits.map((habit) => {
                 const IconComponent = getHabitIcon(habit.icon);
                 const colorConfig = COLOR_PALETTES.find(c => c.hex.toLowerCase() === habit.color.toLowerCase()) || COLOR_PALETTES[0];
 
                 return (
-                  <tr key={habit.id} className="hover:bg-neutral-800/20 transition-colors">
+                  <tr key={habit.id} className="hover:bg-subtle/40 transition-colors">
                     {/* Habit Info */}
                     <td className="py-3 pr-4">
                       <div className="flex items-center gap-2.5">
                         <div 
                           className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                          style={{ backgroundColor: colorConfig.bg, color: colorConfig.text }}
+                          style={{ backgroundColor: colorConfig.bg, color: colorConfig.hex }}
                         >
                           <IconComponent className="w-3.5 h-3.5" />
                         </div>
-                        <span className="text-xs font-medium text-neutral-200 truncate">
+                        <span className="text-xs font-medium text-main truncate">
                           {habit.title}
                         </span>
                       </div>
@@ -132,7 +132,7 @@ export function WeeklyGrid({
                       if (!isDue) {
                         return (
                           <td key={dStr} className="py-3 text-center">
-                            <span className="inline-block w-2 h-2 rounded-full bg-neutral-800" title="Not scheduled" />
+                            <span className="inline-block w-2 h-2 rounded-full bg-subtle" title="Not scheduled" />
                           </td>
                         );
                       }
@@ -141,10 +141,10 @@ export function WeeklyGrid({
                         <td key={dStr} className="py-3 text-center">
                           <button
                             onClick={() => onToggle(habit.id, dStr, !isCompleted, !isCompleted ? habit.target_value : 0)}
-                            className={`w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all duration-150 active:scale-90 ${
+                            className={`w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all duration-150 active:scale-90 cursor-pointer ${
                               isCompleted
-                                ? 'bg-emerald-500 text-black shadow-sm'
-                                : 'border border-neutral-700 hover:border-neutral-500 bg-neutral-950/40 text-transparent'
+                                ? 'bg-emerald-500 text-black shadow-xs'
+                                : 'border border-subtle hover:border-main bg-input text-transparent'
                             }`}
                             aria-label={`Toggle ${habit.title} for ${dStr}`}
                           >
