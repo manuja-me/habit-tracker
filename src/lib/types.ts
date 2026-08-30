@@ -13,7 +13,6 @@ export type HabitType = 'boolean' | 'number';
 
 export interface Habit {
   id: string;
-  user_id?: string;
   title: string;
   description?: string;
   category: HabitCategory;

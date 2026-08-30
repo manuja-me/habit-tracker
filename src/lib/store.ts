@@ -3,11 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Habit, HabitLog } from './types';
 import { supabase, isSupabaseConfigured } from './supabase';
-import { getTodayDateString } from './utils/date';
 
 const HABITS_STORAGE_KEY = 'zenith_habits_v1';
 const LOGS_STORAGE_KEY = 'zenith_logs_v1';
-const USER_SETTINGS_KEY = 'zenith_settings_v1';
 
 const INITIAL_DEFAULT_HABITS: Habit[] = [
   {
@@ -84,20 +82,9 @@ const INITIAL_DEFAULT_HABITS: Habit[] = [
   },
 ];
 
-export interface StoreState {
-  habits: Habit[];
-  logs: Record<string, HabitLog>; // Key: `${habit_id}_${date}`
-  isLoading: boolean;
-  isSyncing: boolean;
-  syncError: string | null;
-  user: any | null;
-  theme: 'dark' | 'light' | 'oled';
-}
-
 // Global in-memory cache to prevent re-fetch flicker across components
 let globalHabits: Habit[] = [];
 let globalLogs: Record<string, HabitLog> = {};
-let globalUser: any = null;
 let listeners: Array<() => void> = [];
 
 function emitChange() {
@@ -117,10 +104,112 @@ export function generateId(): string {
 export function useHabitStore() {
   const [habits, setHabits] = useState<Habit[]>(globalHabits);
   const [logs, setLogs] = useState<Record<string, HabitLog>>(globalLogs);
-  const [user, setUser] = useState<any>(globalUser);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+
+  // Save to local storage
+  const persistLocally = (newHabits: Habit[], newLogs: Record<string, HabitLog>) => {
+    try {
+      localStorage.setItem(HABITS_STORAGE_KEY, JSON.stringify(newHabits));
+      localStorage.setItem(LOGS_STORAGE_KEY, JSON.stringify(newLogs));
+    } catch (e) {
+      console.error('Failed to save to localStorage', e);
+    }
+  };
+
+  // Sync with Supabase (Direct Cloud Sync for Single User)
+  const syncWithCloud = useCallback(async () => {
+    if (!isSupabaseConfigured || !supabase) return;
+
+    setIsSyncing(true);
+    setSyncError(null);
+
+    try {
+      // 1. Fetch habits from cloud
+      const { data: cloudHabits, error: habitsErr } = await supabase
+        .from('habits')
+        .select('*')
+        .order('sort_order', { ascending: true });
+
+      if (habitsErr) throw habitsErr;
+
+      // 2. Fetch logs from cloud
+      const { data: cloudLogs, error: logsErr } = await supabase
+        .from('habit_logs')
+        .select('*')
+        .limit(2500);
+
+      if (logsErr) throw logsErr;
+
+      if (cloudHabits && cloudHabits.length > 0) {
+        const formattedHabits: Habit[] = cloudHabits.map((h: any) => ({
+          id: h.id,
+          title: h.title,
+          description: h.description || '',
+          category: h.category,
+          color: h.color,
+          icon: h.icon,
+          type: h.type,
+          target_value: Number(h.target_value) || 1,
+          target_unit: h.target_unit || '',
+          frequency: h.frequency,
+          custom_days: h.custom_days || [],
+          archived: Boolean(h.archived),
+          order: h.sort_order || 0,
+          created_at: h.created_at,
+          updated_at: h.updated_at,
+        }));
+
+        globalHabits = formattedHabits;
+        setHabits(formattedHabits);
+      } else if (globalHabits.length > 0) {
+        // If cloud database is empty, seed it with our initial local habits
+        for (const h of globalHabits) {
+          await supabase.from('habits').insert({
+            id: h.id,
+            title: h.title,
+            description: h.description || '',
+            category: h.category,
+            color: h.color,
+            icon: h.icon,
+            type: h.type,
+            target_value: h.target_value,
+            target_unit: h.target_unit || '',
+            frequency: h.frequency,
+            custom_days: h.custom_days || [],
+            archived: h.archived,
+            sort_order: h.order,
+          });
+        }
+      }
+
+      if (cloudLogs && cloudLogs.length > 0) {
+        const mappedLogs: Record<string, HabitLog> = {};
+        cloudLogs.forEach((l: any) => {
+          mappedLogs[`${l.habit_id}_${l.date}`] = {
+            id: l.id,
+            habit_id: l.habit_id,
+            date: l.date,
+            completed: Boolean(l.completed),
+            value: Number(l.value) || 0,
+            notes: l.notes || '',
+            created_at: l.created_at,
+            updated_at: l.updated_at,
+          };
+        });
+        globalLogs = mappedLogs;
+        setLogs(mappedLogs);
+      }
+
+      persistLocally(globalHabits, globalLogs);
+    } catch (err: any) {
+      console.warn('Supabase sync notice:', err?.message || err);
+      setSyncError(err?.message || 'Sync failed');
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
 
   // Load from local storage initially
   const loadLocalData = useCallback(() => {
@@ -150,120 +239,12 @@ export function useHabitStore() {
     }
   }, []);
 
-  // Save to local storage
-  const persistLocally = (newHabits: Habit[], newLogs: Record<string, HabitLog>) => {
-    try {
-      localStorage.setItem(HABITS_STORAGE_KEY, JSON.stringify(newHabits));
-      localStorage.setItem(LOGS_STORAGE_KEY, JSON.stringify(newLogs));
-    } catch (e) {
-      console.error('Failed to save to localStorage', e);
-    }
-  };
-
-  // Sync with Supabase (Cloud Sync)
-  const syncWithCloud = useCallback(async (currentUser?: any) => {
-    if (!isSupabaseConfigured || !supabase) return;
-    const activeUser = currentUser || user;
-    if (!activeUser) return;
-
-    setIsSyncing(true);
-    setSyncError(null);
-
-    try {
-      // 1. Fetch habits from cloud
-      const { data: cloudHabits, error: habitsErr } = await supabase
-        .from('habits')
-        .select('*')
-        .order('sort_order', { ascending: true });
-
-      if (habitsErr) throw habitsErr;
-
-      // 2. Fetch logs from cloud (last 365 days)
-      const { data: cloudLogs, error: logsErr } = await supabase
-        .from('habit_logs')
-        .select('*')
-        .limit(2000);
-
-      if (logsErr) throw logsErr;
-
-      if (cloudHabits && cloudHabits.length > 0) {
-        // Map cloud habits
-        const formattedHabits: Habit[] = cloudHabits.map((h: any) => ({
-          id: h.id,
-          user_id: h.user_id,
-          title: h.title,
-          description: h.description || '',
-          category: h.category,
-          color: h.color,
-          icon: h.icon,
-          type: h.type,
-          target_value: Number(h.target_value) || 1,
-          target_unit: h.target_unit || '',
-          frequency: h.frequency,
-          custom_days: h.custom_days || [],
-          archived: Boolean(h.archived),
-          order: h.sort_order || 0,
-          created_at: h.created_at,
-          updated_at: h.updated_at,
-        }));
-
-        globalHabits = formattedHabits;
-        setHabits(formattedHabits);
-      }
-
-      if (cloudLogs && cloudLogs.length > 0) {
-        const mappedLogs: Record<string, HabitLog> = {};
-        cloudLogs.forEach((l: any) => {
-          mappedLogs[`${l.habit_id}_${l.date}`] = {
-            id: l.id,
-            habit_id: l.habit_id,
-            date: l.date,
-            completed: Boolean(l.completed),
-            value: Number(l.value) || 0,
-            notes: l.notes || '',
-            created_at: l.created_at,
-            updated_at: l.updated_at,
-          };
-        });
-        globalLogs = mappedLogs;
-        setLogs(mappedLogs);
-      }
-
-      persistLocally(globalHabits, globalLogs);
-    } catch (err: any) {
-      console.warn('Supabase sync warning:', err?.message || err);
-      setSyncError(err?.message || 'Sync failed');
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [user]);
-
-  // Initialize store and auth listener
+  // Initialize store
   useEffect(() => {
     loadLocalData();
 
     if (isSupabaseConfigured && supabase) {
-      // Check current session
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session?.user) {
-          globalUser = session.user;
-          setUser(session.user);
-          syncWithCloud(session.user);
-        }
-      });
-
-      // Listen for auth changes
-      const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-        globalUser = session?.user || null;
-        setUser(session?.user || null);
-        if (session?.user) {
-          syncWithCloud(session.user);
-        }
-      });
-
-      return () => {
-        authListener.subscription.unsubscribe();
-      };
+      syncWithCloud();
     }
   }, [loadLocalData, syncWithCloud]);
 
@@ -272,7 +253,6 @@ export function useHabitStore() {
     const handleUpdate = () => {
       setHabits([...globalHabits]);
       setLogs({ ...globalLogs });
-      setUser(globalUser);
     };
 
     listeners.push(handleUpdate);
@@ -312,12 +292,11 @@ export function useHabitStore() {
     persistLocally(globalHabits, globalLogs);
     emitChange();
 
-    // Background async sync to Supabase
-    if (isSupabaseConfigured && supabase && globalUser) {
+    // Direct background sync to Supabase (No user_id required)
+    if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('habit_logs').upsert({
           habit_id: habitId,
-          user_id: globalUser.id,
           date: dateStr,
           completed: newCompleted,
           value: newValue,
@@ -330,7 +309,7 @@ export function useHabitStore() {
     }
   };
 
-  // 2. Add New Habit (Optimistic)
+  // 2. Add New Habit (Optimistic + Direct Cloud Sync)
   const addHabit = async (habitData: Omit<Habit, 'id' | 'created_at' | 'order' | 'archived'>) => {
     const newHabit: Habit = {
       ...habitData,
@@ -344,12 +323,10 @@ export function useHabitStore() {
     persistLocally(globalHabits, globalLogs);
     emitChange();
 
-    // Background cloud sync
-    if (isSupabaseConfigured && supabase && globalUser) {
+    if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('habits').insert({
           id: newHabit.id,
-          user_id: globalUser.id,
           title: newHabit.title,
           description: newHabit.description || '',
           category: newHabit.category,
@@ -371,7 +348,7 @@ export function useHabitStore() {
     return newHabit;
   };
 
-  // 3. Update Existing Habit (Optimistic)
+  // 3. Update Existing Habit
   const updateHabit = async (habitId: string, updates: Partial<Habit>) => {
     globalHabits = globalHabits.map((h) => 
       h.id === habitId ? { ...h, ...updates, updated_at: new Date().toISOString() } : h
@@ -379,8 +356,7 @@ export function useHabitStore() {
     persistLocally(globalHabits, globalLogs);
     emitChange();
 
-    // Background cloud sync
-    if (isSupabaseConfigured && supabase && globalUser) {
+    if (isSupabaseConfigured && supabase) {
       try {
         const updatePayload: any = { ...updates, updated_at: new Date().toISOString() };
         if (updates.order !== undefined) updatePayload.sort_order = updates.order;
@@ -391,11 +367,10 @@ export function useHabitStore() {
     }
   };
 
-  // 4. Delete Habit (Optimistic)
+  // 4. Delete Habit
   const deleteHabit = async (habitId: string) => {
     globalHabits = globalHabits.filter((h) => h.id !== habitId);
     
-    // Also remove logs
     const newLogs: Record<string, HabitLog> = {};
     Object.entries(globalLogs).forEach(([key, log]) => {
       if (log.habit_id !== habitId) {
@@ -407,8 +382,7 @@ export function useHabitStore() {
     persistLocally(globalHabits, globalLogs);
     emitChange();
 
-    // Background cloud sync
-    if (isSupabaseConfigured && supabase && globalUser) {
+    if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('habits').delete().eq('id', habitId);
       } catch (e) {
@@ -424,7 +398,7 @@ export function useHabitStore() {
     persistLocally(globalHabits, globalLogs);
     emitChange();
 
-    if (isSupabaseConfigured && supabase && globalUser) {
+    if (isSupabaseConfigured && supabase) {
       try {
         for (const h of updated) {
           await supabase.from('habits').update({ sort_order: h.order }).eq('id', h.id);
@@ -439,7 +413,6 @@ export function useHabitStore() {
     habits: habits.filter(h => !h.archived).sort((a, b) => a.order - b.order),
     allHabits: habits,
     logs,
-    user,
     isLoading,
     isSyncing,
     syncError,

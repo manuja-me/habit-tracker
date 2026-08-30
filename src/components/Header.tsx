@@ -9,12 +9,8 @@ import {
   RefreshCw, 
   Sun, 
   Moon, 
-  Smartphone, 
-  User as UserIcon,
-  Sparkles,
   ChevronLeft,
-  ChevronRight,
-  Calendar as CalendarIcon
+  ChevronRight
 } from 'lucide-react';
 import { useHabitStore } from '../lib/store';
 import { formatDisplayDate, getTodayDateString, formatDate, parseDate } from '../lib/utils/date';
@@ -24,7 +20,7 @@ interface HeaderProps {
   selectedDate: string;
   onSelectDate: (date: string) => void;
   onOpenAddModal: () => void;
-  onOpenAuthModal: () => void;
+  onOpenSyncModal: () => void;
   completedCount: number;
   totalCount: number;
 }
@@ -33,11 +29,11 @@ export function Header({
   selectedDate,
   onSelectDate,
   onOpenAddModal,
-  onOpenAuthModal,
+  onOpenSyncModal,
   completedCount,
   totalCount,
 }: HeaderProps) {
-  const { user, isSyncing, syncWithCloud, isCloudReady } = useHabitStore();
+  const { isSyncing, syncWithCloud, isCloudReady } = useHabitStore();
   const [theme, setTheme] = useState<'dark' | 'light' | 'oled'>('dark');
 
   const todayStr = getTodayDateString();
@@ -84,19 +80,19 @@ export function Header({
         <div className="flex items-center gap-2">
           {/* Cloud Sync Status */}
           <button
-            onClick={() => isCloudReady && user ? syncWithCloud() : onOpenAuthModal()}
-            title={user ? `Synced as ${user.email}` : isCloudReady ? 'Click to Sign In / Sync' : 'Local Standalone Mode'}
+            onClick={() => onOpenSyncModal()}
+            title={isCloudReady ? 'Cloud Synced — Click for details' : 'Local Storage Mode'}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-neutral-900/80 hover:bg-neutral-800 border border-neutral-800 text-neutral-400 hover:text-neutral-200 transition-all"
           >
             {isSyncing ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-            ) : user ? (
+            ) : isCloudReady ? (
               <Cloud className="w-3.5 h-3.5 text-emerald-400" />
             ) : (
               <CloudOff className="w-3.5 h-3.5 text-neutral-500" />
             )}
             <span className="hidden sm:inline">
-              {isSyncing ? 'Syncing...' : user ? 'Cloud Synced' : 'Sync Devices'}
+              {isSyncing ? 'Syncing...' : isCloudReady ? 'Cloud Synced' : 'Local Mode'}
             </span>
           </button>
 

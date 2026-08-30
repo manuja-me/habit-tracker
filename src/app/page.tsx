@@ -13,8 +13,8 @@ import { WeeklyGrid } from '../components/WeeklyGrid';
 import { MinimalHeatmap } from '../components/MinimalHeatmap';
 import { AnalyticsView } from '../components/AnalyticsView';
 import { HabitModal } from '../components/HabitModal';
-import { AuthModal } from '../components/AuthModal';
-import { Plus, Sparkles, Filter, CheckCircle2, ListFilter } from 'lucide-react';
+import { SyncSettingsModal } from '../components/SyncSettingsModal';
+import { Plus, Sparkles } from 'lucide-react';
 
 export default function HabitTrackerPage() {
   const {
@@ -32,7 +32,7 @@ export default function HabitTrackerPage() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [isHabitModalOpen, setIsHabitModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
   // Track previous completion state to trigger confetti only on completion milestone
   const prevCompletionRef = useRef<boolean>(false);
@@ -120,7 +120,7 @@ export default function HabitTrackerPage() {
         selectedDate={selectedDate}
         onSelectDate={setSelectedDate}
         onOpenAddModal={handleOpenAddModal}
-        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onOpenSyncModal={() => setIsSyncModalOpen(true)}
         completedCount={completedCount}
         totalCount={totalCount}
       />
@@ -240,10 +240,10 @@ export default function HabitTrackerPage() {
         editingHabit={editingHabit}
       />
 
-      {/* Auth & Sync Modal */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
+      {/* Sync Status Modal */}
+      <SyncSettingsModal
+        isOpen={isSyncModalOpen}
+        onClose={() => setIsSyncModalOpen(false)}
       />
     </div>
   );

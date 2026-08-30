@@ -6,8 +6,8 @@ This guide walks you through deploying your personal habit tracker completely fo
 
 ## 1. Set Up Free Database & Cloud Sync (Supabase)
 
-1. Go to [supabase.com](https://supabase.com) and sign up for a **Free Tier** account.
-2. Click **"New Project"**, pick a database password and the region closest to you.
+1. Go to [supabase.com](https://supabase.com) and create a **Free Tier** account.
+2. Click **"New Project"**, pick a name and database password.
 3. Once created, open the **SQL Editor** from the left sidebar.
 4. Copy the entire contents of [`supabase/schema.sql`](./supabase/schema.sql) and paste it into the editor, then click **Run**.
 5. Go to **Project Settings** -> **API**:
@@ -57,8 +57,7 @@ This guide walks you through deploying your personal habit tracker completely fo
 
 ---
 
-## 5. Multi-Device Usage
-1. Open the app on your computer and click the **Sync Devices** button in the top header.
-2. Create an account with your email & password.
-3. Open the app on your phone and log in with the same account.
-4. Any habit you check off on your phone will sync across your devices in real time!
+## 5. Zero-Login Multi-Device Usage
+1. Open your habit tracker URL on your computer, phone, or tablet.
+2. No username, email, or password required.
+3. Every habit you check off on any device will automatically sync across all your devices in real-time.
