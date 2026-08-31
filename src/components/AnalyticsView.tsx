@@ -2,7 +2,8 @@
 
 import React, { useMemo } from 'react';
 import { Habit, HabitLog } from '../lib/types';
-import { calculateHabitStats, calculateMilestones } from '../lib/utils/streaks';
+import { calculateHabitStats, calculateMilestones, isDaySuccessful } from '../lib/utils/streaks';
+import { isHabitDueOnDate } from '../lib/utils/date';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
 import { 
   Flame, 
@@ -66,9 +67,11 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
       const dayIdx = getDay(d);
 
       habits.forEach((h) => {
-        dayTotals[dayIdx]++;
-        if (logs[`${h.id}_${dStr}`]?.completed) {
-          dayCounts[dayIdx]++;
+        if (isHabitDueOnDate(h, dStr)) {
+          dayTotals[dayIdx]++;
+          if (isDaySuccessful(h, dStr, logs)) {
+            dayCounts[dayIdx]++;
+          }
         }
       });
     }

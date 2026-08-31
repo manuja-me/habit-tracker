@@ -61,6 +61,15 @@ export function getLastNDays(n: number): string[] {
 
 export function isHabitDueOnDate(habit: Habit, dateStr: string): boolean {
   if (habit.archived) return false;
+
+  // A habit is not due on dates before it was created
+  if (habit.created_at) {
+    const createdDateStr = habit.created_at.split('T')[0];
+    if (dateStr < createdDateStr) {
+      return false;
+    }
+  }
+
   const date = parseISO(dateStr);
   const dayOfWeek = getDay(date); // 0 = Sun, 1 = Mon, ..., 6 = Sat
 
