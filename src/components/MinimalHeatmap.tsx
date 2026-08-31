@@ -38,8 +38,8 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
     return cols;
   }, [overallHeatmapData]);
 
-  const activeDays = overallHeatmapData.filter((d) => d.count > 0).length;
-  const totalCheckins = overallHeatmapData.reduce((acc, d) => acc + d.count, 0);
+  const activeDays = overallHeatmapData.filter((d) => d.count > 0 && d.total > 0).length;
+  const totalCheckins = overallHeatmapData.reduce((acc, d) => acc + (d.total > 0 ? d.count : 0), 0);
 
   // 2. Individual Heatmap Data per Habit
   const individualHeatmaps = useMemo(() => {
@@ -140,9 +140,13 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
               <span className="font-bold text-emerald-500">
                 {formatDisplayDate(hoveredDay.date)}:
               </span>
-              <span>
-                {hoveredDay.count} / {hoveredDay.total} completed
-              </span>
+              {hoveredDay.total === 0 ? (
+                <span className="text-sub">No habits active on this date</span>
+              ) : (
+                <span>
+                  {hoveredDay.count} / {hoveredDay.total} completed
+                </span>
+              )}
               {hoveredDay.completedHabits && hoveredDay.completedHabits.length > 0 && (
                 <span className="text-sub text-[11px] truncate max-w-sm">
                   ({hoveredDay.completedHabits.join(', ')})
@@ -217,7 +221,7 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
                   {weeks.map((week, wIdx) => (
                     <div key={wIdx} className="flex flex-col gap-1">
                       {week.map((day) => {
-                        const isDone = day.count > 0;
+                        const isDone = day.count > 0 && day.total > 0;
                         return (
                           <div
                             key={day.date}

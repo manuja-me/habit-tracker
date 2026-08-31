@@ -62,12 +62,12 @@ export function getLastNDays(n: number): string[] {
 export function isHabitDueOnDate(habit: Habit, dateStr: string): boolean {
   if (habit.archived) return false;
 
+  const todayStr = getTodayDateString();
+  const createdDateStr = habit.created_at ? habit.created_at.split('T')[0] : todayStr;
+
   // A habit is not due on dates before it was created
-  if (habit.created_at) {
-    const createdDateStr = habit.created_at.split('T')[0];
-    if (dateStr < createdDateStr) {
-      return false;
-    }
+  if (dateStr < createdDateStr) {
+    return false;
   }
 
   const date = parseISO(dateStr);

@@ -4,16 +4,22 @@ import { getTodayDateString, isHabitDueOnDate } from './date';
 
 /**
  * Checks if a habit was successful (clean/completed) on a specific date.
- * A habit can only be successful on or after its creation date.
+ * A habit can only be successful on or after its creation date and not in the future.
  * For 'do' habits: requires log?.completed === true.
- * For 'dont' (addiction/quit) habits: clean by default unless explicitly logged as a slip-up (completed === false).
+ * For 'dont' (addiction/quit) habits: clean by default on/after creation date unless explicitly logged as a slip-up.
  */
 export function isDaySuccessful(habit: Habit, dateStr: string, logs: Record<string, HabitLog>): boolean {
-  if (habit.created_at) {
-    const createdDateStr = habit.created_at.split('T')[0];
-    if (dateStr < createdDateStr) {
-      return false;
-    }
+  const todayStr = getTodayDateString();
+  const createdDateStr = habit.created_at ? habit.created_at.split('T')[0] : todayStr;
+  
+  // A habit cannot be successful on dates before its creation date
+  if (dateStr < createdDateStr) {
+    return false;
+  }
+
+  // Future dates cannot be successful yet
+  if (dateStr > todayStr) {
+    return false;
   }
 
   const log = logs[`${habit.id}_${dateStr}`];
@@ -34,9 +40,23 @@ export function calculateHabitStats(habit: Habit, logs: Record<string, HabitLog>
   const isCompletedToday = isDaySuccessful(habit, todayStr, logs);
   const todayValue = todayLog?.value ?? 0;
 
-  // Filter logs for this habit
-  const habitLogs = Object.values(logs).filter((l) => l.habit_id === habit.id);
-  const totalCompletions = habitLogs.filter((l) => l.completed).length;
+  let daysSinceCreation = 0;
+  try {
+    daysSinceCreation = Math.min(365, Math.max(0, differenceInCalendarDays(new Date(), parseISO(createdDateStr))));
+  } catch {
+    daysSinceCreation = 0;
+  }
+
+  // Calculate total completions since creation
+  let totalCompletions = 0;
+  for (let i = 0; i <= daysSinceCreation; i++) {
+    const dStr = format(subDays(new Date(), i), 'yyyy-MM-dd');
+    if (dStr >= createdDateStr && isHabitDueOnDate(habit, dStr)) {
+      if (isDaySuccessful(habit, dStr, logs)) {
+        totalCompletions++;
+      }
+    }
+  }
 
   // Calculate current streak
   let currentStreak = 0;
@@ -49,7 +69,7 @@ export function calculateHabitStats(habit: Habit, logs: Record<string, HabitLog>
 
   // Iterate backwards day by day to count consecutive completed/clean scheduled days
   let daysChecked = 0;
-  while (daysChecked < 365) {
+  while (daysChecked <= daysSinceCreation) {
     const dateStr = format(checkDate, 'yyyy-MM-dd');
 
     // Stop counting before habit was created
@@ -75,14 +95,6 @@ export function calculateHabitStats(habit: Habit, logs: Record<string, HabitLog>
   // Calculate longest streak since creation
   let longestStreak = currentStreak;
   let tempStreak = 0;
-  
-  let daysSinceCreation = 0;
-  try {
-    daysSinceCreation = Math.min(365, Math.max(0, differenceInCalendarDays(new Date(), parseISO(createdDateStr))));
-  } catch {
-    daysSinceCreation = 0;
-  }
-
   let historyDate = subDays(new Date(), daysSinceCreation);
   
   for (let i = 0; i <= daysSinceCreation; i++) {
@@ -154,11 +166,13 @@ export function generateHeatmapData(
     const totalDue = dueHabits.length;
 
     const completedHabits: string[] = [];
-    dueHabits.forEach(h => {
-      if (isDaySuccessful(h, dateStr, logs)) {
-        completedHabits.push(h.title);
-      }
-    });
+    if (totalDue > 0) {
+      dueHabits.forEach(h => {
+        if (isDaySuccessful(h, dateStr, logs)) {
+          completedHabits.push(h.title);
+        }
+      });
+    }
 
     const count = completedHabits.length;
     let level: 0 | 1 | 2 | 3 | 4 = 0;
