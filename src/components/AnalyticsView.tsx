@@ -170,13 +170,13 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-3">
           {milestones.map((m) => {
             const IconComp = getMilestoneIcon(m.iconName);
             return (
               <div 
                 key={m.id}
-                className={`p-3 rounded-none border transition-all ${
+                className={`p-3.5 sm:p-3 rounded-none border transition-all ${
                   m.unlocked 
                     ? 'bg-input border-emerald-500/40 shadow-xs' 
                     : 'bg-input/40 border-subtle opacity-65'
@@ -184,32 +184,32 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
               >
                 <div className="flex items-center justify-between mb-2">
                   <div 
-                    className="w-7 h-7 flex items-center justify-center rounded-none border"
+                    className="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-none border"
                     style={{ 
                       backgroundColor: m.unlocked ? `${m.color}20` : 'transparent',
                       borderColor: m.unlocked ? `${m.color}60` : 'var(--border-subtle)',
                       color: m.unlocked ? m.color : 'var(--text-sub)'
                     }}
                   >
-                    <IconComp className="w-3.5 h-3.5" />
+                    <IconComp className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5" />
                   </div>
                   {m.unlocked ? (
-                    <span className="text-[9px] font-bold text-emerald-500 border border-emerald-500/30 px-1 py-0.2 bg-emerald-500/10">
+                    <span className="text-[10px] sm:text-[9px] font-bold text-emerald-500 border border-emerald-500/30 px-1.5 py-0.5 bg-emerald-500/10">
                       UNLOCKED
                     </span>
                   ) : (
-                    <span className="text-[9px] text-sub flex items-center gap-0.5">
-                      <Lock className="w-2.5 h-2.5" /> {m.days}D
+                    <span className="text-[10px] sm:text-[9px] text-sub flex items-center gap-1">
+                      <Lock className="w-3 h-3 sm:w-2.5 sm:h-2.5" /> {m.days}D
                     </span>
                   )}
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-[11px] font-bold text-main truncate">{m.title}</div>
-                  <div className="text-[9px] text-sub truncate">{m.subtitle}</div>
+                  <div className="text-xs sm:text-[11px] font-bold text-main truncate">{m.title}</div>
+                  <div className="text-[10px] sm:text-[9px] text-sub truncate">{m.subtitle}</div>
                 </div>
 
-                <div className="mt-2">
+                <div className="mt-2.5">
                   <Progress 
                     value={m.progressPercent} 
                     max={100} 
