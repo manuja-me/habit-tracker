@@ -113,7 +113,7 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
                   </div>
                   <button
                     onClick={() => setEnabled(!enabled)}
-                    className={`px-3 py-1 text-xs font-bold font-mono transition-colors border ${
+                    className={`h-10 sm:h-8 px-3.5 sm:px-3 text-xs font-bold font-mono transition-colors border flex items-center justify-center cursor-pointer touch-manipulation active:scale-95 ${
                       enabled
                         ? 'bg-emerald-500 text-black border-emerald-400'
                         : 'bg-card text-sub border-subtle'
@@ -125,14 +125,14 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
 
                 <div className="p-3 bg-input border border-subtle space-y-1.5">
                   <label className="text-xs font-bold text-main flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-emerald-500" />
+                    <Clock className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-emerald-500" />
                     REMINDER TIME (24H)
                   </label>
                   <input
                     type="time"
                     value={time}
                     onChange={(e) => setTime(e.target.value)}
-                    className="w-full bg-card border border-main px-3 py-2 text-sm font-mono text-main outline-none focus:border-emerald-500"
+                    className="w-full bg-card border border-main px-3 py-2.5 sm:py-2 text-sm font-mono text-main outline-none focus:border-emerald-500 min-h-[44px] sm:min-h-0"
                   />
                 </div>
               </div>
@@ -140,18 +140,18 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
           </div>
         )}
 
-        <div className="pt-2 border-t border-subtle flex items-center justify-end gap-2">
+        <div className="pt-3 border-t border-subtle flex items-center justify-end gap-2.5">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 text-xs text-sub hover:text-main uppercase"
+            className="h-11 sm:h-9 px-4 text-xs font-mono font-medium text-sub hover:text-main uppercase cursor-pointer touch-manipulation flex items-center justify-center"
           >
             CANCEL
           </button>
           <button
             onClick={handleSave}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-emerald-500 text-black hover:bg-emerald-400 uppercase transition-colors"
+            className="flex items-center justify-center gap-1.5 h-11 sm:h-9 px-5 text-xs font-mono font-bold bg-emerald-500 text-black hover:bg-emerald-400 uppercase transition-colors active:scale-95 cursor-pointer touch-manipulation"
           >
-            {saved ? <Check className="w-3.5 h-3.5" /> : null}
+            {saved ? <Check className="w-4 h-4" /> : null}
             {saved ? 'SAVED' : 'SAVE SETTINGS'}
           </button>
         </div>

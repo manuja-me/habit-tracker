@@ -249,18 +249,18 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
         </div>
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
           <button
             onClick={handleDownloadImage}
             disabled={isGenerating}
-            className="flex items-center justify-center gap-2 py-2.5 px-4 font-bold text-xs bg-emerald-500 text-black hover:bg-emerald-400 transition-colors uppercase cursor-pointer"
+            className="flex items-center justify-center gap-2 h-12 sm:h-10 px-4 font-bold text-xs font-mono bg-emerald-500 text-black hover:bg-emerald-400 transition-colors uppercase cursor-pointer touch-manipulation active:scale-95"
           >
             <Download className="w-4 h-4" />
             {isGenerating ? 'GENERATING...' : 'DOWNLOAD PNG CARD'}
           </button>
           <button
             onClick={handleCopyText}
-            className="flex items-center justify-center gap-2 py-2.5 px-4 font-bold text-xs bg-input hover:bg-input-focus border border-main text-main transition-colors uppercase cursor-pointer"
+            className="flex items-center justify-center gap-2 h-12 sm:h-10 px-4 font-bold text-xs font-mono bg-input hover:bg-input-focus border border-main text-main transition-colors uppercase cursor-pointer touch-manipulation active:scale-95"
           >
             {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
             {copied ? 'COPIED TO CLIPBOARD' : 'COPY TEXT SUMMARY'}

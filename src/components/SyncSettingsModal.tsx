@@ -81,15 +81,15 @@ export function SyncSettingsModal({ isOpen, onClose }: SyncSettingsModalProps) {
           <button
             onClick={() => syncWithCloud()}
             disabled={isSyncing}
-            className="w-full py-2.5 flex items-center justify-center gap-2 text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black rounded-none border border-emerald-400 active:scale-95 transition-all disabled:opacity-50 cursor-pointer touch-manipulation"
+            className="w-full h-11 sm:h-9 flex items-center justify-center gap-2 text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black rounded-none border border-emerald-400 active:scale-95 transition-all disabled:opacity-50 cursor-pointer touch-manipulation"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>{isSyncing ? 'SYNCING...' : 'FORCE SYNC NOW'}</span>
           </button>
 
           <button
             onClick={onClose}
-            className="w-full py-2 text-xs font-mono font-medium bg-subtle hover:bg-main border border-subtle text-main rounded-none transition-all cursor-pointer touch-manipulation"
+            className="w-full h-11 sm:h-9 flex items-center justify-center text-xs font-mono font-medium bg-subtle hover:bg-main border border-subtle text-main rounded-none transition-all cursor-pointer touch-manipulation"
           >
             CLOSE
           </button>

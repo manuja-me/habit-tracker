@@ -94,19 +94,19 @@ export function Header({
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0 flex-wrap justify-end">
+        <div className="flex items-center gap-1.5 sm:gap-1.5 flex-shrink-0 flex-wrap justify-end">
           {/* Cloud Sync Status */}
           <button
             onClick={onOpenSyncModal}
             title={isCloudReady ? 'Cloud Synced — Click for details' : 'Local Storage Mode'}
-            className="flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 rounded-none text-xs font-mono bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all cursor-pointer touch-manipulation"
+            className="flex items-center gap-1.5 h-9 px-2 sm:h-8 sm:px-2.5 rounded-none text-xs font-mono bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all cursor-pointer touch-manipulation"
           >
             {isSyncing ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-500" />
+              <RefreshCw className="w-4 h-4 sm:w-3.5 sm:h-3.5 animate-spin text-emerald-500" />
             ) : isCloudReady ? (
-              <Cloud className="w-3.5 h-3.5 text-emerald-500" />
+              <Cloud className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-emerald-500" />
             ) : (
-              <CloudOff className="w-3.5 h-3.5 text-muted-custom" />
+              <CloudOff className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-muted-custom" />
             )}
             <span className="hidden sm:inline">
               {isSyncing ? 'SYNCING...' : isCloudReady ? 'SYNCED' : 'LOCAL'}
@@ -116,14 +116,14 @@ export function Header({
           {/* Sound Toggle */}
           <button
             onClick={handleToggleSound}
-            className="p-1.5 sm:p-2 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation"
+            className="w-9 h-9 sm:w-8 sm:h-8 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation"
             title={soundOn ? 'Sound: ON (Click to mute)' : 'Sound: MUTED (Click to enable)'}
             aria-label="Toggle Sound"
           >
             {soundOn ? (
-              <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500" />
+              <Volume2 className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-emerald-500" />
             ) : (
-              <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sub" />
+              <VolumeX className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-sub" />
             )}
           </button>
 
@@ -131,11 +131,11 @@ export function Header({
           {onOpenShortcutsModal && (
             <button
               onClick={onOpenShortcutsModal}
-              className="p-1.5 sm:p-2 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation"
+              className="w-9 h-9 sm:w-8 sm:h-8 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation"
               title="Keyboard Shortcuts (Press ?)"
               aria-label="Keyboard Shortcuts"
             >
-              <Keyboard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <Keyboard className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
             </button>
           )}
 
@@ -143,11 +143,11 @@ export function Header({
           {onOpenShareModal && (
             <button
               onClick={onOpenShareModal}
-              className="p-1.5 sm:p-2 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation"
+              className="w-9 h-9 sm:w-8 sm:h-8 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation"
               title="Share Streak & Stats Card"
               aria-label="Share Stats"
             >
-              <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <Share2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
             </button>
           )}
 
@@ -155,46 +155,46 @@ export function Header({
           {onOpenNotificationModal && (
             <button
               onClick={onOpenNotificationModal}
-              className="p-1.5 sm:p-2 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation"
+              className="w-9 h-9 sm:w-8 sm:h-8 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation"
               title="Daily Check-in Reminder"
               aria-label="Daily Reminder"
             >
-              <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <Bell className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
             </button>
           )}
 
           {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
-            className="p-1.5 sm:p-2 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation"
+            className="w-9 h-9 sm:w-8 sm:h-8 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation"
             title={`Theme: ${theme.toUpperCase()}`}
             aria-label="Toggle Theme"
           >
             {theme === 'light' ? (
-              <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500" />
+              <Sun className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-amber-500" />
             ) : theme === 'oled' ? (
-              <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
+              <Moon className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-purple-400" />
             ) : (
-              <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-neutral-300" />
+              <Moon className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-neutral-300" />
             )}
           </button>
 
           {/* Lock App Button */}
           <button
             onClick={onLockApp}
-            className="p-1.5 sm:p-2 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-rose-500 transition-all flex items-center justify-center cursor-pointer touch-manipulation"
+            className="w-9 h-9 sm:w-8 sm:h-8 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-rose-500 transition-all flex items-center justify-center cursor-pointer touch-manipulation"
             title="Lock Session"
             aria-label="Lock Session"
           >
-            <Lock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <Lock className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
           </button>
 
           {/* Add Habit Button */}
           <button
             onClick={onOpenAddModal}
-            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-none text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-400 shadow-xs transition-all active:scale-95 cursor-pointer touch-manipulation"
+            className="flex items-center gap-1.5 h-9 px-3 sm:h-8 sm:px-3 rounded-none text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-400 shadow-xs transition-all active:scale-95 cursor-pointer touch-manipulation"
           >
-            <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[3]" />
+            <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5 stroke-[3]" />
             <span className="hidden xs:inline sm:inline">NEW </span><span>HABIT</span>
           </button>
         </div>
@@ -207,16 +207,16 @@ export function Header({
           <div className="flex items-center bg-input rounded-none p-0.5 border border-subtle flex-shrink-0">
             <button
               onClick={handlePrevDay}
-              className="p-1 sm:p-1.5 rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer touch-manipulation"
+              className="w-9 h-9 sm:w-7 sm:h-7 rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer touch-manipulation flex items-center justify-center active:scale-95"
               title="Previous Day"
               aria-label="Previous Day"
             >
-              <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <ChevronLeft className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
             </button>
             
             <button
               onClick={() => onSelectDate(todayStr)}
-              className={`px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-mono font-medium rounded-none transition-all cursor-pointer touch-manipulation ${
+              className={`h-9 sm:h-7 px-2.5 sm:px-2.5 text-xs font-mono font-medium rounded-none transition-all cursor-pointer touch-manipulation flex items-center justify-center ${
                 isToday
                   ? 'bg-subtle text-main font-bold border border-main'
                   : 'text-sub hover:text-main'
@@ -227,11 +227,11 @@ export function Header({
 
             <button
               onClick={handleNextDay}
-              className="p-1 sm:p-1.5 rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer touch-manipulation"
+              className="w-9 h-9 sm:w-7 sm:h-7 rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer touch-manipulation flex items-center justify-center active:scale-95"
               title="Next Day"
               aria-label="Next Day"
             >
-              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <ChevronRight className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
             </button>
           </div>
 

@@ -51,25 +51,25 @@ export function WeeklyGrid({
           <div className="flex items-center justify-between sm:justify-start gap-1.5 bg-input p-0.5 rounded-none border border-subtle">
             <button
               onClick={handlePrevWeek}
-              className="p-1 sm:p-1.5 rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer touch-manipulation"
+              className="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer touch-manipulation active:scale-95"
               title="Previous Week"
               aria-label="Previous Week"
             >
-              <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <ChevronLeft className="w-4 h-4 sm:w-4 sm:h-4" />
             </button>
             <button
               onClick={() => onSelectDate(todayStr)}
-              className="px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-mono font-medium text-sub hover:text-main cursor-pointer touch-manipulation"
+              className="h-9 sm:h-7 px-3 sm:px-2.5 text-xs font-mono font-medium text-sub hover:text-main cursor-pointer touch-manipulation flex items-center justify-center"
             >
               CURRENT WEEK
             </button>
             <button
               onClick={handleNextWeek}
-              className="p-1 sm:p-1.5 rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer touch-manipulation"
+              className="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer touch-manipulation active:scale-95"
               title="Next Week"
               aria-label="Next Week"
             >
-              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <ChevronRight className="w-4 h-4 sm:w-4 sm:h-4" />
             </button>
           </div>
         </div>
@@ -116,7 +116,7 @@ export function WeeklyGrid({
                     <td className="py-2.5 sm:py-3 pr-3 sticky left-0 bg-card z-10">
                       <div className="flex items-center gap-2 sm:gap-2.5 max-w-[140px] sm:max-w-[200px]">
                         <div 
-                          className="w-6 h-6 rounded-none flex items-center justify-center flex-shrink-0 border border-subtle"
+                          className="w-7 h-7 sm:w-6 sm:h-6 rounded-none flex items-center justify-center flex-shrink-0 border border-subtle"
                           style={{ 
                             backgroundColor: isDont ? 'rgba(244, 63, 94, 0.15)' : colorConfig.bg, 
                             color: isDont ? '#F43F5E' : colorConfig.hex 
@@ -124,7 +124,7 @@ export function WeeklyGrid({
                         >
                           <IconComponent className="w-3.5 h-3.5" />
                         </div>
-                        <span className="text-xs font-mono font-medium text-main truncate">
+                        <span className="text-xs sm:text-xs font-mono font-medium text-main truncate">
                           {habit.title}
                         </span>
                       </div>
@@ -150,7 +150,7 @@ export function WeeklyGrid({
                           <td key={dStr} className="py-2.5 sm:py-3 text-center px-1">
                             <button
                               onClick={() => onToggle(habit.id, dStr, isSlippedUp, isSlippedUp ? 0 : 1)}
-                              className={`w-7 h-7 sm:w-6 sm:h-6 rounded-none inline-flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation border ${
+                              className={`w-8 h-8 sm:w-7 sm:h-7 rounded-none inline-flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation border ${
                                 isSlippedUp
                                   ? 'bg-rose-500 text-black border-rose-400'
                                   : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'
@@ -159,9 +159,9 @@ export function WeeklyGrid({
                               aria-label={`Toggle ${habit.title} for ${dStr}`}
                             >
                               {isSlippedUp ? (
-                                <ShieldAlert className="w-3.5 h-3.5 stroke-[2.5]" />
+                                <ShieldAlert className="w-4 h-4 stroke-[2.5]" />
                               ) : (
-                                <ShieldCheck className="w-3.5 h-3.5 stroke-[2.5]" />
+                                <ShieldCheck className="w-4 h-4 stroke-[2.5]" />
                               )}
                             </button>
                           </td>
@@ -173,14 +173,14 @@ export function WeeklyGrid({
                         <td key={dStr} className="py-2.5 sm:py-3 text-center px-1">
                           <button
                             onClick={() => onToggle(habit.id, dStr, !isCompleted, !isCompleted ? habit.target_value : 0)}
-                            className={`w-7 h-7 sm:w-6 sm:h-6 rounded-none inline-flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation ${
+                            className={`w-8 h-8 sm:w-7 sm:h-7 rounded-none inline-flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation ${
                               isCompleted
                                 ? 'bg-emerald-500 text-black border border-emerald-400'
                                 : 'border border-subtle hover:border-main bg-input text-transparent'
                             }`}
                             aria-label={`Toggle ${habit.title} for ${dStr}`}
                           >
-                            <Check className={`w-3.5 h-3.5 stroke-[3] ${isCompleted ? 'opacity-100' : 'opacity-0'}`} />
+                            <Check className={`w-4 h-4 stroke-[3] ${isCompleted ? 'opacity-100' : 'opacity-0'}`} />
                           </button>
                         </td>
                       );

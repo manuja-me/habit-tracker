@@ -340,17 +340,17 @@ export default function HabitTrackerPage() {
         {activeTab === 'today' && (
           <div className="w-full max-w-4xl mx-auto px-3.5 sm:px-6 space-y-3 sm:space-y-4">
             {/* Filter pills */}
-            <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 text-xs">
-              <div className="flex items-center gap-1">
+            <div className="flex items-center justify-between gap-3 mb-4 sm:mb-5">
+              <div className="flex items-center gap-1 bg-input p-0.5 rounded-none border border-subtle">
                 {[
                   { id: 'all', label: 'ALL' },
-                  { id: 'pending', label: 'TO DO' },
-                  { id: 'completed', label: 'DONE' },
+                  { id: 'pending', label: 'PENDING' },
+                  { id: 'completed', label: 'COMPLETED' },
                 ].map((f) => (
                   <button
                     key={f.id}
                     onClick={() => setFilterCategory(f.id)}
-                    className={`px-2.5 sm:px-3 py-1 rounded-none text-xs font-mono font-medium transition-all cursor-pointer touch-manipulation select-none ${
+                    className={`px-3 py-1.5 sm:px-3 sm:py-1 rounded-none text-xs font-mono font-medium transition-all cursor-pointer touch-manipulation select-none min-h-[36px] sm:min-h-0 flex items-center justify-center ${
                       filterCategory === f.id
                         ? 'bg-card text-main font-bold border border-main shadow-xs'
                         : 'text-sub hover:text-main hover:bg-subtle/50'
@@ -361,7 +361,7 @@ export default function HabitTrackerPage() {
                 ))}
               </div>
 
-              <span className="text-[11px] sm:text-xs text-sub font-mono flex-shrink-0">
+              <span className="text-xs sm:text-xs text-sub font-mono flex-shrink-0">
                 {displayedDailyHabits.length} HABITS
               </span>
             </div>
@@ -379,7 +379,7 @@ export default function HabitTrackerPage() {
                     ? 'All clear! Everything is completed.'
                     : 'No habits scheduled for today'}
                 </h3>
-                <p className="text-[11px] sm:text-xs font-mono text-sub max-w-sm mx-auto mb-6">
+                <p className="text-xs sm:text-xs font-mono text-sub max-w-sm mx-auto mb-6">
                   {filterCategory === 'all'
                     ? 'Start building your daily routines or tracking addictions to quit.'
                     : 'Consistency maintained.'}
@@ -387,7 +387,7 @@ export default function HabitTrackerPage() {
                 {filterCategory === 'all' && (
                   <button
                     onClick={() => handleOpenAddModal('do')}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-none text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-400 active:scale-95 transition-all cursor-pointer touch-manipulation"
+                    className="inline-flex items-center gap-2 h-11 sm:h-9 px-4 sm:px-4 rounded-none text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-400 active:scale-95 transition-all cursor-pointer touch-manipulation"
                   >
                     <Plus className="w-4 h-4 stroke-[3]" />
                     <span>ADD ROUTINE</span>
@@ -400,8 +400,8 @@ export default function HabitTrackerPage() {
                 {doHabits.length > 0 && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between px-1">
-                      <span className="text-[11px] font-bold font-mono text-emerald-500 uppercase tracking-wider flex items-center gap-1.5">
-                        <Sparkles className="w-3 h-3" /> DO ROUTINES ({doHabits.length})
+                      <span className="text-xs sm:text-[11px] font-bold font-mono text-emerald-500 uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 sm:w-3 sm:h-3" /> DO ROUTINES ({doHabits.length})
                       </span>
                     </div>
                     <div className="grid grid-cols-1 gap-2.5 sm:gap-2">
@@ -442,28 +442,28 @@ export default function HabitTrackerPage() {
                 <div className="pt-3 border-t border-subtle space-y-2.5">
                   <div className="flex items-center justify-between gap-2 flex-wrap px-1">
                     <div className="flex items-center gap-1.5">
-                      <div className="w-4 h-4 bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center justify-center">
-                        <ShieldOff className="w-2.5 h-2.5" />
+                      <div className="w-5 h-5 sm:w-4 sm:h-4 bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center justify-center">
+                        <ShieldOff className="w-3 h-3 sm:w-2.5 sm:h-2.5" />
                       </div>
-                      <span className="text-[11px] font-bold font-mono text-rose-400 uppercase tracking-wider">
+                      <span className="text-xs sm:text-[11px] font-bold font-mono text-rose-400 uppercase tracking-wider">
                         DON'T ROUTINES — QUIT & BREAK ADDICTIONS ({dontHabits.length})
                       </span>
                     </div>
-                    <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.2">
+                    <span className="text-[10px] sm:text-[9px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5">
                       AUTO-CLEAN DAILY (ONLY LOG SLIP-UPS)
                     </span>
                   </div>
 
                   {dontHabits.length === 0 ? (
-                    <div className="p-4 rounded-none bg-card/60 border border-dashed border-subtle text-center space-y-2">
-                      <p className="text-[11px] font-mono text-sub">
+                    <div className="p-4 rounded-none bg-card/60 border border-dashed border-subtle text-center space-y-2.5">
+                      <p className="text-xs sm:text-[11px] font-mono text-sub">
                         No addictions or habits to stop tracked yet.
                       </p>
                       <button
                         onClick={() => handleOpenAddModal('dont')}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-mono font-bold bg-input hover:bg-rose-500/10 hover:border-rose-500/40 border border-main text-rose-400 transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-2 h-11 sm:h-9 px-4 sm:px-3 text-xs sm:text-[11px] font-mono font-bold bg-input hover:bg-rose-500/10 hover:border-rose-500/40 border border-main text-rose-400 transition-colors cursor-pointer touch-manipulation"
                       >
-                        <Plus className="w-3.5 h-3.5" />
+                        <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                         <span>TRACK ADDICTION / QUIT HABIT</span>
                       </button>
                     </div>

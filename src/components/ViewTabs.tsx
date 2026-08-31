@@ -28,13 +28,13 @@ export function ViewTabs({ activeTab, onTabChange }: ViewTabsProps) {
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              className={`flex-1 flex items-center justify-center gap-1 sm:gap-2 py-2 px-1 sm:px-3 rounded-none text-[10px] sm:text-xs font-mono font-medium transition-all cursor-pointer touch-manipulation select-none ${
+              className={`flex-1 flex items-center justify-center gap-1.5 sm:gap-2 h-11 sm:h-9 px-1.5 sm:px-3 rounded-none text-xs sm:text-xs font-mono font-medium transition-all cursor-pointer touch-manipulation select-none active:scale-98 ${
                 isActive
                   ? 'bg-subtle text-main border border-main font-bold shadow-xs'
                   : 'text-sub hover:text-main hover:bg-subtle/50'
               }`}
             >
-              <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-emerald-500' : 'text-sub'}`} />
+              <Icon className={`w-4 h-4 sm:w-3.5 sm:h-3.5 flex-shrink-0 ${isActive ? 'text-emerald-500' : 'text-sub'}`} />
               <span className="truncate">{tab.label}</span>
             </button>
           );

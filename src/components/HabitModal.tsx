@@ -208,7 +208,7 @@ export function HabitModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={nature === 'do' ? 'e.g. Read 20 Pages, Morning Workout' : 'e.g. Smoking Cigarettes, Junk Food, Late Night Phone'}
-              className="w-full px-3 py-2 sm:py-2.5 rounded-none bg-input border border-main text-xs sm:text-sm text-main placeholder-muted-custom focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+              className="w-full px-3.5 py-3 sm:py-2 rounded-none bg-input border border-main text-sm sm:text-sm text-main placeholder-muted-custom focus:outline-none focus:border-emerald-500 transition-colors font-mono min-h-[44px] sm:min-h-[38px]"
             />
           </div>
 
@@ -222,21 +222,21 @@ export function HabitModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Notes, targets, reasons..."
-              className="w-full px-3 py-2 sm:py-2.5 rounded-none bg-input border border-main text-xs sm:text-sm text-main placeholder-muted-custom focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+              className="w-full px-3.5 py-3 sm:py-2 rounded-none bg-input border border-main text-sm sm:text-sm text-main placeholder-muted-custom focus:outline-none focus:border-emerald-500 transition-colors font-mono min-h-[44px] sm:min-h-[38px]"
             />
           </div>
 
           {/* Weaning / Spacing Protocol (DON'T habits only) */}
           {nature === 'dont' && (
-            <div className="p-3 bg-input border border-rose-500/30 space-y-2.5">
+            <div className="p-3 sm:p-3 bg-input border border-rose-500/30 space-y-2.5">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
-                  <ShieldAlert className="w-3.5 h-3.5" />
+                  <ShieldAlert className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                   GRADUAL WEANING & TAPERING SCHEDULE
                 </label>
                 <span className="text-[10px] text-sub font-mono">SCIENTIFIC FADING</span>
               </div>
-              <p className="text-[10px] text-sub leading-tight">
+              <p className="text-[11px] sm:text-[10px] text-sub leading-tight">
                 Instead of quitting cold turkey, expand clean days between indulgences to smoothly rewire dopamine pathways.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
@@ -250,14 +250,14 @@ export function HabitModal({
                     type="button"
                     key={p.id}
                     onClick={() => setWeaningProtocol(p.id as any)}
-                    className={`p-2 text-left border transition-all cursor-pointer ${
+                    className={`p-2.5 sm:p-2 text-left border transition-all cursor-pointer touch-manipulation min-h-[48px] sm:min-h-[40px] ${
                       weaningProtocol === p.id
                         ? 'bg-rose-500/15 border-rose-500 text-rose-400'
                         : 'bg-card border-subtle text-sub hover:border-main'
                     }`}
                   >
-                    <div className="text-[10px] font-bold font-mono">{p.title}</div>
-                    <div className="text-[9px] text-sub truncate mt-0.5">{p.desc}</div>
+                    <div className="text-xs sm:text-[10px] font-bold font-mono">{p.title}</div>
+                    <div className="text-[10px] sm:text-[9px] text-sub truncate mt-0.5">{p.desc}</div>
                   </button>
                 ))}
               </div>
@@ -269,13 +269,13 @@ export function HabitModal({
             <label className="block text-xs font-bold uppercase tracking-wider text-sub mb-1.5">
               CATEGORY
             </label>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1.5 sm:gap-1.5">
               {CATEGORIES.map((cat) => (
                 <button
                   type="button"
                   key={cat.id}
                   onClick={() => setCategory(cat.id)}
-                  className={`px-2.5 py-1 rounded-none text-[11px] font-mono transition-all cursor-pointer touch-manipulation select-none ${
+                  className={`px-3 py-2 sm:px-2.5 sm:py-1 rounded-none text-xs sm:text-[11px] font-mono transition-all cursor-pointer touch-manipulation select-none min-h-[38px] sm:min-h-0 flex items-center justify-center ${
                     category === cat.id
                       ? 'bg-emerald-500 text-black font-bold border border-emerald-400'
                       : 'bg-input border border-main text-sub hover:text-main'
@@ -294,13 +294,13 @@ export function HabitModal({
               <label className="block text-xs font-bold uppercase tracking-wider text-sub mb-2">
                 COLOR
               </label>
-              <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+              <div className="flex items-center gap-2 sm:gap-1.5 flex-wrap sm:flex-nowrap">
                 {COLOR_PALETTES.map((c) => (
                   <button
                     type="button"
                     key={c.name}
                     onClick={() => setColor(c.hex)}
-                    className={`w-7 h-7 sm:w-6 sm:h-6 rounded-none flex items-center justify-center transition-all cursor-pointer touch-manipulation ${
+                    className={`w-9 h-9 sm:w-6 sm:h-6 rounded-none flex items-center justify-center transition-all cursor-pointer touch-manipulation active:scale-95 ${
                       color.toLowerCase() === c.hex.toLowerCase()
                         ? 'border-2 border-white scale-110 shadow-xs'
                         : 'opacity-80 hover:opacity-100 border border-subtle'
@@ -309,7 +309,7 @@ export function HabitModal({
                     aria-label={c.name}
                   >
                     {color.toLowerCase() === c.hex.toLowerCase() && (
-                      <Check className="w-3.5 h-3.5 text-black stroke-[3]" />
+                      <Check className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-black stroke-[3]" />
                     )}
                   </button>
                 ))}
@@ -321,7 +321,7 @@ export function HabitModal({
               <label className="block text-xs font-bold uppercase tracking-wider text-sub mb-2">
                 ICON
               </label>
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+              <div className="flex items-center gap-2 sm:gap-1.5 overflow-x-auto pb-1">
                 {Object.keys(AVAILABLE_ICONS).slice(0, 7).map((iconName) => {
                   const IconComp = AVAILABLE_ICONS[iconName];
                   const isSelected = icon === iconName;
@@ -330,14 +330,14 @@ export function HabitModal({
                       type="button"
                       key={iconName}
                       onClick={() => setIcon(iconName)}
-                      className={`w-7 h-7 rounded-none flex items-center justify-center transition-all flex-shrink-0 cursor-pointer touch-manipulation ${
+                      className={`w-9 h-9 sm:w-7 sm:h-7 rounded-none flex items-center justify-center transition-all flex-shrink-0 cursor-pointer touch-manipulation active:scale-95 ${
                         isSelected
                           ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500'
                           : 'bg-input border border-main text-sub hover:text-main'
                       }`}
                       aria-label={iconName}
                     >
-                      <IconComp className="w-3.5 h-3.5" />
+                      <IconComp className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                     </button>
                   );
                 })}
@@ -354,7 +354,7 @@ export function HabitModal({
               <button
                 type="button"
                 onClick={() => setType('boolean')}
-                className={`py-2 px-2 sm:px-3 rounded-none text-xs font-mono font-medium border text-center transition-all cursor-pointer touch-manipulation ${
+                className={`h-11 sm:h-9 px-3 rounded-none text-xs font-mono font-medium border text-center transition-all cursor-pointer touch-manipulation flex items-center justify-center ${
                   type === 'boolean'
                     ? 'bg-subtle border-emerald-500 text-main font-bold shadow-xs'
                     : 'bg-input border-main text-sub hover:text-main'
@@ -365,7 +365,7 @@ export function HabitModal({
               <button
                 type="button"
                 onClick={() => setType('number')}
-                className={`py-2 px-2 sm:px-3 rounded-none text-xs font-mono font-medium border text-center transition-all cursor-pointer touch-manipulation ${
+                className={`h-11 sm:h-9 px-3 rounded-none text-xs font-mono font-medium border text-center transition-all cursor-pointer touch-manipulation flex items-center justify-center ${
                   type === 'number'
                     ? 'bg-subtle border-emerald-500 text-main font-bold shadow-xs'
                     : 'bg-input border-main text-sub hover:text-main'
@@ -384,7 +384,7 @@ export function HabitModal({
                     min="1"
                     value={targetValue}
                     onChange={(e) => setTargetValue(Number(e.target.value))}
-                    className="w-full px-3 py-1.5 rounded-none bg-card border border-main text-xs text-main focus:outline-none focus:border-emerald-500 font-mono"
+                    className="w-full px-3 py-2.5 sm:py-1.5 rounded-none bg-card border border-main text-sm sm:text-xs text-main focus:outline-none focus:border-emerald-500 font-mono min-h-[40px] sm:min-h-0"
                   />
                 </div>
                 <div>
@@ -394,7 +394,7 @@ export function HabitModal({
                     value={targetUnit}
                     onChange={(e) => setTargetUnit(e.target.value)}
                     placeholder="ml, pages, reps"
-                    className="w-full px-3 py-1.5 rounded-none bg-card border border-main text-xs text-main focus:outline-none focus:border-emerald-500 font-mono"
+                    className="w-full px-3 py-2.5 sm:py-1.5 rounded-none bg-card border border-main text-sm sm:text-xs text-main focus:outline-none focus:border-emerald-500 font-mono min-h-[40px] sm:min-h-0"
                   />
                 </div>
               </div>
@@ -416,7 +416,7 @@ export function HabitModal({
                   type="button"
                   key={freq.id}
                   onClick={() => setFrequency(freq.id as HabitFrequency)}
-                  className={`py-2 px-1.5 sm:px-2.5 rounded-none text-xs font-mono font-medium border text-center transition-all cursor-pointer touch-manipulation ${
+                  className={`h-11 sm:h-9 px-2 rounded-none text-xs font-mono font-medium border text-center transition-all cursor-pointer touch-manipulation flex items-center justify-center ${
                     frequency === freq.id
                       ? 'bg-subtle border-emerald-500 text-main font-bold shadow-xs'
                       : 'bg-input border-main text-sub hover:text-main'
@@ -428,7 +428,7 @@ export function HabitModal({
             </div>
 
             {frequency === 'custom' && (
-              <div className="grid grid-cols-7 gap-1 sm:gap-1.5 p-2 rounded-none bg-input border border-subtle">
+              <div className="grid grid-cols-7 gap-1.5 sm:gap-1.5 p-2.5 rounded-none bg-input border border-subtle">
                 {DAYS_OF_WEEK.map((item, idx) => {
                   const isSelected = customDays.includes(item.day);
                   return (
@@ -436,7 +436,7 @@ export function HabitModal({
                       type="button"
                       key={idx}
                       onClick={() => toggleCustomDay(item.day)}
-                      className={`h-8 sm:h-7 rounded-none text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center touch-manipulation ${
+                      className={`h-10 sm:h-7 rounded-none text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center touch-manipulation ${
                         isSelected
                           ? 'bg-emerald-500 text-black border border-emerald-400 shadow-xs'
                           : 'text-sub hover:text-main'
@@ -451,17 +451,17 @@ export function HabitModal({
           </div>
 
           {/* Footer Submit */}
-          <div className="flex items-center justify-end gap-2 pt-3 sm:pt-4 border-t border-subtle">
+          <div className="flex items-center justify-end gap-2.5 pt-4 sm:pt-4 border-t border-subtle">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-mono font-medium text-sub hover:text-main transition-colors cursor-pointer touch-manipulation"
+              className="h-11 sm:h-9 px-4 text-xs font-mono font-medium text-sub hover:text-main transition-colors cursor-pointer touch-manipulation flex items-center justify-center"
             >
               CANCEL
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black rounded-none border border-emerald-400 active:scale-95 transition-all cursor-pointer touch-manipulation"
+              className="h-11 sm:h-9 px-5 text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black rounded-none border border-emerald-400 active:scale-95 transition-all cursor-pointer touch-manipulation flex items-center justify-center"
             >
               {editingHabit ? 'SAVE CHANGES' : 'CREATE HABIT'}
             </button>
