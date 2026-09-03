@@ -45,7 +45,6 @@ export interface HabitLog {
   date: string; // YYYY-MM-DD format
   completed: boolean;
   value: number;
-  notes?: string;
   created_at: string;
   updated_at: string;
 }

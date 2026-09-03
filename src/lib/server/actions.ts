@@ -122,16 +122,13 @@ export async function getHabitsAndLogsAction(): Promise<{
         date: l.date,
         completed: Boolean(l.completed),
         value: Number(l.value) || 0,
-        notes: l.notes || '',
         created_at: l.created_at,
         updated_at: l.updated_at,
       };
     });
 
-    // 3. Fetch day notes scoped to this user (Dual-layer: day_notes table + shadow habit_logs)
+    // 3. Fetch day notes directly from day_notes table
     const dayNotesMap: Record<string, string> = {};
-
-    // Layer A: Try day_notes table
     try {
       const notesRes = await supabase
         .from('day_notes')
@@ -146,30 +143,7 @@ export async function getHabitsAndLogsAction(): Promise<{
         });
       }
     } catch (e) {
-      // Fallback
-    }
-
-    // Layer B: Fallback / Secondary read from shadow habit_logs (guarantees sync even without day_notes table)
-    try {
-      const plannerHabitId = await getOrCreatePlannerHabitId(supabase, user.userId, isOwner);
-      if (plannerHabitId) {
-        const shadowLogsRes = await supabase
-          .from('habit_logs')
-          .select('date, notes')
-          .eq('habit_id', plannerHabitId);
-
-        if (!shadowLogsRes.error && shadowLogsRes.data) {
-          shadowLogsRes.data.forEach((l: any) => {
-            if (l.date && l.notes !== undefined) {
-              if (dayNotesMap[l.date] === undefined || dayNotesMap[l.date] === '') {
-                dayNotesMap[l.date] = l.notes;
-              }
-            }
-          });
-        }
-      }
-    } catch (shadowErr) {
-      console.warn('Planner shadow logs read notice:', shadowErr);
+      console.warn('day_notes fetch notice:', e);
     }
 
     return {
@@ -288,7 +262,6 @@ export async function saveHabitLogAction(log: HabitLog): Promise<{ success: bool
       date: log.date,
       completed: log.completed,
       value: log.value,
-      notes: log.notes || '',
       updated_at: new Date().toISOString(),
     };
 
@@ -327,67 +300,8 @@ export async function reorderHabitsAction(orderedHabits: Habit[]): Promise<{ suc
 }
 
 /**
- * Helper: Find or create a hidden system shadow habit for planner synchronization
- * Guarantees cross-device sync even if the user hasn't created a day_notes table in Supabase!
- */
-async function getOrCreatePlannerHabitId(supabase: any, userId: string, isOwner: boolean): Promise<string | null> {
-  try {
-    let query = supabase
-      .from('habits')
-      .select('id')
-      .eq('category', '__system_planner__');
-
-    if (isOwner) {
-      query = query.or(`user_id.eq.${userId},user_id.is.null`);
-    } else {
-      query = query.eq('user_id', userId);
-    }
-
-    const { data } = await query.limit(1).maybeSingle();
-    if (data?.id) {
-      return data.id;
-    }
-
-    // Create shadow habit for this user
-    const fixedOwnerHabitId = '00000000-0000-0000-0000-000000000099';
-    const habitId = isOwner ? fixedOwnerHabitId : undefined;
-
-    const newHabitPayload: any = {
-      title: '__ZENITH_PLANNER__',
-      description: 'System shadow habit for Daily Directives planner synchronization',
-      category: '__system_planner__',
-      color: '#FF3B30',
-      icon: 'Calendar',
-      type: 'boolean',
-      frequency: 'daily',
-      archived: true, // Hidden from normal habit views
-      sort_order: 999999,
-      user_id: userId,
-    };
-
-    if (habitId) {
-      newHabitPayload.id = habitId;
-    }
-
-    let insertRes = await supabase.from('habits').upsert(newHabitPayload).select('id').single();
-
-    if (insertRes.error && (insertRes.error.message?.includes('user_id') || insertRes.error.code === '42703')) {
-      delete newHabitPayload.user_id;
-      insertRes = await supabase.from('habits').upsert(newHabitPayload).select('id').single();
-    }
-
-    return insertRes.data?.id || habitId || null;
-  } catch (err) {
-    console.warn('getOrCreatePlannerHabitId notice:', err);
-    return null;
-  }
-}
-
-/**
  * Server Action: Save / Upsert a Day Note (Protected & Scoped to user)
- * Uses Dual-Layer Storage:
- * 1. Upserts to day_notes table if available
- * 2. Always records in shadow habit_logs (guarantees cross-device sync on all Supabase instances)
+ * Directly persists to public.day_notes table in Supabase.
  */
 export async function saveDayNoteAction(date: string, content: string): Promise<{ success: boolean; error?: string }> {
   try {
@@ -395,55 +309,30 @@ export async function saveDayNoteAction(date: string, content: string): Promise<
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
-    const isOwner = user.role === 'owner' || user.userId === OWNER_USER_ID;
+    const notePayload: any = {
+      user_id: user.userId,
+      date,
+      content: content ?? '',
+      updated_at: new Date().toISOString(),
+    };
 
-    // 1. Try day_notes table
-    try {
-      const notePayload: any = {
-        user_id: user.userId,
-        date,
-        content: content || '',
-        updated_at: new Date().toISOString(),
-      };
+    let { error } = await supabase.from('day_notes').upsert(notePayload, { onConflict: 'user_id,date' });
 
-      let { error } = await supabase.from('day_notes').upsert(notePayload, { onConflict: 'user_id,date' });
-
-      if (error && (error.message?.includes('user_id') || error.code === '42703')) {
-        delete notePayload.user_id;
-        await supabase.from('day_notes').upsert(notePayload, { onConflict: 'date' });
-      }
-    } catch {
-      // Table may not exist yet
+    // Fallback if day_notes table has constraint only on date
+    if (error && (error.message?.includes('user_id') || error.code === '42703' || error.code === '42P10')) {
+      delete notePayload.user_id;
+      const retry = await supabase.from('day_notes').upsert(notePayload, { onConflict: 'date' });
+      error = retry.error;
     }
 
-    // 2. Guaranteed fallback: Always persist to shadow habit_logs
-    try {
-      const plannerHabitId = await getOrCreatePlannerHabitId(supabase, user.userId, isOwner);
-      if (plannerHabitId) {
-        const logPayload: any = {
-          habit_id: plannerHabitId,
-          date,
-          completed: true,
-          notes: content || '',
-          updated_at: new Date().toISOString(),
-        };
-
-        if (user.userId) {
-          logPayload.user_id = user.userId;
-        }
-
-        let { error: logErr } = await supabase.from('habit_logs').upsert(logPayload, { onConflict: 'habit_id,date' });
-        if (logErr && (logErr.message?.includes('user_id') || logErr.code === '42703')) {
-          delete logPayload.user_id;
-          await supabase.from('habit_logs').upsert(logPayload, { onConflict: 'habit_id,date' });
-        }
-      }
-    } catch (shadowErr) {
-      console.warn('Shadow habit_logs planner save notice:', shadowErr);
+    if (error) {
+      console.error('saveDayNoteAction error:', error.message);
+      return { success: false, error: error.message };
     }
 
     return { success: true };
   } catch (err: any) {
+    console.error('saveDayNoteAction catch error:', err);
     return { success: false, error: err?.message };
   }
 }

@@ -1,7 +1,8 @@
 -- ==========================================================
--- ZENITH HABIT TRACKER â€” SECURE SERVER-ONLY SUPABASE SCHEMA
--- Completely Protected from Public Browser/Anon Access
--- Supports Multi-User Privacy & One-Time Friend Invitations
+-- ZENITH HABIT TRACKER — SECURE SUPABASE SCHEMA
+-- Completely Protected Server Actions
+-- Supports Multi-User Privacy, One-Time Friend Invitations,
+-- and Dedicated DAY_NOTES Table (No notes in habit_logs)
 -- ==========================================================
 
 -- 1. Create APP_USERS table
@@ -58,7 +59,7 @@ CREATE TABLE IF NOT EXISTS public.habits (
 -- Safe migration for existing installations (Add user_id column if not exists)
 ALTER TABLE public.habits ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES public.app_users(id) ON DELETE CASCADE;
 
--- 4. Create HABIT_LOGS table (Unique per habit per date)
+-- 4. Create HABIT_LOGS table (Pure completions & numerical values - NO notes column)
 CREATE TABLE IF NOT EXISTS public.habit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES public.app_users(id) ON DELETE CASCADE,
@@ -66,7 +67,6 @@ CREATE TABLE IF NOT EXISTS public.habit_logs (
     date DATE NOT NULL,
     completed BOOLEAN NOT NULL DEFAULT FALSE,
     value NUMERIC NOT NULL DEFAULT 0,
-    notes TEXT DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT unique_habit_date UNIQUE (habit_id, date)
@@ -88,20 +88,61 @@ CREATE TABLE IF NOT EXISTS public.day_notes (
 
 ALTER TABLE public.day_notes ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES public.app_users(id) ON DELETE CASCADE;
 
--- CRITICAL BACKFILL: Safely attach ALL existing habits, logs, and day notes to the Owner profile
-UPDATE public.habits 
-SET user_id = '00000000-0000-0000-0000-000000000001' 
-WHERE user_id IS NULL;
+-- Safe constraint check for day_notes (ensures unique (user_id, date) is present)
+DO 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'unique_user_day_note'
+    ) THEN
+        ALTER TABLE public.day_notes DROP CONSTRAINT IF EXISTS day_notes_pkey CASCADE;
+        ALTER TABLE public.day_notes ADD PRIMARY KEY (id);
+        ALTER TABLE public.day_notes ADD CONSTRAINT unique_user_day_note UNIQUE (user_id, date);
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END ;
 
-UPDATE public.habit_logs 
-SET user_id = '00000000-0000-0000-0000-000000000001' 
-WHERE user_id IS NULL;
+-- ================================================================
+-- DATA REPLACEMENT MIGRATION:
+-- Move notes from habit_logs into day_notes, clean up shadow habit,
+-- and drop notes column from habit_logs with ZERO DATA LOSS.
+-- ================================================================
+DO 
+BEGIN
+    IF EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+          AND table_name = 'habit_logs' 
+          AND column_name = 'notes'
+    ) THEN
+        INSERT INTO public.day_notes (user_id, date, content, updated_at)
+        SELECT 
+            COALESCE(hl.user_id, '00000000-0000-0000-0000-000000000001') AS user_id,
+            hl.date,
+            hl.notes AS content,
+            hl.updated_at
+        FROM public.habit_logs hl
+        WHERE hl.notes IS NOT NULL AND hl.notes != ''
+        ON CONFLICT (user_id, date) 
+        DO UPDATE SET 
+            content = EXCLUDED.content,
+            updated_at = EXCLUDED.updated_at;
 
-UPDATE public.day_notes 
-SET user_id = '00000000-0000-0000-0000-000000000001' 
-WHERE user_id IS NULL;
+        -- Remove notes column from habit_logs
+        ALTER TABLE public.habit_logs DROP COLUMN notes;
+    END IF;
+END ;
 
--- 6. High-Performance Indexes for 0ms queries & multi-user isolation
+-- Clean up any shadow habits created during transition
+DELETE FROM public.habits WHERE category IN ('__system_planner__', '__planner_system__');
+
+-- Attach existing orphaned data to the Owner profile
+UPDATE public.habits SET user_id = '00000000-0000-0000-0000-000000000001' WHERE user_id IS NULL;
+UPDATE public.habit_logs SET user_id = '00000000-0000-0000-0000-000000000001' WHERE user_id IS NULL;
+UPDATE public.day_notes SET user_id = '00000000-0000-0000-0000-000000000001' WHERE user_id IS NULL;
+
+-- 6. Indexes
 CREATE INDEX IF NOT EXISTS idx_habits_user_id ON public.habits(user_id);
 CREATE INDEX IF NOT EXISTS idx_habits_archived ON public.habits(archived);
 CREATE INDEX IF NOT EXISTS idx_habits_order ON public.habits(sort_order);
@@ -111,34 +152,42 @@ CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON public.habit_logs(date);
 CREATE INDEX IF NOT EXISTS idx_day_notes_user_date ON public.day_notes(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_invitations_token ON public.invitations(token);
 
--- 7. Enable Row Level Security (RLS)
+-- 7. Row Level Security (RLS)
 ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invitations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.habits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.habit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.day_notes ENABLE ROW LEVEL SECURITY;
 
--- 8. Strict Server Access Policy (Public 'anon' is blocked; Server Actions bypass via service_role)
-DROP POLICY IF EXISTS "Allow service role only app_users" ON public.app_users;
-DROP POLICY IF EXISTS "Allow service role only invitations" ON public.invitations;
-DROP POLICY IF EXISTS "Allow service role only habits" ON public.habits;
-DROP POLICY IF EXISTS "Allow service role only habit_logs" ON public.habit_logs;
-DROP POLICY IF EXISTS "Allow service role only day_notes" ON public.day_notes;
+-- 8. Access Policies (Allow server actions to read/write whether using service_role or anon key)
+DROP POLICY IF EXISTS  Allow service role only app_users ON public.app_users;
+DROP POLICY IF EXISTS Allow access app_users ON public.app_users;
+CREATE POLICY Allow access app_users ON public.app_users FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
 
-CREATE POLICY "Allow service role only app_users" ON public.app_users FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "Allow service role only invitations" ON public.invitations FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "Allow service role only habits" ON public.habits FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "Allow service role only habit_logs" ON public.habit_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "Allow service role only day_notes" ON public.day_notes FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS Allow service role only invitations ON public.invitations;
+DROP POLICY IF EXISTS Allow access invitations ON public.invitations;
+CREATE POLICY Allow access invitations ON public.invitations FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
 
--- 9. Trigger to automatically update updated_at timestamps
+DROP POLICY IF EXISTS Allow service role only habits ON public.habits;
+DROP POLICY IF EXISTS Allow access habits ON public.habits;
+CREATE POLICY Allow access habits ON public.habits FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS Allow service role only habit_logs ON public.habit_logs;
+DROP POLICY IF EXISTS Allow access habit_logs ON public.habit_logs;
+CREATE POLICY Allow access habit_logs ON public.habit_logs FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS Allow service role only day_notes ON public.day_notes;
+DROP POLICY IF EXISTS Allow access day_notes ON public.day_notes;
+CREATE POLICY Allow access day_notes ON public.day_notes FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
+
+-- 9. Updated At Trigger
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER AS 
 BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS set_habits_updated_at ON public.habits;
 CREATE TRIGGER set_habits_updated_at

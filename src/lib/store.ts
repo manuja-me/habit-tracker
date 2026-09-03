@@ -367,7 +367,6 @@ export function useHabitStore() {
       date: dateStr,
       completed: newCompleted,
       value: newValue,
-      notes: currentLog?.notes || '',
       created_at: currentLog?.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
