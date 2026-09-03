@@ -7,7 +7,8 @@ import {
   saveHabitAction, 
   deleteHabitAction, 
   saveHabitLogAction, 
-  reorderHabitsAction 
+  reorderHabitsAction,
+  saveDayNoteAction
 } from './server/actions';
 
 const HABITS_STORAGE_KEY = 'zenith_habits_v1';
@@ -221,7 +222,30 @@ async function executeCloudSync(isBackground = false) {
         const habitsChanged = JSON.stringify(mergedHabits) !== JSON.stringify(globalHabits);
         const logsChanged = JSON.stringify(cleanLogs) !== JSON.stringify(globalLogs);
 
-        if (habitsChanged || logsChanged) {
+        // Reconcile server Day Notes
+        const serverDayNotes = res.dayNotes || {};
+        const mergedDayNotes = { ...globalDayNotes, ...serverDayNotes };
+
+        // Backfill any local notes that do not exist on the server yet
+        Object.entries(globalDayNotes).forEach(([dateStr, content]) => {
+          if (content && !serverDayNotes[dateStr]) {
+            saveDayNoteAction(dateStr, content).catch(() => {});
+          }
+        });
+
+        const dayNotesChanged = JSON.stringify(mergedDayNotes) !== JSON.stringify(globalDayNotes);
+        if (dayNotesChanged) {
+          globalDayNotes = mergedDayNotes;
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem(DAY_NOTES_STORAGE_KEY, JSON.stringify(globalDayNotes));
+            } catch (e) {
+              console.error('Failed to save day notes to localStorage', e);
+            }
+          }
+        }
+
+        if (habitsChanged || logsChanged || dayNotesChanged) {
           globalHabits = mergedHabits;
           globalLogs = cleanLogs;
           persistLocally(globalHabits, globalLogs);
@@ -479,8 +503,9 @@ export function useHabitStore() {
     });
   };
 
-  // 6. Save Day Note / Tasks (Instant autosave + Broadcast sync)
+  // 6. Save Day Note / Tasks (Instant autosave + Broadcast sync + Cloud sync)
   const saveDayNote = (dateStr: string, content: string) => {
+    lastLocalMutationTime = Date.now();
     globalDayNotes = {
       ...globalDayNotes,
       [dateStr]: content,
@@ -494,6 +519,11 @@ export function useHabitStore() {
     }
     emitChange();
     broadcastLocalUpdate();
+
+    // Persist to server in background
+    saveDayNoteAction(dateStr, content).catch((e) => {
+      console.warn('Background saveDayNoteAction error:', e);
+    });
   };
 
   return {

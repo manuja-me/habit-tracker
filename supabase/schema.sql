@@ -75,12 +75,29 @@ CREATE TABLE IF NOT EXISTS public.habit_logs (
 -- Safe migration for existing installations (Add user_id column if not exists)
 ALTER TABLE public.habit_logs ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES public.app_users(id) ON DELETE CASCADE;
 
--- 5. CRITICAL BACKFILL: Safely attach ALL existing habits and logs to the Owner profile
+-- 5. Create DAY_NOTES table (Per-user per-date directives / tasks)
+CREATE TABLE IF NOT EXISTS public.day_notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES public.app_users(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT unique_user_day_note UNIQUE (user_id, date)
+);
+
+ALTER TABLE public.day_notes ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES public.app_users(id) ON DELETE CASCADE;
+
+-- CRITICAL BACKFILL: Safely attach ALL existing habits, logs, and day notes to the Owner profile
 UPDATE public.habits 
 SET user_id = '00000000-0000-0000-0000-000000000001' 
 WHERE user_id IS NULL;
 
 UPDATE public.habit_logs 
+SET user_id = '00000000-0000-0000-0000-000000000001' 
+WHERE user_id IS NULL;
+
+UPDATE public.day_notes 
 SET user_id = '00000000-0000-0000-0000-000000000001' 
 WHERE user_id IS NULL;
 
@@ -91,6 +108,7 @@ CREATE INDEX IF NOT EXISTS idx_habits_order ON public.habits(sort_order);
 CREATE INDEX IF NOT EXISTS idx_habit_logs_user_id ON public.habit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_habit_logs_habit_date ON public.habit_logs(habit_id, date);
 CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON public.habit_logs(date);
+CREATE INDEX IF NOT EXISTS idx_day_notes_user_date ON public.day_notes(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_invitations_token ON public.invitations(token);
 
 -- 7. Enable Row Level Security (RLS)
@@ -98,17 +116,20 @@ ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invitations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.habits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.habit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.day_notes ENABLE ROW LEVEL SECURITY;
 
 -- 8. Strict Server Access Policy (Public 'anon' is blocked; Server Actions bypass via service_role)
 DROP POLICY IF EXISTS "Allow service role only app_users" ON public.app_users;
 DROP POLICY IF EXISTS "Allow service role only invitations" ON public.invitations;
 DROP POLICY IF EXISTS "Allow service role only habits" ON public.habits;
 DROP POLICY IF EXISTS "Allow service role only habit_logs" ON public.habit_logs;
+DROP POLICY IF EXISTS "Allow service role only day_notes" ON public.day_notes;
 
 CREATE POLICY "Allow service role only app_users" ON public.app_users FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "Allow service role only invitations" ON public.invitations FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "Allow service role only habits" ON public.habits FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "Allow service role only habit_logs" ON public.habit_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Allow service role only day_notes" ON public.day_notes FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- 9. Trigger to automatically update updated_at timestamps
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
@@ -128,5 +149,11 @@ CREATE TRIGGER set_habits_updated_at
 DROP TRIGGER IF EXISTS set_habit_logs_updated_at ON public.habit_logs;
 CREATE TRIGGER set_habit_logs_updated_at
     BEFORE UPDATE ON public.habit_logs
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_updated_at();
+
+DROP TRIGGER IF EXISTS set_day_notes_updated_at ON public.day_notes;
+CREATE TRIGGER set_day_notes_updated_at
+    BEFORE UPDATE ON public.day_notes
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_updated_at();

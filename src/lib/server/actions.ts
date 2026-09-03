@@ -13,6 +13,7 @@ export async function getHabitsAndLogsAction(): Promise<{
   isConfigured: boolean;
   habits?: Habit[];
   logs?: Record<string, HabitLog>;
+  dayNotes?: Record<string, string>;
   error?: string;
   user?: { id: string; username: string; role: string };
 }> {
@@ -21,12 +22,12 @@ export async function getHabitsAndLogsAction(): Promise<{
 
     const config = getCleanSupabaseConfig();
     if (!config) {
-      return { success: true, isConfigured: false, habits: [], logs: {}, user: { id: user.userId, username: user.username, role: user.role } };
+      return { success: true, isConfigured: false, habits: [], logs: {}, dayNotes: {}, user: { id: user.userId, username: user.username, role: user.role } };
     }
 
     const supabase = getServerSupabase();
     if (!supabase) {
-      return { success: true, isConfigured: false, habits: [], logs: {}, user: { id: user.userId, username: user.username, role: user.role } };
+      return { success: true, isConfigured: false, habits: [], logs: {}, dayNotes: {}, user: { id: user.userId, username: user.username, role: user.role } };
     }
 
     // 1. Fetch habits scoped to this user
@@ -127,11 +128,31 @@ export async function getHabitsAndLogsAction(): Promise<{
       };
     });
 
+    // 3. Fetch day notes scoped to this user
+    const dayNotesMap: Record<string, string> = {};
+    try {
+      const notesRes = await supabase
+        .from('day_notes')
+        .select('date, content')
+        .or(isOwner ? `user_id.eq.${user.userId},user_id.is.null` : `user_id.eq.${user.userId}`);
+
+      if (notesRes.data) {
+        notesRes.data.forEach((dn: any) => {
+          if (dn.date && dn.content) {
+            dayNotesMap[dn.date] = dn.content;
+          }
+        });
+      }
+    } catch (e) {
+      // Fallback if day_notes table does not exist yet
+    }
+
     return {
       success: true,
       isConfigured: true,
       habits: formattedHabits,
       logs: mappedLogs,
+      dayNotes: dayNotesMap,
       user: { id: user.userId, username: user.username, role: user.role },
     };
   } catch (err: any) {
@@ -274,6 +295,41 @@ export async function reorderHabitsAction(orderedHabits: Habit[]): Promise<{ suc
     for (const h of orderedHabits) {
       await supabase.from('habits').update({ sort_order: h.order }).eq('id', h.id);
     }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}
+
+/**
+ * Server Action: Save / Upsert a Day Note (Protected & Scoped to user)
+ */
+export async function saveDayNoteAction(date: string, content: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await requireAuth();
+    const supabase = getServerSupabase();
+    if (!supabase) return { success: true };
+
+    const notePayload: any = {
+      user_id: user.userId,
+      date,
+      content: content || '',
+      updated_at: new Date().toISOString(),
+    };
+
+    let { error } = await supabase.from('day_notes').upsert(notePayload, { onConflict: 'user_id,date' });
+
+    // Resilient fallback if user_id column doesn't exist yet
+    if (error && (error.message?.includes('user_id') || error.code === '42703')) {
+      delete notePayload.user_id;
+      const retry = await supabase.from('day_notes').upsert(notePayload, { onConflict: 'date' });
+      error = retry.error;
+    }
+
+    if (error) {
+      console.warn('saveDayNoteAction notice:', error.message);
+    }
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message };
