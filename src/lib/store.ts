@@ -218,40 +218,40 @@ async function executeCloudSync(isBackground = false) {
         if (typeof window !== 'undefined') {
           localStorage.setItem(INITIALIZED_KEY, 'true');
         }
+      }
 
-        const habitsChanged = JSON.stringify(mergedHabits) !== JSON.stringify(globalHabits);
-        const logsChanged = JSON.stringify(cleanLogs) !== JSON.stringify(globalLogs);
+      const habitsChanged = JSON.stringify(mergedHabits) !== JSON.stringify(globalHabits);
+      const logsChanged = JSON.stringify(cleanLogs) !== JSON.stringify(globalLogs);
 
-        // Reconcile server Day Notes
-        const serverDayNotes = res.dayNotes || {};
-        const mergedDayNotes = { ...globalDayNotes, ...serverDayNotes };
+      // Reconcile server Day Notes (ALWAYS runs for Mobile and Desktop sync)
+      const serverDayNotes = res.dayNotes || {};
+      const mergedDayNotes = { ...globalDayNotes, ...serverDayNotes };
 
-        // Backfill any local notes that do not exist on the server yet
-        Object.entries(globalDayNotes).forEach(([dateStr, content]) => {
-          if (content && !serverDayNotes[dateStr]) {
-            saveDayNoteAction(dateStr, content).catch(() => {});
-          }
-        });
+      // Backfill any local notes that do not exist on the server yet
+      Object.entries(globalDayNotes).forEach(([dateStr, content]) => {
+        if (content && !serverDayNotes[dateStr]) {
+          saveDayNoteAction(dateStr, content).catch(() => {});
+        }
+      });
 
-        const dayNotesChanged = JSON.stringify(mergedDayNotes) !== JSON.stringify(globalDayNotes);
-        if (dayNotesChanged) {
-          globalDayNotes = mergedDayNotes;
-          if (typeof window !== 'undefined') {
-            try {
-              localStorage.setItem(DAY_NOTES_STORAGE_KEY, JSON.stringify(globalDayNotes));
-            } catch (e) {
-              console.error('Failed to save day notes to localStorage', e);
-            }
+      const dayNotesChanged = JSON.stringify(mergedDayNotes) !== JSON.stringify(globalDayNotes);
+      if (dayNotesChanged) {
+        globalDayNotes = mergedDayNotes;
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(DAY_NOTES_STORAGE_KEY, JSON.stringify(globalDayNotes));
+          } catch (e) {
+            console.error('Failed to save day notes to localStorage', e);
           }
         }
+      }
 
-        if (habitsChanged || logsChanged || dayNotesChanged) {
-          globalHabits = mergedHabits;
-          globalLogs = cleanLogs;
-          persistLocally(globalHabits, globalLogs);
-          emitChange();
-          broadcastLocalUpdate();
-        }
+      if (habitsChanged || logsChanged || dayNotesChanged) {
+        globalHabits = mergedHabits;
+        globalLogs = cleanLogs;
+        persistLocally(globalHabits, globalLogs);
+        emitChange();
+        broadcastLocalUpdate();
       }
     }
   } catch (err: any) {

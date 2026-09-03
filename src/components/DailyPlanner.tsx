@@ -25,6 +25,7 @@ function DayNoteRow({
 }: DayNoteRowProps) {
   const [value, setValue] = useState(initialValue);
   const [isSavedRecently, setIsSavedRecently] = useState(false);
+  const isFocusedRef = useRef(false);
   const dateObj = parseISO(dateStr);
   const dayNum = format(dateObj, 'dd');
   const dayName = format(dateObj, 'EEEE'); // Full English name e.g. FRIDAY
@@ -32,7 +33,9 @@ function DayNoteRow({
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    setValue(initialValue || '');
+    if (!isFocusedRef.current) {
+      setValue(initialValue || '');
+    }
   }, [initialValue]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -51,6 +54,7 @@ function DayNoteRow({
   };
 
   const handleBlur = () => {
+    isFocusedRef.current = false;
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
@@ -103,6 +107,9 @@ function DayNoteRow({
           rows={2}
           value={value}
           onChange={handleChange}
+          onFocus={() => {
+            isFocusedRef.current = true;
+          }}
           onBlur={handleBlur}
           placeholder={`Directives & tasks for ${dayName}...`}
           className="w-full bg-transparent text-xs font-mono text-main placeholder-muted-custom focus:outline-none resize-none leading-relaxed"
