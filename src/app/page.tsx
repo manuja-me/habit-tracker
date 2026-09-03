@@ -16,7 +16,6 @@ import { MinimalHeatmap } from '../components/MinimalHeatmap';
 import { AnalyticsView } from '../components/AnalyticsView';
 import { DailyPlanner } from '../components/DailyPlanner';
 import { HabitModal } from '../components/HabitModal';
-import { SyncSettingsModal } from '../components/SyncSettingsModal';
 import { ShortcutsModal } from '../components/ShortcutsModal';
 import { ShareStreakModal } from '../components/ShareStreakModal';
 import { NotificationModal } from '../components/NotificationModal';
@@ -45,7 +44,6 @@ export default function HabitTrackerPage() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [isHabitModalOpen, setIsHabitModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
-  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
@@ -153,7 +151,7 @@ export default function HabitTrackerPage() {
       }
 
       // Don't trigger if modals are open (except closing them with Esc)
-      const hasOpenModal = isHabitModalOpen || isSyncModalOpen || isShortcutsModalOpen || isShareModalOpen || isNotificationModalOpen;
+      const hasOpenModal = isHabitModalOpen || isInviteModalOpen || isShortcutsModalOpen || isShareModalOpen || isNotificationModalOpen;
       if (hasOpenModal) return;
 
       const key = e.key.toLowerCase();
@@ -248,7 +246,7 @@ export default function HabitTrackerPage() {
     selectedDate,
     toggleHabit,
     isHabitModalOpen,
-    isSyncModalOpen,
+    isInviteModalOpen,
     isShortcutsModalOpen,
     isShareModalOpen,
     isNotificationModalOpen
@@ -326,7 +324,6 @@ export default function HabitTrackerPage() {
         selectedDate={selectedDate}
         onSelectDate={setSelectedDate}
         onOpenAddModal={handleOpenAddModal}
-        onOpenSyncModal={() => setIsSyncModalOpen(true)}
         onOpenInviteModal={() => setIsInviteModalOpen(true)}
         onOpenShortcutsModal={() => setIsShortcutsModalOpen(true)}
         onOpenShareModal={() => setIsShareModalOpen(true)}
@@ -564,12 +561,6 @@ export default function HabitTrackerPage() {
         onSave={handleSaveHabit}
         editingHabit={editingHabit}
         initialNature={modalInitialNature}
-      />
-
-      {/* Sync Status Modal */}
-      <SyncSettingsModal
-        isOpen={isSyncModalOpen}
-        onClose={() => setIsSyncModalOpen(false)}
       />
 
       {/* Keyboard Shortcuts Modal */}

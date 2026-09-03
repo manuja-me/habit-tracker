@@ -17,7 +17,8 @@ import {
   Bell,
   Volume2,
   VolumeX,
-  UserPlus
+  UserPlus,
+  Check
 } from 'lucide-react';
 import { useHabitStore } from '../lib/store';
 import { useTheme } from '../lib/theme';
@@ -30,7 +31,6 @@ interface HeaderProps {
   selectedDate: string;
   onSelectDate: (date: string) => void;
   onOpenAddModal: () => void;
-  onOpenSyncModal: () => void;
   onOpenInviteModal?: () => void;
   onOpenShortcutsModal?: () => void;
   onOpenShareModal?: () => void;
@@ -44,7 +44,6 @@ export function Header({
   selectedDate,
   onSelectDate,
   onOpenAddModal,
-  onOpenSyncModal,
   onOpenInviteModal,
   onOpenShortcutsModal,
   onOpenShareModal,
@@ -53,13 +52,21 @@ export function Header({
   completedCount,
   totalCount,
 }: HeaderProps) {
-  const { isSyncing, isCloudReady, currentUser } = useHabitStore();
+  const { isSyncing, isCloudReady, currentUser, syncWithCloud, syncError } = useHabitStore();
   const { theme, toggleTheme } = useTheme();
   const [soundOn, setSoundOn] = useState(true);
+  const [justSynced, setJustSynced] = useState(false);
 
   useEffect(() => {
     setSoundOn(isSoundEnabled());
   }, []);
+
+  const handleSyncClick = async () => {
+    if (isSyncing) return;
+    await syncWithCloud();
+    setJustSynced(true);
+    setTimeout(() => setJustSynced(false), 2000);
+  };
 
   const handleToggleSound = () => {
     const next = !soundOn;
@@ -133,21 +140,36 @@ export function Header({
             </button>
           )}
 
-          {/* Cloud Sync Status */}
+          {/* Cloud Sync Button (Direct 1-Click Sync) */}
           <button
-            onClick={onOpenSyncModal}
-            title={isCloudReady ? 'Cloud Synced — Click for details' : 'Local Storage Mode'}
-            className="flex items-center gap-1.5 h-10 px-3 sm:h-8 sm:px-2.5 rounded-none text-xs font-mono bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all cursor-pointer touch-manipulation active:scale-95"
+            onClick={handleSyncClick}
+            disabled={isSyncing}
+            title={
+              syncError
+                ? `Sync error: ${syncError} (Click to retry)`
+                : isCloudReady
+                ? 'Cloud Synced — Click to Force Sync'
+                : 'Local Storage Mode — Click to sync'
+            }
+            className={`flex items-center gap-1.5 h-10 px-3 sm:h-8 sm:px-2.5 rounded-none text-xs font-mono border transition-all cursor-pointer touch-manipulation active:scale-95 select-none ${
+              isSyncing
+                ? 'bg-[#FF3B30]/10 border-[#FF3B30] text-[#FF3B30]'
+                : justSynced
+                ? 'bg-emerald-500/15 border-emerald-500 text-emerald-500'
+                : 'bg-card hover:bg-subtle border-main text-sub hover:text-main'
+            }`}
           >
             {isSyncing ? (
               <RefreshCw className="w-4 h-4 sm:w-3.5 sm:h-3.5 animate-spin text-[#FF3B30]" />
+            ) : justSynced ? (
+              <Check className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-emerald-500 stroke-[3]" />
             ) : isCloudReady ? (
               <Cloud className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-neutral-300" />
             ) : (
               <CloudOff className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-muted-custom" />
             )}
             <span>
-              {isSyncing ? 'SYNCING...' : isCloudReady ? 'SYNCED' : 'LOCAL'}
+              {isSyncing ? 'SYNCING...' : justSynced ? 'SYNCED' : isCloudReady ? 'SYNC' : 'LOCAL'}
             </span>
           </button>
 
