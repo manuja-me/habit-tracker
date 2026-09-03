@@ -63,13 +63,13 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
   const getOverallLevelStyle = (level: number) => {
     switch (level) {
       case 1:
-        return 'bg-emerald-900/60 border-emerald-700/50';
+        return 'bg-[#FF3B30]/25 border-[#FF3B30]/40';
       case 2:
-        return 'bg-emerald-700 border-emerald-600';
+        return 'bg-[#FF3B30]/50 border-[#FF3B30]/65';
       case 3:
-        return 'bg-emerald-500 border-emerald-400';
+        return 'bg-[#FF3B30]/75 border-[#FF3B30]/85';
       case 4:
-        return 'bg-emerald-400 border-emerald-300';
+        return 'bg-[#FF3B30] border-[#FF3B30]';
       default:
         return 'bg-[var(--heatmap-empty)] border-subtle hover:border-main';
     }
@@ -79,35 +79,35 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
     if (level === 0) {
       return 'bg-[var(--heatmap-empty)] border-subtle hover:border-main';
     }
-    // High intensity fill matching habit color
+    // High intensity fill matching habit color or Swiss Red
     return 'border border-white/20';
   };
 
   return (
     <div className="w-full max-w-4xl mx-auto px-3.5 sm:px-6 space-y-4 sm:space-y-6">
       {/* 1. TOP SECTION: Overall Consistency Heatmap (All Habits) */}
-      <div className="p-3.5 sm:p-5 rounded-none bg-card border border-main transition-colors space-y-4">
+      <div className="p-4 sm:p-5 rounded-none bg-card border border-main transition-colors space-y-4">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-subtle pb-3">
           <div>
             <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-              <h2 className="text-xs sm:text-sm font-bold font-mono uppercase text-main">
-                OVERALL CONSISTENCY (ALL HABITS)
+              <span className="text-xs font-mono font-black text-[#FF3B30]">03 //</span>
+              <h2 className="text-sm sm:text-base font-black font-sans uppercase tracking-tight text-main">
+                CONSISTENCY MATRIX (ALL PROTOCOLS)
               </h2>
             </div>
-            <p className="text-[11px] sm:text-xs text-sub font-mono mt-0.5">
-              {totalCheckins} total logs across {activeDays} active days in past 364 days
+            <p className="text-xs text-sub font-mono uppercase tracking-wider mt-0.5">
+              {totalCheckins} TOTAL LOGS ACROSS {activeDays} ACTIVE DAYS (PAST 52 WEEKS)
             </p>
           </div>
 
-          <div className="flex items-center gap-1.5 text-sub text-[10px] sm:text-[11px] self-end sm:self-auto">
+          <div className="flex items-center gap-1.5 text-sub text-[10px] font-mono uppercase tracking-wider self-end sm:self-auto">
             <span>LESS</span>
             <div className="w-2.5 h-2.5 rounded-none bg-[var(--heatmap-empty)] border border-subtle" />
-            <div className="w-2.5 h-2.5 rounded-none bg-emerald-900/60 border border-emerald-700/50" />
-            <div className="w-2.5 h-2.5 rounded-none bg-emerald-700 border border-emerald-600" />
-            <div className="w-2.5 h-2.5 rounded-none bg-emerald-500 border border-emerald-400" />
-            <div className="w-2.5 h-2.5 rounded-none bg-emerald-400 border border-emerald-300" />
+            <div className="w-2.5 h-2.5 rounded-none bg-[#FF3B30]/25 border border-[#FF3B30]/40" />
+            <div className="w-2.5 h-2.5 rounded-none bg-[#FF3B30]/50 border border-[#FF3B30]/65" />
+            <div className="w-2.5 h-2.5 rounded-none bg-[#FF3B30]/75 border border-[#FF3B30]/85" />
+            <div className="w-2.5 h-2.5 rounded-none bg-[#FF3B30] border border-[#FF3B30]" />
             <span>MORE</span>
           </div>
         </div>

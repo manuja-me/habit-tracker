@@ -81,26 +81,35 @@ export function Header({
 
   return (
     <header className="w-full max-w-4xl mx-auto pt-4 sm:pt-6 pb-3 sm:pb-4 px-3.5 sm:px-6">
-      {/* Top Navbar */}
+      {/* Top Swiss Masthead */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-5">
-        {/* Brand & Primary Add Button (Mobile-first prominent layout) */}
+        {/* Brand & Index */}
         <div className="flex items-center justify-between w-full sm:w-auto">
-          <div className="flex items-center gap-2.5 sm:gap-3 flex-shrink-0">
-            <div className="w-8 h-8 sm:w-8 sm:h-8 rounded-none bg-emerald-500 flex items-center justify-center text-black font-bold border border-emerald-400">
-              <Flame className="w-4 h-4 sm:w-4 sm:h-4 fill-black" />
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {/* Swiss Cross / Block Icon */}
+            <div className="w-8 h-8 rounded-none bg-[#FF3B30] flex items-center justify-center text-white font-black text-sm shadow-xs select-none">
+              <span className="text-base font-black leading-none">✚</span>
             </div>
-            <h1 className="text-base sm:text-base font-bold tracking-tight text-main font-mono uppercase">
-              Zenith
-            </h1>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-bold text-[#FF3B30]">01 //</span>
+                <h1 className="text-lg sm:text-xl font-black tracking-tight text-main uppercase font-sans">
+                  Zenith
+                </h1>
+              </div>
+              <div className="text-[10px] font-mono tracking-widest text-sub uppercase">
+                HABIT SYSTEM // MODULAR PROTOCOL
+              </div>
+            </div>
           </div>
 
-          {/* Prominent Add Habit Button (Visible on mobile header) */}
+          {/* Prominent Add Habit Button (Mobile) */}
           <button
             onClick={onOpenAddModal}
-            className="flex items-center gap-1.5 h-10 px-3.5 sm:h-8 sm:px-3 rounded-none text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-400 shadow-xs transition-all active:scale-95 cursor-pointer touch-manipulation sm:hidden"
+            className="flex items-center gap-1.5 h-10 px-3.5 sm:h-8 sm:px-3 rounded-none text-xs font-mono font-bold bg-[#FF3B30] hover:bg-[#E02D24] text-white border border-[#FF3B30] shadow-xs transition-all active:scale-95 cursor-pointer touch-manipulation sm:hidden"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
-            <span>NEW HABIT</span>
+            <span>NEW ROUTINE</span>
           </button>
         </div>
 
@@ -113,9 +122,9 @@ export function Header({
             className="flex items-center gap-1.5 h-10 px-3 sm:h-8 sm:px-2.5 rounded-none text-xs font-mono bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all cursor-pointer touch-manipulation active:scale-95"
           >
             {isSyncing ? (
-              <RefreshCw className="w-4 h-4 sm:w-3.5 sm:h-3.5 animate-spin text-emerald-500" />
+              <RefreshCw className="w-4 h-4 sm:w-3.5 sm:h-3.5 animate-spin text-[#FF3B30]" />
             ) : isCloudReady ? (
-              <Cloud className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-emerald-500" />
+              <Cloud className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-neutral-300" />
             ) : (
               <CloudOff className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-muted-custom" />
             )}
@@ -133,7 +142,7 @@ export function Header({
               aria-label="Toggle Sound"
             >
               {soundOn ? (
-                <Volume2 className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5 text-emerald-500" />
+                <Volume2 className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5 text-[#FF3B30]" />
               ) : (
                 <VolumeX className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5 text-sub" />
               )}
@@ -183,9 +192,9 @@ export function Header({
               aria-label="Toggle Theme"
             >
               {theme === 'light' ? (
-                <Sun className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5 text-amber-500" />
+                <Sun className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5 text-neutral-800" />
               ) : theme === 'oled' ? (
-                <Moon className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5 text-purple-400" />
+                <Moon className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5 text-neutral-100" />
               ) : (
                 <Moon className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5 text-neutral-300" />
               )}
@@ -194,7 +203,7 @@ export function Header({
             {/* Lock App Button */}
             <button
               onClick={onLockApp}
-              className="w-10 h-10 sm:w-8 sm:h-8 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-rose-500 transition-all flex items-center justify-center cursor-pointer touch-manipulation active:scale-95"
+              className="w-10 h-10 sm:w-8 sm:h-8 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-[#FF3B30] transition-all flex items-center justify-center cursor-pointer touch-manipulation active:scale-95"
               title="Lock Session"
               aria-label="Lock Session"
             >
@@ -204,19 +213,19 @@ export function Header({
             {/* Desktop Add Habit Button */}
             <button
               onClick={onOpenAddModal}
-              className="hidden sm:flex items-center gap-1.5 h-8 px-3 rounded-none text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-400 shadow-xs transition-all active:scale-95 cursor-pointer touch-manipulation"
+              className="hidden sm:flex items-center gap-1.5 h-8 px-3 rounded-none text-xs font-mono font-bold bg-[#FF3B30] hover:bg-[#E02D24] text-white border border-[#FF3B30] shadow-xs transition-all active:scale-95 cursor-pointer touch-manipulation"
             >
               <Plus className="w-3.5 h-3.5 stroke-[3]" />
-              <span>NEW HABIT</span>
+              <span>NEW ROUTINE</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Date & Progress Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4 p-4 sm:p-4 rounded-none bg-card border border-main transition-colors">
+      {/* Date & Progress Banner (Modular Grid Layout) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4 p-4 sm:p-5 rounded-none bg-card border border-main transition-colors">
         {/* Date Selector */}
-        <div className="flex items-center justify-between sm:justify-start gap-3 sm:gap-3">
+        <div className="flex items-center justify-between sm:justify-start gap-3 sm:gap-4">
           <div className="flex items-center bg-input rounded-none p-1 border border-subtle flex-shrink-0">
             <button
               onClick={handlePrevDay}
@@ -231,7 +240,7 @@ export function Header({
               onClick={() => onSelectDate(todayStr)}
               className={`h-11 sm:h-8 px-3.5 sm:px-3 text-xs sm:text-xs font-mono font-bold rounded-none transition-all cursor-pointer touch-manipulation flex items-center justify-center ${
                 isToday
-                  ? 'bg-subtle text-main font-bold border border-main'
+                  ? 'bg-main text-main font-black border border-main'
                   : 'text-sub hover:text-main'
               }`}
             >
@@ -249,26 +258,34 @@ export function Header({
           </div>
 
           <div className="min-w-0 text-right sm:text-left">
-            <div className="text-sm sm:text-sm font-bold text-main tracking-tight font-mono truncate">
+            <div className="text-base sm:text-lg font-black text-main tracking-tight uppercase font-sans truncate">
               {formatDisplayDate(selectedDate)}
             </div>
-            <div className="text-xs sm:text-xs text-sub font-mono">
+            <div className="text-xs font-mono text-sub uppercase tracking-wider">
               {totalCount === 0 
-                ? 'No habits' 
-                : `${completedCount}/${totalCount} completed`}
+                ? '00 / 00 PROTOCOLS' 
+                : `${String(completedCount).padStart(2, '0')} / ${String(totalCount).padStart(2, '0')} COMPLETED`}
             </div>
           </div>
         </div>
 
-        {/* Prominent Daily Progress Bar */}
-        <div className="flex items-center gap-3 w-full sm:w-56 flex-shrink-0 pt-2 sm:pt-0 border-t border-subtle sm:border-t-0">
-          <Progress
-            value={completedCount}
-            max={totalCount || 1}
-            size="md"
-            indicatorColor="#10B981"
-            showLabel
-          />
+        {/* Big Display Percentage & Progress Bar */}
+        <div className="flex flex-col sm:items-end gap-1.5 w-full sm:w-60 flex-shrink-0 pt-2 sm:pt-0 border-t border-subtle sm:border-t-0">
+          <div className="flex items-baseline justify-between sm:justify-end gap-2 w-full">
+            <span className="text-[10px] font-mono tracking-widest text-sub uppercase">COMPLIANCE</span>
+            <span className="text-2xl sm:text-3xl font-black font-sans tracking-tight text-main">
+              {percentage}<span className="text-sm font-mono text-[#FF3B30]">%</span>
+            </span>
+          </div>
+          <div className="w-full">
+            <Progress
+              value={completedCount}
+              max={totalCount || 1}
+              size="md"
+              indicatorColor="#FF3B30"
+              showLabel={false}
+            />
+          </div>
         </div>
       </div>
     </header>

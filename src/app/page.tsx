@@ -341,7 +341,7 @@ export default function HabitTrackerPage() {
           <div className="w-full max-w-4xl mx-auto px-3.5 sm:px-6 space-y-3 sm:space-y-4">
             {/* Filter pills */}
             <div className="flex items-center justify-between gap-3 mb-4 sm:mb-5">
-              <div className="flex items-center gap-1.5 sm:gap-1 bg-input p-1 sm:p-0.5 rounded-none border border-subtle">
+              <div className="flex items-center bg-card p-1 rounded-none border border-main shadow-xs">
                 {[
                   { id: 'all', label: 'ALL' },
                   { id: 'pending', label: 'PENDING' },
@@ -350,9 +350,9 @@ export default function HabitTrackerPage() {
                   <button
                     key={f.id}
                     onClick={() => setFilterCategory(f.id)}
-                    className={`h-10 sm:h-8 px-3.5 sm:px-3 rounded-none text-xs font-mono font-bold transition-all cursor-pointer touch-manipulation select-none flex items-center justify-center active:scale-95 ${
+                    className={`h-10 sm:h-8 px-4 sm:px-3 rounded-none text-xs font-sans font-black tracking-tight uppercase transition-all cursor-pointer touch-manipulation select-none flex items-center justify-center active:scale-95 ${
                       filterCategory === f.id
-                        ? 'bg-card text-main font-bold border border-main shadow-xs'
+                        ? 'bg-subtle text-main font-black border border-main border-b-2 border-b-[#FF3B30]'
                         : 'text-sub hover:text-main hover:bg-subtle/50'
                     }`}
                   >
@@ -361,33 +361,33 @@ export default function HabitTrackerPage() {
                 ))}
               </div>
 
-              <span className="text-xs sm:text-xs text-sub font-mono font-bold flex-shrink-0">
-                {displayedDailyHabits.length} HABITS
+              <span className="text-xs font-mono font-bold text-sub flex-shrink-0 uppercase tracking-wider">
+                {String(displayedDailyHabits.length).padStart(2, '0')} PROTOCOLS
               </span>
             </div>
 
             {/* Habit Lists: DO Routines and DONT Routines with Divider */}
             {displayedDailyHabits.length === 0 ? (
-              <div className="p-8 sm:p-12 text-center rounded-none bg-card border border-main transition-colors">
-                <div className="w-12 h-12 rounded-none bg-subtle text-emerald-500 border border-subtle flex items-center justify-center mx-auto mb-4">
-                  <Sparkles className="w-6 h-6" />
+              <div className="p-8 sm:p-14 text-center rounded-none bg-card border border-main transition-colors">
+                <div className="w-12 h-12 rounded-none bg-subtle text-[#FF3B30] border border-main flex items-center justify-center mx-auto mb-4 font-black text-xl">
+                  ✚
                 </div>
-                <h3 className="text-sm sm:text-sm font-bold font-mono uppercase text-main mb-1.5">
+                <h3 className="text-base sm:text-lg font-black font-sans uppercase tracking-tight text-main mb-1.5">
                   {filterCategory === 'completed'
-                    ? 'No habits completed yet today'
+                    ? 'No protocols completed yet today'
                     : filterCategory === 'pending'
-                    ? 'All clear! Everything is completed.'
-                    : 'No habits scheduled for today'}
+                    ? 'All clear. Zero pending protocols.'
+                    : 'No protocols scheduled for today'}
                 </h3>
-                <p className="text-xs sm:text-xs font-mono text-sub max-w-sm mx-auto mb-6">
+                <p className="text-xs font-mono text-sub max-w-sm mx-auto mb-6 uppercase tracking-wider">
                   {filterCategory === 'all'
-                    ? 'Start building your daily routines or tracking addictions to quit.'
-                    : 'Consistency maintained.'}
+                    ? 'Initialize daily building routines or configure addiction breakers.'
+                    : 'System consistency maintained.'}
                 </p>
                 {filterCategory === 'all' && (
                   <button
                     onClick={() => handleOpenAddModal('do')}
-                    className="inline-flex items-center gap-2 h-12 sm:h-9 px-5 sm:px-4 rounded-none text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black border border-emerald-400 active:scale-95 transition-all cursor-pointer touch-manipulation"
+                    className="inline-flex items-center gap-2 h-12 sm:h-9 px-5 sm:px-4 rounded-none text-xs font-sans font-black uppercase tracking-tight bg-[#FF3B30] hover:bg-[#E02D24] text-white border border-[#FF3B30] active:scale-95 transition-all cursor-pointer touch-manipulation shadow-xs"
                   >
                     <Plus className="w-4 h-4 stroke-[3]" />
                     <span>ADD ROUTINE</span>
@@ -395,16 +395,22 @@ export default function HabitTrackerPage() {
                 )}
               </div>
             ) : (
-              <div className="space-y-5 sm:space-y-5">
+              <div className="space-y-6 sm:space-y-6">
                 {/* 1. DO ROUTINES (BUILD) */}
                 {doHabits.length > 0 && (
-                  <div className="space-y-2.5 sm:space-y-2">
-                    <div className="flex items-center justify-between px-1">
-                      <span className="text-xs sm:text-[11px] font-bold font-mono text-emerald-500 uppercase tracking-wider flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 sm:w-3 sm:h-3" /> DO ROUTINES ({doHabits.length})
+                  <div className="space-y-3 sm:space-y-2.5">
+                    <div className="flex items-center justify-between px-1 pb-2 border-b border-subtle">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs font-mono font-black text-[#FF3B30]">01 //</span>
+                        <h2 className="text-sm font-black font-sans text-main uppercase tracking-tight">
+                          DO ROUTINES (BUILD)
+                        </h2>
+                      </div>
+                      <span className="text-xs font-mono text-sub uppercase">
+                        {String(doHabits.length).padStart(2, '0')} PROTOCOLS
                       </span>
                     </div>
-                    <div className="grid grid-cols-1 gap-3 sm:gap-2">
+                    <div className="grid grid-cols-1 gap-3 sm:gap-2.5">
                       {doHabits.map((habit) => {
                         const globalIdx = displayedDailyHabits.findIndex((h) => h.id === habit.id);
                         return (
@@ -439,31 +445,29 @@ export default function HabitTrackerPage() {
                 )}
 
                 {/* 2. DIVIDER & DON'T ROUTINES (QUIT & BREAK ADDICTIONS) */}
-                <div className="pt-4 border-t border-subtle space-y-3">
-                  <div className="flex items-center justify-between gap-2 flex-wrap px-1">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-5 h-5 sm:w-4 sm:h-4 bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center justify-center">
-                        <ShieldOff className="w-3.5 h-3.5 sm:w-2.5 sm:h-2.5" />
-                      </div>
-                      <span className="text-xs sm:text-[11px] font-bold font-mono text-rose-400 uppercase tracking-wider">
-                        DON'T ROUTINES — QUIT & BREAK ADDICTIONS ({dontHabits.length})
-                      </span>
+                <div className="pt-4 space-y-3 sm:space-y-2.5">
+                  <div className="flex items-center justify-between gap-2 flex-wrap px-1 pb-2 border-b border-subtle">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xs font-mono font-black text-[#FF3B30]">02 //</span>
+                      <h2 className="text-sm font-black font-sans text-main uppercase tracking-tight">
+                        DONT ROUTINES (QUIT & BREAK)
+                      </h2>
                     </div>
-                    <span className="text-xs sm:text-[9px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5">
-                      AUTO-CLEAN DAILY (ONLY LOG SLIP-UPS)
+                    <span className="text-[11px] font-mono font-bold text-[#FF3B30] bg-[#FF3B30]/10 border border-[#FF3B30]/30 px-2 py-0.5 uppercase tracking-wider">
+                      AUTO-CLEAN PROTOCOL
                     </span>
                   </div>
 
                   {dontHabits.length === 0 ? (
-                    <div className="p-5 rounded-none bg-card/60 border border-dashed border-subtle text-center space-y-3">
-                      <p className="text-xs sm:text-[11px] font-mono text-sub">
-                        No addictions or habits to stop tracked yet.
+                    <div className="p-6 rounded-none bg-card border border-main text-center space-y-3">
+                      <p className="text-xs font-mono text-sub uppercase tracking-wider">
+                        Zero addiction or habit-breaking routines configured.
                       </p>
                       <button
                         onClick={() => handleOpenAddModal('dont')}
-                        className="inline-flex items-center gap-2 h-12 sm:h-9 px-5 sm:px-3 text-xs sm:text-[11px] font-mono font-bold bg-input hover:bg-rose-500/10 hover:border-rose-500/40 border border-main text-rose-400 transition-colors cursor-pointer touch-manipulation active:scale-95"
+                        className="inline-flex items-center gap-2 h-12 sm:h-9 px-5 sm:px-4 text-xs font-sans font-black uppercase tracking-tight bg-card hover:bg-[#FF3B30]/10 hover:border-[#FF3B30] border border-main text-main hover:text-[#FF3B30] transition-colors cursor-pointer touch-manipulation active:scale-95"
                       >
-                        <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                        <Plus className="w-4 h-4" />
                         <span>TRACK ADDICTION / QUIT HABIT</span>
                       </button>
                     </div>

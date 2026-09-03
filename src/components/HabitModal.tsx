@@ -438,7 +438,7 @@ export function HabitModal({
                       onClick={() => toggleCustomDay(item.day)}
                       className={`h-10 sm:h-7 rounded-none text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center touch-manipulation ${
                         isSelected
-                          ? 'bg-emerald-500 text-black border border-emerald-400 shadow-xs'
+                          ? 'bg-[#FF3B30] text-white border border-[#FF3B30] shadow-xs'
                           : 'text-sub hover:text-main'
                       }`}
                     >
@@ -455,15 +455,15 @@ export function HabitModal({
             <button
               type="button"
               onClick={onClose}
-              className="h-11 sm:h-9 px-4 text-xs font-mono font-medium text-sub hover:text-main transition-colors cursor-pointer touch-manipulation flex items-center justify-center"
+              className="h-11 sm:h-9 px-4 text-xs font-mono font-bold text-sub hover:text-main transition-colors cursor-pointer touch-manipulation flex items-center justify-center uppercase"
             >
               CANCEL
             </button>
             <button
               type="submit"
-              className="h-11 sm:h-9 px-5 text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black rounded-none border border-emerald-400 active:scale-95 transition-all cursor-pointer touch-manipulation flex items-center justify-center"
+              className="h-11 sm:h-9 px-6 text-xs font-sans font-black bg-[#FF3B30] hover:bg-[#E02D24] text-white rounded-none border border-[#FF3B30] active:scale-95 transition-all cursor-pointer touch-manipulation flex items-center justify-center uppercase tracking-tight shadow-xs"
             >
-              {editingHabit ? 'SAVE CHANGES' : 'CREATE HABIT'}
+              {editingHabit ? 'SAVE CHANGES' : 'INITIALIZE ROUTINE'}
             </button>
           </div>
         </form>

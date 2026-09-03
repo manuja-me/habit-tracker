@@ -113,22 +113,22 @@ export function MinimalHabitItem({
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      className={`group relative flex flex-col p-3.5 sm:p-3.5 rounded-none transition-all duration-150 border font-mono ${
-        isFocused ? 'border-l-4 border-l-emerald-500 bg-card/90 ring-1 ring-emerald-500/30' : ''
+      className={`group relative flex flex-col p-4 sm:p-4 rounded-none transition-all duration-150 border ${
+        isFocused ? 'border-l-4 border-l-[#FF3B30] bg-card/90 ring-1 ring-[#FF3B30]/30' : ''
       } ${
         isDont
           ? isSlippedUp
-            ? 'bg-rose-500/10 border-rose-500/40'
-            : 'bg-card border-emerald-500/20 hover:border-emerald-500/40'
+            ? 'bg-[#FF3B30]/10 border-[#FF3B30]/40'
+            : 'bg-card border-main hover:border-neutral-500'
           : isCompleted
-          ? 'bg-card/50 border-emerald-500/30'
-          : 'bg-card border-main hover:border-emerald-500/40'
+          ? 'bg-card/60 border-main border-l-4 border-l-[#FF3B30]'
+          : 'bg-card border-main hover:border-neutral-500'
       }`}
     >
       {/* Main Row: Checkbox/Toggle, Title & Streak, Action Buttons */}
-      <div className="flex items-center justify-between gap-3 sm:gap-3">
+      <div className="flex items-center justify-between gap-3 sm:gap-4">
         {/* Left Side: Drag handle + Checkbox/Status + Icon + Title */}
-        <div className="flex items-center gap-3 sm:gap-2.5 min-w-0 flex-1">
+        <div className="flex items-center gap-3 sm:gap-3 min-w-0 flex-1">
           {/* Drag Handle */}
           <div 
             className="cursor-grab active:cursor-grabbing text-sub/40 hover:text-main transition-colors flex items-center justify-center p-1 sm:p-0.5 touch-manipulation"
@@ -141,46 +141,46 @@ export function MinimalHabitItem({
           {isDont ? (
             <button
               onClick={handleCheckboxClick}
-              className={`relative flex-shrink-0 w-12 h-12 sm:w-8 sm:h-8 rounded-none flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation border ${
+              className={`relative flex-shrink-0 w-12 h-12 sm:w-9 sm:h-9 rounded-none flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation border ${
                 isSlippedUp
-                  ? 'bg-rose-500 text-black border-rose-400 shadow-sm'
-                  : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/25'
+                  ? 'bg-[#FF3B30] text-white border-[#FF3B30] shadow-sm'
+                  : 'bg-card text-[#FF3B30] border-[#FF3B30] hover:bg-[#FF3B30]/10'
               }`}
               title={isSlippedUp ? 'Click to undo slip-up' : 'Auto-clean. Click if you indulged today'}
               aria-label={isSlippedUp ? 'Slipped up' : 'Clean'}
             >
               {isSlippedUp ? (
-                <ShieldAlert className="w-6 h-6 sm:w-4.5 sm:h-4.5 stroke-[2.5]" />
+                <ShieldAlert className="w-6 h-6 sm:w-5 sm:h-5 stroke-[2.5]" />
               ) : (
-                <ShieldCheck className="w-6 h-6 sm:w-4.5 sm:h-4.5 stroke-[2.5]" />
+                <ShieldCheck className="w-6 h-6 sm:w-5 sm:h-5 stroke-[2.5]" />
               )}
             </button>
           ) : (
             <button
               onClick={handleCheckboxClick}
-              className={`relative flex-shrink-0 w-12 h-12 sm:w-8 sm:h-8 rounded-none flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation ${
+              className={`relative flex-shrink-0 w-12 h-12 sm:w-9 sm:h-9 rounded-none flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation border ${
                 isCompleted
-                  ? 'bg-emerald-500 text-black border border-emerald-400 shadow-sm'
-                  : 'border border-main hover:border-emerald-500 bg-input/70'
+                  ? 'bg-[#FF3B30] text-white border-[#FF3B30] shadow-sm'
+                  : 'border-2 border-main hover:border-neutral-400 bg-input/70'
               }`}
               aria-label={isCompleted ? 'Mark incomplete' : 'Mark complete'}
             >
               {isCompleted && (
-                <Check className="w-6 h-6 sm:w-4.5 sm:h-4.5 stroke-[3]" />
+                <Check className="w-6 h-6 sm:w-5 sm:h-5 stroke-[3]" />
               )}
             </button>
           )}
 
           {/* Category Icon */}
           <div 
-            className="flex-shrink-0 w-10 h-10 sm:w-8 sm:h-8 rounded-none flex items-center justify-center border border-subtle"
+            className="flex-shrink-0 w-10 h-10 sm:w-9 sm:h-9 rounded-none flex items-center justify-center border border-subtle"
             style={{ 
               backgroundColor: isDont 
-                ? isSlippedUp ? 'rgba(244, 63, 94, 0.15)' : 'rgba(16, 185, 129, 0.12)'
-                : isCompleted ? 'rgba(16, 185, 129, 0.12)' : colorConfig.bg,
+                ? isSlippedUp ? 'rgba(255, 59, 48, 0.15)' : 'rgba(255, 59, 48, 0.08)'
+                : isCompleted ? 'rgba(255, 59, 48, 0.08)' : colorConfig.bg,
               color: isDont
-                ? isSlippedUp ? '#F43F5E' : '#10B981'
-                : isCompleted ? '#10B981' : colorConfig.hex 
+                ? isSlippedUp ? '#FF3B30' : '#FF3B30'
+                : isCompleted ? '#FF3B30' : colorConfig.hex 
             }}
           >
             <IconComponent className="w-5 h-5 sm:w-4 sm:h-4" />
@@ -188,13 +188,13 @@ export function MinimalHabitItem({
 
           {/* Title and Streak */}
           <div className="min-w-0 flex-1 flex flex-col justify-center">
-            <div className="flex items-center gap-2 sm:gap-2 flex-wrap">
+            <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
               <span 
                 onClick={handleCheckboxClick}
-                className={`text-sm sm:text-sm font-bold tracking-tight truncate cursor-pointer select-none transition-colors ${
+                className={`text-base sm:text-base font-black font-sans tracking-tight uppercase truncate cursor-pointer select-none transition-colors ${
                   isDont
-                    ? isSlippedUp ? 'text-rose-400 line-through' : 'text-main'
-                    : isCompleted ? 'text-sub line-through opacity-80' : 'text-main'
+                    ? isSlippedUp ? 'text-[#FF3B30] line-through' : 'text-main'
+                    : isCompleted ? 'text-sub line-through opacity-75' : 'text-main'
                 }`}
               >
                 {habit.title}
@@ -202,10 +202,10 @@ export function MinimalHabitItem({
 
               {/* DON'T Habit Status Badge */}
               {isDont && (
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs sm:text-[10px] font-bold border ${
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs sm:text-[10px] font-mono font-bold border ${
                   isSlippedUp 
-                    ? 'bg-rose-500/20 text-rose-400 border-rose-500/40' 
-                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    ? 'bg-[#FF3B30]/20 text-[#FF3B30] border-[#FF3B30]/40' 
+                    : 'bg-card text-main border-main'
                 }`}>
                   {isSlippedUp ? 'SLIPPED UP' : 'CLEAN TODAY'}
                 </span>
@@ -213,15 +213,15 @@ export function MinimalHabitItem({
               
               {/* Clean Streak Tag */}
               {stats.currentStreak > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs sm:text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                  <Flame className="w-3.5 h-3.5 sm:w-3 sm:h-3 fill-amber-500" />
-                  {stats.currentStreak}d {isDont ? 'clean' : ''}
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs sm:text-[10px] font-mono font-bold bg-card text-[#FF3B30] border border-main">
+                  <Flame className="w-3.5 h-3.5 sm:w-3 sm:h-3 fill-[#FF3B30]" />
+                  {stats.currentStreak}D {isDont ? 'CLEAN' : 'STREAK'}
                 </span>
               )}
             </div>
 
             {habit.description && (
-              <p className="text-xs sm:text-[11px] text-sub truncate mt-0.5">
+              <p className="text-xs sm:text-[11px] font-mono text-sub truncate mt-0.5">
                 {habit.description}
               </p>
             )}
@@ -298,7 +298,7 @@ export function MinimalHabitItem({
 
               <button
                 onClick={(e) => handleIncrement(e, stepAmount)}
-                className="h-11 px-4 sm:h-8 sm:px-3 text-xs sm:text-xs font-bold bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/30 border border-emerald-500/30 text-emerald-500 transition-colors cursor-pointer touch-manipulation active:scale-95 flex items-center justify-center"
+                className="h-11 px-4 sm:h-8 sm:px-3 text-xs sm:text-xs font-mono font-bold bg-[#FF3B30]/15 hover:bg-[#FF3B30]/25 active:bg-[#FF3B30]/30 border border-[#FF3B30]/30 text-[#FF3B30] transition-colors cursor-pointer touch-manipulation active:scale-95 flex items-center justify-center"
                 title={`+${stepAmount}`}
                 aria-label={`+${stepAmount}`}
               >
@@ -312,7 +312,7 @@ export function MinimalHabitItem({
             value={currentValue}
             max={habit.target_value}
             size="sm"
-            indicatorColor={isCompleted ? '#10B981' : habit.color}
+            indicatorColor={isCompleted ? '#FF3B30' : habit.color}
           />
         </div>
       )}
