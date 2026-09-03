@@ -20,6 +20,7 @@ import { SyncSettingsModal } from '../components/SyncSettingsModal';
 import { ShortcutsModal } from '../components/ShortcutsModal';
 import { ShareStreakModal } from '../components/ShareStreakModal';
 import { NotificationModal } from '../components/NotificationModal';
+import { InviteFriendModal } from '../components/InviteFriendModal';
 import { PinLockScreen } from '../components/PinLockScreen';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { Plus, Sparkles, ShieldOff } from 'lucide-react';
@@ -48,6 +49,7 @@ export default function HabitTrackerPage() {
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
   const [draggedHabitId, setDraggedHabitId] = useState<string | null>(null);
@@ -325,6 +327,7 @@ export default function HabitTrackerPage() {
         onSelectDate={setSelectedDate}
         onOpenAddModal={handleOpenAddModal}
         onOpenSyncModal={() => setIsSyncModalOpen(true)}
+        onOpenInviteModal={() => setIsInviteModalOpen(true)}
         onOpenShortcutsModal={() => setIsShortcutsModalOpen(true)}
         onOpenShareModal={() => setIsShareModalOpen(true)}
         onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
@@ -587,6 +590,12 @@ export default function HabitTrackerPage() {
       <NotificationModal
         isOpen={isNotificationModalOpen}
         onClose={() => setIsNotificationModalOpen(false)}
+      />
+
+      {/* Invite Friend Modal */}
+      <InviteFriendModal
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
       />
     </div>
   );

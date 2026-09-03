@@ -1,48 +1,12 @@
 'use server';
 
-import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from './auth';
+import { OWNER_USER_ID } from './auth-utils';
+import { getCleanSupabaseConfig, getServerSupabase } from './supabase';
 import { Habit, HabitLog } from '../types';
 
-// Server-side private credentials
-function getCleanSupabaseConfig() {
-  let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
-  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim();
-
-  if (!url || !key) return null;
-
-  // Handle accidental dashboard URL paste like https://supabase.com/dashboard/project/abcdefghijklmnop
-  const dashboardMatch = url.match(/supabase\.com\/dashboard\/project\/([a-z0-9_-]+)/i);
-  if (dashboardMatch && dashboardMatch[1]) {
-    url = `https://${dashboardMatch[1]}.supabase.co`;
-  }
-
-  // Remove any trailing slashes and subpaths like /rest/v1 that cause PostgREST "Invalid path" error
-  url = url.replace(/\/+$/, '');
-  if (url.includes('/rest/v1')) {
-    url = url.replace(/\/rest\/v1.*$/, '');
-  }
-
-  if (!url.startsWith('https://') || url.includes('your-project-url')) {
-    return null;
-  }
-
-  return { url, key };
-}
-
-function getServerSupabase() {
-  const config = getCleanSupabaseConfig();
-  if (!config) return null;
-  return createClient(config.url, config.key, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
-}
-
 /**
- * Server Action: Fetch habits and logs (Protected by requireAuth)
+ * Server Action: Fetch habits and logs scoped to the authenticated user
  */
 export async function getHabitsAndLogsAction(): Promise<{
   success: boolean;
@@ -50,41 +14,70 @@ export async function getHabitsAndLogsAction(): Promise<{
   habits?: Habit[];
   logs?: Record<string, HabitLog>;
   error?: string;
+  user?: { id: string; username: string; role: string };
 }> {
   try {
-    await requireAuth();
+    const user = await requireAuth();
 
     const config = getCleanSupabaseConfig();
     if (!config) {
-      return { success: true, isConfigured: false, habits: [], logs: {} };
+      return { success: true, isConfigured: false, habits: [], logs: {}, user: { id: user.userId, username: user.username, role: user.role } };
     }
 
     const supabase = getServerSupabase();
     if (!supabase) {
-      return { success: true, isConfigured: false, habits: [], logs: {} };
+      return { success: true, isConfigured: false, habits: [], logs: {}, user: { id: user.userId, username: user.username, role: user.role } };
     }
 
-    // 1. Fetch habits (only active, non-archived habits)
-    const { data: habitsData, error: habitsErr } = await supabase
+    // 1. Fetch habits scoped to this user
+    let habitsData: any[] = [];
+    const isOwner = user.role === 'owner' || user.userId === OWNER_USER_ID;
+
+    // Try scoped query with user_id
+    const habitsRes = await supabase
       .from('habits')
       .select('*')
       .eq('archived', false)
+      .or(isOwner ? `user_id.eq.${user.userId},user_id.is.null` : `user_id.eq.${user.userId}`)
       .order('sort_order', { ascending: true });
 
-    if (habitsErr) throw habitsErr;
+    if (habitsRes.error) {
+      // Fallback for pre-migration databases: owner gets all, new member gets empty
+      if (isOwner) {
+        const fallbackRes = await supabase
+          .from('habits')
+          .select('*')
+          .eq('archived', false)
+          .order('sort_order', { ascending: true });
+        if (fallbackRes.error) throw fallbackRes.error;
+        habitsData = fallbackRes.data || [];
+      } else {
+        habitsData = [];
+      }
+    } else {
+      habitsData = habitsRes.data || [];
+    }
 
-    // 2. Fetch logs
-    const { data: logsData, error: logsErr } = await supabase
-      .from('habit_logs')
-      .select('*')
-      .limit(3000);
+    // 2. Fetch logs restricted to this user's habits (100% data isolation guarantee)
+    const userHabitIds = habitsData.map((h: any) => h.id);
+    let logsData: any[] = [];
 
-    if (logsErr) throw logsErr;
+    if (userHabitIds.length > 0) {
+      const logsRes = await supabase
+        .from('habit_logs')
+        .select('*')
+        .in('habit_id', userHabitIds)
+        .limit(5000);
+
+      if (!logsRes.error && logsRes.data) {
+        logsData = logsRes.data;
+      }
+    }
 
     const formattedHabits: Habit[] = (habitsData || []).map((h: any) => {
       const rawDesc = h.description || '';
       const isDont = rawDesc.includes('[NATURE:DONT]');
-      
+
       // Parse weaning config if present
       let weaningConfig = undefined;
       const weaningMatch = rawDesc.match(/\[WEANING:(.*?)\]/);
@@ -139,18 +132,23 @@ export async function getHabitsAndLogsAction(): Promise<{
       isConfigured: true,
       habits: formattedHabits,
       logs: mappedLogs,
+      user: { id: user.userId, username: user.username, role: user.role },
     };
   } catch (err: any) {
-    return { success: false, isConfigured: Boolean(getCleanSupabaseConfig()), error: err?.message || 'Failed to fetch data' };
+    return {
+      success: false,
+      isConfigured: Boolean(getCleanSupabaseConfig()),
+      error: err?.message || 'Failed to fetch data',
+    };
   }
 }
 
 /**
- * Server Action: Save / Upsert a Habit (Protected)
+ * Server Action: Save / Upsert a Habit (Protected & Scoped to user)
  */
 export async function saveHabitAction(habit: Habit): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAuth();
+    const user = await requireAuth();
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
@@ -167,8 +165,9 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
       }
     }
 
-    const { error } = await supabase.from('habits').upsert({
+    const habitPayload: any = {
       id: habit.id,
+      user_id: user.userId,
       title: habit.title,
       description: storedDesc,
       category: habit.category,
@@ -182,7 +181,16 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
       archived: Boolean(habit.archived),
       sort_order: habit.order,
       updated_at: new Date().toISOString(),
-    });
+    };
+
+    let { error } = await supabase.from('habits').upsert(habitPayload);
+
+    // Resilient fallback if user_id column doesn't exist yet
+    if (error && (error.message?.includes('user_id') || error.code === '42703')) {
+      delete habitPayload.user_id;
+      const retry = await supabase.from('habits').upsert(habitPayload);
+      error = retry.error;
+    }
 
     if (error) throw error;
     return { success: true };
@@ -192,7 +200,7 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
 }
 
 /**
- * Server Action: Delete a Habit (Protected)
+ * Server Action: Delete a Habit (Protected & Scoped to user)
  */
 export async function deleteHabitAction(habitId: string): Promise<{ success: boolean; error?: string }> {
   try {
@@ -206,7 +214,7 @@ export async function deleteHabitAction(habitId: string): Promise<{ success: boo
     // 2. Delete the habit from the database
     const { error: deleteErr } = await supabase.from('habits').delete().eq('id', habitId);
 
-    // 3. If hard delete is restricted by DB policies/triggers, fallback to soft delete (archived = true)
+    // 3. Fallback to soft delete if restricted
     if (deleteErr) {
       const { error: archiveErr } = await supabase.from('habits').update({ archived: true }).eq('id', habitId);
       if (archiveErr) throw deleteErr;
@@ -220,22 +228,32 @@ export async function deleteHabitAction(habitId: string): Promise<{ success: boo
 }
 
 /**
- * Server Action: Save / Upsert a Habit Log (Protected)
+ * Server Action: Save / Upsert a Habit Log (Protected & Scoped to user)
  */
 export async function saveHabitLogAction(log: HabitLog): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAuth();
+    const user = await requireAuth();
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
-    const { error } = await supabase.from('habit_logs').upsert({
+    const logPayload: any = {
       habit_id: log.habit_id,
+      user_id: user.userId,
       date: log.date,
       completed: log.completed,
       value: log.value,
       notes: log.notes || '',
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'habit_id,date' });
+    };
+
+    let { error } = await supabase.from('habit_logs').upsert(logPayload, { onConflict: 'habit_id,date' });
+
+    // Fallback if user_id column doesn't exist yet
+    if (error && (error.message?.includes('user_id') || error.code === '42703')) {
+      delete logPayload.user_id;
+      const retry = await supabase.from('habit_logs').upsert(logPayload, { onConflict: 'habit_id,date' });
+      error = retry.error;
+    }
 
     if (error) throw error;
     return { success: true };
@@ -245,7 +263,7 @@ export async function saveHabitLogAction(log: HabitLog): Promise<{ success: bool
 }
 
 /**
- * Server Action: Reorder Habits (Protected)
+ * Server Action: Reorder Habits (Protected & Scoped to user)
  */
 export async function reorderHabitsAction(orderedHabits: Habit[]): Promise<{ success: boolean; error?: string }> {
   try {

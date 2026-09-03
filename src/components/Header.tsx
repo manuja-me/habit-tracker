@@ -16,7 +16,8 @@ import {
   Share2,
   Bell,
   Volume2,
-  VolumeX
+  VolumeX,
+  UserPlus
 } from 'lucide-react';
 import { useHabitStore } from '../lib/store';
 import { useTheme } from '../lib/theme';
@@ -30,6 +31,7 @@ interface HeaderProps {
   onSelectDate: (date: string) => void;
   onOpenAddModal: () => void;
   onOpenSyncModal: () => void;
+  onOpenInviteModal?: () => void;
   onOpenShortcutsModal?: () => void;
   onOpenShareModal?: () => void;
   onOpenNotificationModal?: () => void;
@@ -43,6 +45,7 @@ export function Header({
   onSelectDate,
   onOpenAddModal,
   onOpenSyncModal,
+  onOpenInviteModal,
   onOpenShortcutsModal,
   onOpenShareModal,
   onOpenNotificationModal,
@@ -50,7 +53,7 @@ export function Header({
   completedCount,
   totalCount,
 }: HeaderProps) {
-  const { isSyncing, isCloudReady } = useHabitStore();
+  const { isSyncing, isCloudReady, currentUser } = useHabitStore();
   const { theme, toggleTheme } = useTheme();
   const [soundOn, setSoundOn] = useState(true);
 
@@ -92,7 +95,9 @@ export function Header({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold text-[#FF3B30]">01 //</span>
+                <span className="text-xs font-mono font-bold text-[#FF3B30]">
+                  {currentUser?.username ? `${currentUser.username.toUpperCase()} //` : '01 //'}
+                </span>
                 <h1 className="text-lg sm:text-xl font-black tracking-tight text-main uppercase font-sans">
                   Zenith
                 </h1>
@@ -115,6 +120,19 @@ export function Header({
 
         {/* Action Utility Controls */}
         <div className="flex items-center gap-2 sm:gap-1.5 flex-wrap justify-between sm:justify-end">
+          {/* Invite Friend Modal (Owner Only) */}
+          {onOpenInviteModal && (currentUser?.role === 'owner' || !currentUser) && (
+            <button
+              onClick={onOpenInviteModal}
+              className="flex items-center gap-1.5 h-10 px-3 sm:h-8 sm:px-2.5 rounded-none text-xs font-mono font-bold bg-card hover:bg-[#FF3B30]/10 border border-[#FF3B30] text-[#FF3B30] transition-all cursor-pointer touch-manipulation active:scale-95"
+              title="Invite Friend (Private Profile & PIN)"
+              aria-label="Invite Friend"
+            >
+              <UserPlus className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+              <span className="hidden md:inline">INVITE</span>
+            </button>
+          )}
+
           {/* Cloud Sync Status */}
           <button
             onClick={onOpenSyncModal}

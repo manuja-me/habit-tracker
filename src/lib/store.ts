@@ -21,6 +21,7 @@ const INITIAL_DEFAULT_HABITS: Habit[] = [];
 let globalHabits: Habit[] = [];
 let globalLogs: Record<string, HabitLog> = {};
 let globalDayNotes: Record<string, string> = {};
+let globalCurrentUser: { id: string; username: string; role: string } | null = null;
 let globalIsCloudReady = true;
 let globalIsSyncing = false;
 let globalSyncError: string | null = null;
@@ -153,6 +154,10 @@ async function executeCloudSync(isBackground = false) {
 
     globalIsCloudReady = Boolean(res.isConfigured);
     globalSyncError = null;
+
+    if (res.user) {
+      globalCurrentUser = res.user;
+    }
 
     if (res.isConfigured) {
       // Stale response guard: If a local action happened while this request was flying, ignore outdated response
@@ -289,6 +294,7 @@ export function useHabitStore() {
   const [habits, setHabits] = useState<Habit[]>(globalHabits);
   const [logs, setLogs] = useState<Record<string, HabitLog>>(globalLogs);
   const [dayNotes, setDayNotes] = useState<Record<string, string>>(globalDayNotes);
+  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; role: string } | null>(globalCurrentUser);
   const [isLoading, setIsLoading] = useState<boolean>(!isStorageLoaded);
   const [isSyncing, setIsSyncing] = useState<boolean>(globalIsSyncing);
   const [syncError, setSyncError] = useState<string | null>(globalSyncError);
@@ -301,6 +307,7 @@ export function useHabitStore() {
       setHabits([...globalHabits]);
       setLogs({ ...globalLogs });
       setDayNotes({ ...globalDayNotes });
+      setCurrentUser(globalCurrentUser);
       setIsLoading(!isStorageLoaded);
       setIsSyncing(globalIsSyncing);
       setSyncError(globalSyncError);
@@ -494,6 +501,7 @@ export function useHabitStore() {
     allHabits: habits,
     logs,
     dayNotes,
+    currentUser,
     isLoading,
     isSyncing,
     syncError,
