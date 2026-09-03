@@ -12,6 +12,7 @@ import {
 
 const HABITS_STORAGE_KEY = 'zenith_habits_v1';
 const LOGS_STORAGE_KEY = 'zenith_logs_v1';
+const DAY_NOTES_STORAGE_KEY = 'zenith_day_notes_v1';
 const INITIALIZED_KEY = 'zenith_initialized_v1';
 
 const INITIAL_DEFAULT_HABITS: Habit[] = [];
@@ -19,6 +20,7 @@ const INITIAL_DEFAULT_HABITS: Habit[] = [];
 // Global in-memory state
 let globalHabits: Habit[] = [];
 let globalLogs: Record<string, HabitLog> = {};
+let globalDayNotes: Record<string, string> = {};
 let globalIsCloudReady = true;
 let globalIsSyncing = false;
 let globalSyncError: string | null = null;
@@ -49,6 +51,9 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         if (event.data.logs) {
           globalLogs = event.data.logs;
         }
+        if (event.data.dayNotes) {
+          globalDayNotes = event.data.dayNotes;
+        }
         emitChange();
       }
     };
@@ -62,6 +67,7 @@ function broadcastLocalUpdate() {
         type: 'SYNC_STATE',
         habits: globalHabits,
         logs: globalLogs,
+        dayNotes: globalDayNotes,
       });
     } catch (e) {}
   }
@@ -93,6 +99,7 @@ function loadLocalDataFromStorage() {
   try {
     const storedHabits = localStorage.getItem(HABITS_STORAGE_KEY);
     const storedLogs = localStorage.getItem(LOGS_STORAGE_KEY);
+    const storedDayNotes = localStorage.getItem(DAY_NOTES_STORAGE_KEY);
 
     if (storedHabits) {
       globalHabits = JSON.parse(storedHabits);
@@ -105,6 +112,16 @@ function loadLocalDataFromStorage() {
       globalLogs = JSON.parse(storedLogs);
     } else {
       globalLogs = {};
+    }
+
+    if (storedDayNotes) {
+      try {
+        globalDayNotes = JSON.parse(storedDayNotes);
+      } catch (err) {
+        globalDayNotes = {};
+      }
+    } else {
+      globalDayNotes = {};
     }
 
     isStorageLoaded = true;
@@ -259,12 +276,19 @@ function initGlobalSyncCoordinator() {
         emitChange();
       } catch (err) {}
     }
+    if (e.key === DAY_NOTES_STORAGE_KEY && e.newValue) {
+      try {
+        globalDayNotes = JSON.parse(e.newValue);
+        emitChange();
+      } catch (err) {}
+    }
   });
 }
 
 export function useHabitStore() {
   const [habits, setHabits] = useState<Habit[]>(globalHabits);
   const [logs, setLogs] = useState<Record<string, HabitLog>>(globalLogs);
+  const [dayNotes, setDayNotes] = useState<Record<string, string>>(globalDayNotes);
   const [isLoading, setIsLoading] = useState<boolean>(!isStorageLoaded);
   const [isSyncing, setIsSyncing] = useState<boolean>(globalIsSyncing);
   const [syncError, setSyncError] = useState<string | null>(globalSyncError);
@@ -276,6 +300,7 @@ export function useHabitStore() {
     const handleUpdate = () => {
       setHabits([...globalHabits]);
       setLogs({ ...globalLogs });
+      setDayNotes({ ...globalDayNotes });
       setIsLoading(!isStorageLoaded);
       setIsSyncing(globalIsSyncing);
       setSyncError(globalSyncError);
@@ -447,10 +472,28 @@ export function useHabitStore() {
     });
   };
 
+  // 6. Save Day Note / Tasks (Instant autosave + Broadcast sync)
+  const saveDayNote = (dateStr: string, content: string) => {
+    globalDayNotes = {
+      ...globalDayNotes,
+      [dateStr]: content,
+    };
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(DAY_NOTES_STORAGE_KEY, JSON.stringify(globalDayNotes));
+      } catch (e) {
+        console.error('Failed to save day notes to localStorage', e);
+      }
+    }
+    emitChange();
+    broadcastLocalUpdate();
+  };
+
   return {
     habits: habits.filter((h) => !h.archived).sort((a, b) => a.order - b.order),
     allHabits: habits,
     logs,
+    dayNotes,
     isLoading,
     isSyncing,
     syncError,
@@ -461,5 +504,6 @@ export function useHabitStore() {
     deleteHabit,
     reorderHabits,
     syncWithCloud,
+    saveDayNote,
   };
 }

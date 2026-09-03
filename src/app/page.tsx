@@ -14,6 +14,7 @@ import { MinimalHabitItem } from '../components/MinimalHabitItem';
 import { WeeklyGrid } from '../components/WeeklyGrid';
 import { MinimalHeatmap } from '../components/MinimalHeatmap';
 import { AnalyticsView } from '../components/AnalyticsView';
+import { DailyPlanner } from '../components/DailyPlanner';
 import { HabitModal } from '../components/HabitModal';
 import { SyncSettingsModal } from '../components/SyncSettingsModal';
 import { ShortcutsModal } from '../components/ShortcutsModal';
@@ -338,8 +339,11 @@ export default function HabitTrackerPage() {
       {/* Main View Content */}
       <main className="w-full">
         {activeTab === 'today' && (
-          <div className="w-full max-w-4xl mx-auto px-3.5 sm:px-6 space-y-3 sm:space-y-4">
-            {/* Filter pills */}
+          <div className="w-full max-w-6xl mx-auto px-3.5 sm:px-6">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Left Column: Habit Protocols */}
+              <div className="lg:col-span-7 space-y-3 sm:space-y-4 min-w-0">
+                {/* Filter pills */}
             <div className="flex items-center justify-between gap-3 mb-4 sm:mb-5">
               <div className="flex items-center bg-card p-1 rounded-none border border-main shadow-xs">
                 {[
@@ -507,6 +511,27 @@ export default function HabitTrackerPage() {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Right Column: Daily Planner Desktop Side Panel (hidden on mobile) */}
+          <div className="lg:col-span-5 hidden lg:block bg-card p-4 sm:p-5 border border-main rounded-none shadow-xs sticky top-6">
+            <DailyPlanner
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+            />
+          </div>
+        </div>
+      </div>
+    )}
+
+        {activeTab === 'planner' && (
+          <div className="w-full max-w-4xl mx-auto px-3.5 sm:px-6">
+            <div className="bg-card p-4 sm:p-6 border border-main rounded-none shadow-xs">
+              <DailyPlanner
+                selectedDate={selectedDate}
+                onSelectDate={setSelectedDate}
+              />
+            </div>
           </div>
         )}
 

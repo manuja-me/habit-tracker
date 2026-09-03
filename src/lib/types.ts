@@ -73,3 +73,9 @@ export interface HeatmapDay {
   level: 0 | 1 | 2 | 3 | 4;
   completedHabits: string[];
 }
+
+export interface DayNote {
+  date: string; // YYYY-MM-DD
+  content: string;
+  updated_at: string;
+}
