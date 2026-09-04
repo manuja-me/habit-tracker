@@ -57,19 +57,39 @@ export default function HabitTrackerPage() {
 
   // Validate server HttpOnly session on mount
   useEffect(() => {
+    let isMounted = true;
+
+    // Safety timeout: Ensure the loading screen is never stuck permanently
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted) {
+        setIsUnlocked((prev) => (prev === null ? false : prev));
+      }
+    }, 2000);
+
     const checkAuth = async () => {
       try {
         const authenticated = await checkSessionAction();
-        setIsUnlocked(authenticated);
-        if (authenticated) {
-          syncWithCloud();
+        if (isMounted) {
+          setIsUnlocked(authenticated);
+          if (authenticated) {
+            syncWithCloud();
+          }
         }
       } catch (err) {
-        setIsUnlocked(false);
+        if (isMounted) {
+          setIsUnlocked(false);
+        }
+      } finally {
+        clearTimeout(safetyTimeout);
       }
     };
 
     checkAuth();
+
+    return () => {
+      isMounted = false;
+      clearTimeout(safetyTimeout);
+    };
   }, [syncWithCloud]);
 
   const handleUnlockSuccess = () => {
