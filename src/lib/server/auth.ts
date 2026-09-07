@@ -93,7 +93,6 @@ export async function verifyPinAction(enteredPin: string): Promise<{
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: 365 * 24 * 60 * 60, // 1 year persistence
   });
 
   return { success: true, user: matchedUser };
@@ -324,7 +323,6 @@ export async function completeInviteSetupAction(
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 365 * 24 * 60 * 60,
     });
 
     return { success: true, user: sessionUser };

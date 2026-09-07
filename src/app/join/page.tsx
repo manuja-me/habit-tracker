@@ -72,6 +72,9 @@ function JoinForm() {
       const res = await completeInviteSetupAction(token, cleanName, pin);
       if (res.success) {
         setIsSuccess(true);
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('zenith_session_unlocked', 'true');
+        }
         setTimeout(() => {
           // Hard reload to root to ensure fresh auth session cookie loads
           window.location.href = '/';

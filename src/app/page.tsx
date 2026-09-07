@@ -55,32 +55,44 @@ export default function HabitTrackerPage() {
 
   const prevCompletionRef = useRef<boolean>(false);
 
-  // Validate server HttpOnly session on mount
+  // Validate session on mount: Require PIN whenever the website was closed or in a fresh session
   useEffect(() => {
     let isMounted = true;
 
-    // Safety timeout: Ensure the loading screen is never stuck permanently
-    const safetyTimeout = setTimeout(() => {
-      if (isMounted) {
-        setIsUnlocked((prev) => (prev === null ? false : prev));
-      }
-    }, 2000);
+    // Check if the current tab session has already been unlocked with PIN
+    const isSessionUnlocked =
+      typeof window !== 'undefined' &&
+      sessionStorage.getItem('zenith_session_unlocked') === 'true';
 
+    if (!isSessionUnlocked) {
+      // Fresh session, new tab, or website was closed: Lock immediately & ensure server cookie is purged
+      setIsUnlocked(false);
+      lockSessionAction().catch(() => {});
+      return;
+    }
+
+    // Existing active tab session (e.g. page reload): Verify server session
     const checkAuth = async () => {
       try {
         const authenticated = await checkSessionAction();
         if (isMounted) {
-          setIsUnlocked(authenticated);
           if (authenticated) {
+            setIsUnlocked(true);
             syncWithCloud();
+          } else {
+            if (typeof window !== 'undefined') {
+              sessionStorage.removeItem('zenith_session_unlocked');
+            }
+            setIsUnlocked(false);
           }
         }
       } catch (err) {
         if (isMounted) {
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('zenith_session_unlocked');
+          }
           setIsUnlocked(false);
         }
-      } finally {
-        clearTimeout(safetyTimeout);
       }
     };
 
@@ -88,16 +100,21 @@ export default function HabitTrackerPage() {
 
     return () => {
       isMounted = false;
-      clearTimeout(safetyTimeout);
     };
   }, [syncWithCloud]);
 
   const handleUnlockSuccess = () => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('zenith_session_unlocked', 'true');
+    }
     setIsUnlocked(true);
     syncWithCloud();
   };
 
   const handleLockApp = async () => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('zenith_session_unlocked');
+    }
     await lockSessionAction();
     setIsUnlocked(false);
   };

@@ -135,6 +135,11 @@ function loadLocalDataFromStorage() {
 
 // Unified Single Cloud Sync Executor
 async function executeCloudSync(isBackground = false) {
+  // Skip cloud sync if current tab session is locked
+  if (typeof window !== 'undefined' && sessionStorage.getItem('zenith_session_unlocked') !== 'true') {
+    return;
+  }
+
   // If user performed a local action (add, delete, toggle) within the last 3.5s, skip sync to avoid race conditions
   if (isBackground && Date.now() - lastLocalMutationTime < 3500) {
     return;
