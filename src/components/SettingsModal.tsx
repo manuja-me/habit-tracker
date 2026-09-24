@@ -19,11 +19,13 @@ import {
   Shield, 
   Sparkles,
   Sliders,
-  Laptop
+  Laptop,
+  Clock
 } from 'lucide-react';
 import { useHabitStore } from '../lib/store';
 import { useTheme } from '../lib/theme';
 import { isSoundEnabled, setSoundEnabled } from '../lib/utils/sound';
+import { LAST_VISIT_STORAGE_KEY, formatLastVisitReadable } from '../lib/utils/presence';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -32,6 +34,7 @@ interface SettingsModalProps {
   onOpenShortcutsModal?: () => void;
   onOpenShareModal?: () => void;
   onOpenNotificationModal?: () => void;
+  onTriggerAbsenceCheck?: () => void;
   onLockApp: () => void;
 }
 
@@ -42,15 +45,21 @@ export function SettingsModal({
   onOpenShortcutsModal,
   onOpenShareModal,
   onOpenNotificationModal,
+  onTriggerAbsenceCheck,
   onLockApp,
 }: SettingsModalProps) {
   const { isSyncing, isCloudReady, currentUser, syncWithCloud, syncError } = useHabitStore();
   const { theme, setTheme } = useTheme();
   const [soundOn, setSoundOn] = useState(true);
   const [justSynced, setJustSynced] = useState(false);
+  const [lastVisitDisplay, setLastVisitDisplay] = useState('First recorded session');
 
   useEffect(() => {
     setSoundOn(isSoundEnabled());
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(LAST_VISIT_STORAGE_KEY);
+      setLastVisitDisplay(formatLastVisitReadable(stored));
+    }
   }, [isOpen]);
 
   useEffect(() => {
@@ -301,6 +310,45 @@ export function SettingsModal({
                 </div>
               </button>
             )}
+          </div>
+        </div>
+
+        {/* Section: Activity & Session Audit */}
+        <div className="space-y-3 pt-3 border-t border-subtle">
+          <label className="text-xs font-mono font-bold uppercase tracking-wider text-sub block">
+            Presence & Activity Audit
+          </label>
+          <div className="p-3.5 bg-input border border-subtle flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 bg-card border border-main flex items-center justify-center text-main flex-shrink-0">
+                <Clock className="w-3.5 h-3.5 text-[#FF3B30]" />
+              </div>
+              <div>
+                <div className="text-xs font-sans font-bold text-main">
+                  24-Hour Absence Detection
+                </div>
+                <div className="text-[10px] font-mono text-sub">
+                  Last recorded visit: {lastVisitDisplay}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 border border-[#FF3B30]/40 text-[#FF3B30] bg-[#FF3B30]/5 uppercase">
+                ACTIVE
+              </span>
+              {onTriggerAbsenceCheck && (
+                <button
+                  onClick={() => {
+                    onClose();
+                    onTriggerAbsenceCheck();
+                  }}
+                  className="text-[10px] font-mono font-bold px-2.5 py-1 border border-subtle hover:border-main bg-card hover:bg-subtle text-sub hover:text-main uppercase transition-colors cursor-pointer"
+                  title="Run an absence check / test catch-up audit"
+                >
+                  AUDIT NOW
+                </button>
+              )}
+            </div>
           </div>
         </div>
 

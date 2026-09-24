@@ -21,6 +21,14 @@ import { ShortcutsModal } from '../components/ShortcutsModal';
 import { ShareStreakModal } from '../components/ShareStreakModal';
 import { NotificationModal } from '../components/NotificationModal';
 import { InviteFriendModal } from '../components/InviteFriendModal';
+import { AbsenceCatchUpModal } from '../components/AbsenceCatchUpModal';
+import { 
+  checkInactivity, 
+  recordCurrentVisit, 
+  AbsenceDetectionResult,
+  LAST_VISIT_STORAGE_KEY,
+  LAST_ACKNOWLEDGED_ABSENCE_KEY
+} from '../lib/utils/presence';
 import { PinLockScreen } from '../components/PinLockScreen';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { Plus } from 'lucide-react';
@@ -50,12 +58,81 @@ export default function HabitTrackerPage() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [absenceInfo, setAbsenceInfo] = useState<AbsenceDetectionResult | null>(null);
+  const [isAbsenceModalOpen, setIsAbsenceModalOpen] = useState(false);
 
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
   const [draggedHabitId, setDraggedHabitId] = useState<string | null>(null);
   const [modalInitialNature, setModalInitialNature] = useState<'do' | 'dont'>('do');
 
   const prevCompletionRef = useRef<boolean>(false);
+
+  // Inactivity / 24-hour absence check upon session unlock
+  useEffect(() => {
+    if (isUnlocked) {
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const simulatedHours = urlParams.get('absence');
+        if (simulatedHours) {
+          const hours = parseInt(simulatedHours, 10) || 24;
+          const fakePast = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+          localStorage.setItem(LAST_VISIT_STORAGE_KEY, fakePast);
+          localStorage.removeItem(LAST_ACKNOWLEDGED_ABSENCE_KEY);
+        }
+      }
+
+      const result = checkInactivity(24);
+      if (result.wasAway && (result.missedDates.length > 0 || result.hoursAway >= 24)) {
+        setAbsenceInfo(result);
+        setIsAbsenceModalOpen(true);
+      } else {
+        recordCurrentVisit();
+      }
+    }
+  }, [isUnlocked]);
+
+  const handleTriggerAudit = () => {
+    let result = checkInactivity(24);
+    if (!result.wasAway || result.missedDates.length === 0) {
+      const yesterday = new Date(Date.now() - 26 * 3600 * 1000);
+      result = {
+        wasAway: true,
+        hoursAway: 26,
+        daysAway: 1,
+        previousVisitIso: yesterday.toISOString(),
+        missedDates: [yesterday.toISOString().split('T')[0]],
+      };
+    }
+    setAbsenceInfo(result);
+    setIsAbsenceModalOpen(true);
+  };
+
+  // Periodic heartbeat & unload listener to keep visit timestamp updated
+  useEffect(() => {
+    if (!isUnlocked) return;
+    const interval = setInterval(() => {
+      recordCurrentVisit();
+    }, 10 * 60 * 1000);
+
+    const handleUnload = () => {
+      recordCurrentVisit();
+    };
+    window.addEventListener('beforeunload', handleUnload);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('beforeunload', handleUnload);
+    };
+  }, [isUnlocked]);
+
+  const handleSaveAbsenceLogs = (
+    batch: Array<{ habitId: string; dateStr: string; completed: boolean; value: number }>
+  ) => {
+    batch.forEach(({ habitId, dateStr, completed, value }) => {
+      toggleHabit(habitId, dateStr, completed, value);
+    });
+    recordCurrentVisit();
+  };
 
   // Validate session on mount
   useEffect(() => {
@@ -229,7 +306,8 @@ export default function HabitTrackerPage() {
         isInviteModalOpen || 
         isShortcutsModalOpen || 
         isShareModalOpen || 
-        isNotificationModalOpen;
+        isNotificationModalOpen ||
+        isAbsenceModalOpen;
         
       if (hasOpenModal) return;
 
@@ -559,6 +637,7 @@ export default function HabitTrackerPage() {
         onOpenShortcutsModal={() => setIsShortcutsModalOpen(true)}
         onOpenShareModal={() => setIsShareModalOpen(true)}
         onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
+        onTriggerAbsenceCheck={handleTriggerAudit}
         onLockApp={handleLockApp}
       />
 
@@ -596,6 +675,18 @@ export default function HabitTrackerPage() {
         isOpen={isInviteModalOpen}
         onClose={() => setIsInviteModalOpen(false)}
       />
+
+      {/* 24-Hour Absence Audit Modal */}
+      {absenceInfo && (
+        <AbsenceCatchUpModal
+          isOpen={isAbsenceModalOpen}
+          absence={absenceInfo}
+          habits={habits}
+          logs={logs}
+          onClose={() => setIsAbsenceModalOpen(false)}
+          onSaveLogs={handleSaveAbsenceLogs}
+        />
+      )}
     </div>
   );
 }
