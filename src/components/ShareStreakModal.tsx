@@ -75,7 +75,7 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
     ctx.fillRect(0, 0, 1200, 680);
 
     // 2. Border
-    ctx.strokeStyle = '#10B981';
+    ctx.strokeStyle = '#FF3B30';
     ctx.lineWidth = 4;
     ctx.strokeRect(24, 24, 1152, 632);
 
@@ -87,7 +87,7 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
     ctx.strokeRect(40, 40, 1120, 600);
 
     // 4. Header Bar
-    ctx.fillStyle = '#10B981';
+    ctx.fillStyle = '#FF3B30';
     ctx.fillRect(70, 70, 36, 36);
     ctx.fillStyle = '#000000';
     ctx.font = 'bold 22px monospace';
@@ -111,7 +111,7 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
     // 6. Metrics Grid
     const metrics = [
       { label: 'ACTIVE STREAK', val: `${activeStreak} DAYS`, color: '#F59E0B' },
-      { label: 'BEST STREAK', val: `${bestStreak} DAYS`, color: '#10B981' },
+      { label: 'BEST STREAK', val: `${bestStreak} DAYS`, color: '#FF3B30' },
       { label: '30D ADHERENCE', val: `${avg30DayRate}%`, color: '#6366F1' },
       { label: 'TODAY SCORE', val: `${completedToday} / ${activeHabits.length}`, color: '#EC4899' },
     ];
@@ -147,7 +147,7 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
       ctx.strokeRect(70, y, 1060, 42);
 
       // Color pill
-      ctx.fillStyle = h.color || '#10B981';
+      ctx.fillStyle = h.color || '#FF3B30';
       ctx.fillRect(85, y + 14, 14, 14);
 
       // Title
@@ -166,7 +166,7 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
       ctx.fillText(`🔥 ${s?.currentStreak || 0}D STREAK`, 720, y + 27);
 
       // Rate
-      ctx.fillStyle = '#10B981';
+      ctx.fillStyle = '#FF3B30';
       ctx.font = 'bold 14px monospace';
       ctx.fillText(`${s?.completionRate30Days || 0}% 30D`, 980, y + 27);
     });
@@ -189,7 +189,7 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
         {/* Header */}
         <div className="flex items-center justify-between border-b border-subtle pb-3">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-none bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 flex items-center justify-center">
+            <div className="w-6 h-6 rounded-none bg-[#FF3B30]/15 text-[#FF3B30] border border-[#FF3B30]/30 flex items-center justify-center">
               <Share2 className="w-3.5 h-3.5" />
             </div>
             <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-main">
@@ -205,11 +205,11 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
         </div>
 
         {/* Preview Card */}
-        <div className="p-4 sm:p-5 rounded-none bg-main border border-emerald-500/40 space-y-4 shadow-inner">
+        <div className="p-4 sm:p-5 rounded-none bg-main border border-[#FF3B30]/40 space-y-4 shadow-inner">
           <div className="flex items-center justify-between border-b border-subtle pb-2.5">
             <div className="flex items-center gap-2">
-              <div className="w-5 h-5 bg-emerald-500 flex items-center justify-center text-black font-bold">
-                <Flame className="w-3 h-3 fill-black" />
+              <div className="w-5 h-5 bg-[#FF3B30] flex items-center justify-center text-white font-bold">
+                <Flame className="w-3 h-3 fill-white" />
               </div>
               <span className="text-xs font-bold text-main">ZENITH REPORT</span>
             </div>
@@ -223,7 +223,7 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
             </div>
             <div className="p-2 bg-card border border-subtle">
               <div className="text-[9px] text-sub uppercase">BEST</div>
-              <div className="text-sm font-bold text-emerald-500">{bestStreak} DAYS</div>
+              <div className="text-sm font-bold text-[#FF3B30]">{bestStreak} DAYS</div>
             </div>
             <div className="p-2 bg-card border border-subtle">
               <div className="text-[9px] text-sub uppercase">30D ADHERENCE</div>
@@ -253,7 +253,7 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
           <button
             onClick={handleDownloadImage}
             disabled={isGenerating}
-            className="flex items-center justify-center gap-2 h-12 sm:h-10 px-4 font-bold text-xs font-mono bg-emerald-500 text-black hover:bg-emerald-400 transition-colors uppercase cursor-pointer touch-manipulation active:scale-95"
+            className="flex items-center justify-center gap-2 h-12 sm:h-10 px-4 font-bold text-xs font-mono bg-[#FF3B30] text-white hover:bg-[#E02D24] transition-colors uppercase cursor-pointer touch-manipulation active:scale-95"
           >
             <Download className="w-4 h-4" />
             {isGenerating ? 'GENERATING...' : 'DOWNLOAD PNG CARD'}
@@ -262,7 +262,7 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
             onClick={handleCopyText}
             className="flex items-center justify-center gap-2 h-12 sm:h-10 px-4 font-bold text-xs font-mono bg-input hover:bg-input-focus border border-main text-main transition-colors uppercase cursor-pointer touch-manipulation active:scale-95"
           >
-            {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+            {copied ? <Check className="w-4 h-4 text-[#FF3B30]" /> : <Copy className="w-4 h-4" />}
             {copied ? 'COPIED TO CLIPBOARD' : 'COPY TEXT SUMMARY'}
           </button>
         </div>

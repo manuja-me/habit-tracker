@@ -67,7 +67,7 @@ export const AVAILABLE_ICONS: Record<string, LucideIcon> = {
 };
 
 export const COLOR_PALETTES = [
-  { name: 'Emerald', hex: '#10B981', bg: 'rgba(16, 185, 129, 0.15)', text: '#34D399' },
+  { name: 'Swiss Red', hex: '#FF3B30', bg: 'rgba(255, 59, 48, 0.15)', text: '#FF3B30' },
   { name: 'Indigo', hex: '#6366F1', bg: 'rgba(99, 102, 241, 0.15)', text: '#818CF8' },
   { name: 'Cyan', hex: '#06B6D4', bg: 'rgba(6, 182, 212, 0.15)', text: '#22D3EE' },
   { name: 'Amber', hex: '#F59E0B', bg: 'rgba(245, 158, 11, 0.15)', text: '#FBBF24' },

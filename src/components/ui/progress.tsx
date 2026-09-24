@@ -33,8 +33,8 @@ export const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
             className="h-full rounded-none transition-all duration-200 ease-out"
             style={{
               width: `${percentage}%`,
-              backgroundColor: indicatorColor || '#10B981',
-              boxShadow: percentage > 0 ? `0 0 10px ${indicatorColor || 'rgba(16, 185, 129, 0.4)'}` : 'none',
+              backgroundColor: indicatorColor || '#FF3B30',
+              boxShadow: percentage > 0 ? `0 0 10px ${indicatorColor || 'rgba(255, 59, 48, 0.3)'}` : 'none',
             }}
           />
         </div>

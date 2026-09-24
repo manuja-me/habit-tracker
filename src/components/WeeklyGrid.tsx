@@ -43,9 +43,8 @@ export function WeeklyGrid({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-5 pb-3 border-b border-subtle">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-mono font-black text-[#FF3B30]">02 //</span>
               <h2 className="text-sm sm:text-base font-black font-sans uppercase tracking-tight text-main">
-                WEEKLY PROTOCOL MATRIX
+                Weekly Overview
               </h2>
             </div>
             <p className="text-xs text-sub font-mono uppercase tracking-wider mt-0.5">

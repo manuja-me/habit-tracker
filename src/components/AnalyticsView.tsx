@@ -9,8 +9,6 @@ import {
   Flame, 
   TrendingUp, 
   CheckCircle2, 
-  BarChart3, 
-  Calendar,
   Award,
   ShieldCheck,
   Zap,
@@ -163,9 +161,8 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
       <div className="p-5 sm:p-6 rounded-none bg-card border border-main space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-subtle">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-black text-[#FF3B30]">04 //</span>
             <h3 className="text-sm font-black font-sans uppercase tracking-tight text-main">
-              TARGET MILESTONES & ARCHIVAL BADGES
+              Milestones & Badges
             </h3>
           </div>
           <span className="text-xs font-mono text-sub uppercase tracking-wider">
@@ -181,7 +178,7 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
                 key={m.id}
                 className={`p-3.5 sm:p-3 rounded-none border transition-all ${
                   m.unlocked 
-                    ? 'bg-input border-emerald-500/40 shadow-xs' 
+                    ? 'bg-input border-[#FF3B30]/40 shadow-xs' 
                     : 'bg-input/40 border-subtle opacity-65'
                 }`}
               >
@@ -197,7 +194,7 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
                     <IconComp className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5" />
                   </div>
                   {m.unlocked ? (
-                    <span className="text-[10px] sm:text-[9px] font-bold text-emerald-500 border border-emerald-500/30 px-1.5 py-0.5 bg-emerald-500/10">
+                    <span className="text-[10px] sm:text-[9px] font-bold text-[#FF3B30] border border-[#FF3B30]/30 px-1.5 py-0.5 bg-[#FF3B30]/10">
                       UNLOCKED
                     </span>
                   ) : (
@@ -231,9 +228,8 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
         {/* Habit Ranking */}
         <div className="p-5 sm:p-6 rounded-none bg-card border border-main transition-colors">
           <div className="flex items-center gap-2 mb-3 sm:mb-4 pb-2 border-b border-subtle">
-            <span className="text-xs font-mono font-black text-[#FF3B30]">05 //</span>
             <h3 className="text-xs sm:text-sm font-black font-sans uppercase tracking-tight text-main">
-              PROTOCOL PERFORMANCE BREAKDOWN
+              Habit Performance Breakdown
             </h3>
           </div>
 
@@ -282,9 +278,8 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
         <div className="p-5 sm:p-6 rounded-none bg-card border border-main transition-colors flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1 pb-2 border-b border-subtle">
-              <span className="text-xs font-mono font-black text-[#FF3B30]">06 //</span>
               <h3 className="text-xs sm:text-sm font-black font-sans uppercase tracking-tight text-main">
-                WEEKDAY FREQUENCY VECTOR (90D)
+                Weekday Consistency (90 Days)
               </h3>
             </div>
             <p className="text-xs font-mono text-sub uppercase tracking-wider mb-4 sm:mb-6 mt-2">

@@ -18,7 +18,7 @@ export function triggerDailyCelebration() {
   fire(0.25, {
     spread: 26,
     startVelocity: 55,
-    colors: ['#10B981', '#34D399', '#6EE7B7'],
+    colors: ['#FF3B30', '#E02D24', '#FF6961'],
   });
 
   fire(0.2, {

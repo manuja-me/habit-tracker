@@ -91,9 +91,8 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-subtle pb-3">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-mono font-black text-[#FF3B30]">03 //</span>
               <h2 className="text-sm sm:text-base font-black font-sans uppercase tracking-tight text-main">
-                CONSISTENCY MATRIX (ALL PROTOCOLS)
+                Consistency Heatmap
               </h2>
             </div>
             <p className="text-xs text-sub font-mono uppercase tracking-wider mt-0.5">
@@ -137,7 +136,7 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
         <div className="pt-2 border-t border-subtle text-xs font-mono text-main min-h-[1.75rem] flex items-center">
           {hoveredDay ? (
             <div className="flex items-center gap-2 animate-in fade-in duration-100 flex-wrap">
-              <span className="font-bold text-emerald-500">
+              <span className="font-bold text-[#FF3B30]">
                 {formatDisplayDate(hoveredDay.date)}:
               </span>
               {hoveredDay.total === 0 ? (
@@ -165,7 +164,7 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
       <div className="space-y-3 sm:space-y-4">
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-emerald-500" />
+            <Layers className="w-4 h-4 text-[#FF3B30]" />
             <h3 className="text-xs sm:text-sm font-bold font-mono uppercase text-main">
               INDIVIDUAL HABIT HEATMAPS
             </h3>
@@ -205,7 +204,7 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
                     <Flame className="w-3 h-3 fill-amber-500" /> {stats.currentStreak}D STREAK
                   </span>
                   <span className="text-sub">|</span>
-                  <span className="text-emerald-500 font-bold text-[11px]">
+                  <span className="text-[#FF3B30] font-bold text-[11px]">
                     {stats.completionRate30Days}% 30D
                   </span>
                   <span className="text-sub">|</span>

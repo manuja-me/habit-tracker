@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { Command, X, Keyboard } from 'lucide-react';
+import { X, Keyboard } from 'lucide-react';
 
 interface ShortcutsModalProps {
   isOpen: boolean;
@@ -42,7 +42,7 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-subtle pb-3">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-none bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 flex items-center justify-center">
+            <div className="w-6 h-6 rounded-none bg-[#FF3B30]/15 text-[#FF3B30] border border-[#FF3B30]/30 flex items-center justify-center">
               <Keyboard className="w-3.5 h-3.5" />
             </div>
             <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-main">
@@ -65,7 +65,7 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
               className="flex items-center justify-between py-1.5 px-2 rounded-none bg-input/40 border border-subtle text-xs"
             >
               <span className="text-sub font-mono text-[11px] sm:text-xs">{s.desc}</span>
-              <kbd className="px-2 py-0.5 font-bold font-mono text-[10px] sm:text-[11px] bg-card text-emerald-500 border border-emerald-500/40 rounded-none shadow-xs">
+              <kbd className="px-2 py-0.5 font-bold font-mono text-[10px] sm:text-[11px] bg-card text-[#FF3B30] border border-[#FF3B30]/40 rounded-none shadow-xs">
                 {s.key}
               </kbd>
             </div>

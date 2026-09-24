@@ -113,7 +113,7 @@ export function InviteFriendModal({ isOpen, onClose }: InviteFriendModalProps) {
                   onClick={handleCopy}
                   className={`px-3.5 py-2 text-xs font-mono font-bold uppercase flex items-center gap-1.5 transition-all cursor-pointer ${
                     isCopied
-                      ? 'bg-emerald-500 text-black border border-emerald-400'
+                      ? 'bg-card text-[#FF3B30] border border-[#FF3B30]'
                       : 'bg-[#FF3B30] hover:bg-[#E02D24] text-white border border-[#FF3B30]'
                   }`}
                 >

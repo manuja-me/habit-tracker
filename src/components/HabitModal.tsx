@@ -158,12 +158,12 @@ export function HabitModal({
               }}
               className={`p-2.5 text-left border transition-all cursor-pointer ${
                 nature === 'do'
-                  ? 'bg-emerald-500/15 border-emerald-500 text-emerald-400'
+                  ? 'bg-[#FF3B30]/15 border-[#FF3B30] text-[#FF3B30]'
                   : 'bg-input border-subtle text-sub hover:border-main'
               }`}
             >
               <div className="flex items-center gap-1.5 text-xs font-bold font-mono uppercase">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                <Sparkles className="w-3.5 h-3.5 text-[#FF3B30]" />
                 DO (BUILD)
               </div>
               <p className="text-[10px] text-sub mt-0.5 leading-tight">
@@ -208,7 +208,7 @@ export function HabitModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={nature === 'do' ? 'e.g. Read 20 Pages, Morning Workout' : 'e.g. Smoking Cigarettes, Junk Food, Late Night Phone'}
-              className="w-full px-3.5 py-3 sm:py-2 rounded-none bg-input border border-main text-sm sm:text-sm text-main placeholder-muted-custom focus:outline-none focus:border-emerald-500 transition-colors font-mono min-h-[44px] sm:min-h-[38px]"
+              className="w-full px-3.5 py-3 sm:py-2 rounded-none bg-input border border-main text-sm sm:text-sm text-main placeholder-muted-custom focus:outline-none focus:border-[#FF3B30] transition-colors font-mono min-h-[44px] sm:min-h-[38px]"
             />
           </div>
 
@@ -222,7 +222,7 @@ export function HabitModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Notes, targets, reasons..."
-              className="w-full px-3.5 py-3 sm:py-2 rounded-none bg-input border border-main text-sm sm:text-sm text-main placeholder-muted-custom focus:outline-none focus:border-emerald-500 transition-colors font-mono min-h-[44px] sm:min-h-[38px]"
+              className="w-full px-3.5 py-3 sm:py-2 rounded-none bg-input border border-main text-sm sm:text-sm text-main placeholder-muted-custom focus:outline-none focus:border-[#FF3B30] transition-colors font-mono min-h-[44px] sm:min-h-[38px]"
             />
           </div>
 
@@ -277,7 +277,7 @@ export function HabitModal({
                   onClick={() => setCategory(cat.id)}
                   className={`px-3 py-2 sm:px-2.5 sm:py-1 rounded-none text-xs sm:text-[11px] font-mono transition-all cursor-pointer touch-manipulation select-none min-h-[38px] sm:min-h-0 flex items-center justify-center ${
                     category === cat.id
-                      ? 'bg-emerald-500 text-black font-bold border border-emerald-400'
+                      ? 'bg-[#FF3B30] text-white font-bold border border-[#FF3B30]'
                       : 'bg-input border border-main text-sub hover:text-main'
                   }`}
                 >
@@ -332,7 +332,7 @@ export function HabitModal({
                       onClick={() => setIcon(iconName)}
                       className={`w-9 h-9 sm:w-7 sm:h-7 rounded-none flex items-center justify-center transition-all flex-shrink-0 cursor-pointer touch-manipulation active:scale-95 ${
                         isSelected
-                          ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500'
+                          ? 'bg-[#FF3B30]/20 text-[#FF3B30] border border-[#FF3B30]'
                           : 'bg-input border border-main text-sub hover:text-main'
                       }`}
                       aria-label={iconName}
@@ -356,7 +356,7 @@ export function HabitModal({
                 onClick={() => setType('boolean')}
                 className={`h-11 sm:h-9 px-3 rounded-none text-xs font-mono font-medium border text-center transition-all cursor-pointer touch-manipulation flex items-center justify-center ${
                   type === 'boolean'
-                    ? 'bg-subtle border-emerald-500 text-main font-bold shadow-xs'
+                    ? 'bg-subtle border-[#FF3B30] text-main font-bold shadow-xs'
                     : 'bg-input border-main text-sub hover:text-main'
                 }`}
               >
@@ -367,7 +367,7 @@ export function HabitModal({
                 onClick={() => setType('number')}
                 className={`h-11 sm:h-9 px-3 rounded-none text-xs font-mono font-medium border text-center transition-all cursor-pointer touch-manipulation flex items-center justify-center ${
                   type === 'number'
-                    ? 'bg-subtle border-emerald-500 text-main font-bold shadow-xs'
+                    ? 'bg-subtle border-[#FF3B30] text-main font-bold shadow-xs'
                     : 'bg-input border-main text-sub hover:text-main'
                 }`}
               >
@@ -384,7 +384,7 @@ export function HabitModal({
                     min="1"
                     value={targetValue}
                     onChange={(e) => setTargetValue(Number(e.target.value))}
-                    className="w-full px-3 py-2.5 sm:py-1.5 rounded-none bg-card border border-main text-sm sm:text-xs text-main focus:outline-none focus:border-emerald-500 font-mono min-h-[40px] sm:min-h-0"
+                    className="w-full px-3 py-2.5 sm:py-1.5 rounded-none bg-card border border-main text-sm sm:text-xs text-main focus:outline-none focus:border-[#FF3B30] font-mono min-h-[40px] sm:min-h-0"
                   />
                 </div>
                 <div>
@@ -394,7 +394,7 @@ export function HabitModal({
                     value={targetUnit}
                     onChange={(e) => setTargetUnit(e.target.value)}
                     placeholder="ml, pages, reps"
-                    className="w-full px-3 py-2.5 sm:py-1.5 rounded-none bg-card border border-main text-sm sm:text-xs text-main focus:outline-none focus:border-emerald-500 font-mono min-h-[40px] sm:min-h-0"
+                    className="w-full px-3 py-2.5 sm:py-1.5 rounded-none bg-card border border-main text-sm sm:text-xs text-main focus:outline-none focus:border-[#FF3B30] font-mono min-h-[40px] sm:min-h-0"
                   />
                 </div>
               </div>
@@ -418,7 +418,7 @@ export function HabitModal({
                   onClick={() => setFrequency(freq.id as HabitFrequency)}
                   className={`h-11 sm:h-9 px-2 rounded-none text-xs font-mono font-medium border text-center transition-all cursor-pointer touch-manipulation flex items-center justify-center ${
                     frequency === freq.id
-                      ? 'bg-subtle border-emerald-500 text-main font-bold shadow-xs'
+                      ? 'bg-subtle border-[#FF3B30] text-main font-bold shadow-xs'
                       : 'bg-input border-main text-sub hover:text-main'
                   }`}
                 >

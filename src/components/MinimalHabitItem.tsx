@@ -56,22 +56,18 @@ export function MinimalHabitItem({
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   const isDont = habit.nature === 'dont';
-  // For 'dont' habits, clean by default unless explicitly marked completed: false (slip-up)
   const isSlippedUp = isDont && log !== undefined && log.completed === false;
   const isCompleted = isDont ? !isSlippedUp : Boolean(log?.completed);
 
   const weaningStatus = calculateWeaningStatus(habit, allLogs);
-
   const currentValue = log?.value ?? (isCompleted ? habit.target_value : 0);
   const IconComponent = getHabitIcon(habit.icon);
-
   const colorConfig = COLOR_PALETTES.find(c => c.hex.toLowerCase() === habit.color.toLowerCase()) || COLOR_PALETTES[0];
 
   const handleCheckboxClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isDont) {
-      // Toggle between Clean (completed: true) and Slipped Up (completed: false)
-      const nextCompleted = isSlippedUp; // if slipped up, make clean (true); if clean, make slip-up (false)
+      const nextCompleted = isSlippedUp;
       if (nextCompleted) {
         playCheckSound();
       } else {
@@ -113,67 +109,67 @@ export function MinimalHabitItem({
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      className={`group relative flex flex-col p-4 sm:p-4 rounded-none transition-all duration-150 border ${
-        isFocused ? 'border-l-4 border-l-[#FF3B30] bg-card/90 ring-1 ring-[#FF3B30]/30' : ''
+      className={`group relative flex flex-col p-3.5 sm:p-4 rounded-none transition-all duration-150 border ${
+        isFocused ? 'border-l-4 border-l-[#FF3B30] bg-card' : ''
       } ${
         isDont
           ? isSlippedUp
-            ? 'bg-[#FF3B30]/10 border-[#FF3B30]/40'
-            : 'bg-card border-main hover:border-neutral-500'
+            ? 'bg-[#FF3B30]/10 border-[#FF3B30]/30'
+            : 'bg-card border-main hover:border-subtle'
           : isCompleted
-          ? 'bg-card/60 border-main border-l-4 border-l-[#FF3B30]'
-          : 'bg-card border-main hover:border-neutral-500'
+          ? 'bg-card/70 border-main border-l-2 border-l-[#FF3B30]'
+          : 'bg-card border-main hover:border-subtle'
       }`}
     >
-      {/* Main Row: Checkbox/Toggle, Title & Streak, Action Buttons */}
-      <div className="flex items-center justify-between gap-3 sm:gap-4">
-        {/* Left Side: Drag handle + Checkbox/Status + Icon + Title */}
-        <div className="flex items-center gap-3 sm:gap-3 min-w-0 flex-1">
+      {/* Main Row */}
+      <div className="flex items-center justify-between gap-3">
+        {/* Left Side */}
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           {/* Drag Handle */}
           <div 
-            className="cursor-grab active:cursor-grabbing text-sub/40 hover:text-main transition-colors flex items-center justify-center p-1 sm:p-0.5 touch-manipulation"
+            className="cursor-grab active:cursor-grabbing text-sub/30 group-hover:text-sub transition-colors flex items-center justify-center p-0.5"
             title="Drag to reorder"
           >
-            <GripVertical className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+            <GripVertical className="w-3.5 h-3.5" />
           </div>
 
-          {/* Large Tactile Status Button (48px on mobile for effortless tapping) */}
+          {/* Checkbox / Status Button */}
           {isDont ? (
             <button
               onClick={handleCheckboxClick}
-              className={`relative flex-shrink-0 w-12 h-12 sm:w-9 sm:h-9 rounded-none flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation border ${
+              className={`relative flex-shrink-0 w-8 h-8 rounded-none flex items-center justify-center transition-all duration-100 active:scale-95 cursor-pointer touch-manipulation border ${
                 isSlippedUp
-                  ? 'bg-[#FF3B30] text-white border-[#FF3B30] shadow-sm'
-                  : 'bg-card text-[#FF3B30] border-[#FF3B30] hover:bg-[#FF3B30]/10'
+                  ? 'bg-[#FF3B30] text-white border-[#FF3B30]'
+                  : 'bg-input text-[#FF3B30] border-main hover:border-[#FF3B30]'
               }`}
-              title={isSlippedUp ? 'Click to undo slip-up' : 'Auto-clean. Click if you indulged today'}
+              title={isSlippedUp ? 'Slipped up (Click to reset)' : 'Clean today'}
               aria-label={isSlippedUp ? 'Slipped up' : 'Clean'}
             >
               {isSlippedUp ? (
-                <ShieldAlert className="w-6 h-6 sm:w-5 sm:h-5 stroke-[2.5]" />
+                <ShieldAlert className="w-4 h-4 stroke-[2.5]" />
               ) : (
-                <ShieldCheck className="w-6 h-6 sm:w-5 sm:h-5 stroke-[2.5]" />
+                <ShieldCheck className="w-4 h-4 stroke-[2.5]" />
               )}
             </button>
           ) : (
             <button
               onClick={handleCheckboxClick}
-              className={`relative flex-shrink-0 w-12 h-12 sm:w-9 sm:h-9 rounded-none flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation border ${
+              className={`relative flex-shrink-0 w-8 h-8 rounded-none flex items-center justify-center transition-all duration-100 active:scale-95 cursor-pointer touch-manipulation border ${
                 isCompleted
-                  ? 'bg-[#FF3B30] text-white border-[#FF3B30] shadow-sm'
-                  : 'border-2 border-main hover:border-neutral-400 bg-input/70'
+                  ? 'bg-[#FF3B30] text-white border-[#FF3B30]'
+                  : 'border border-main hover:border-neutral-400 bg-input'
               }`}
               aria-label={isCompleted ? 'Mark incomplete' : 'Mark complete'}
             >
               {isCompleted && (
-                <Check className="w-6 h-6 sm:w-5 sm:h-5 stroke-[3]" />
+                <Check className="w-4 h-4 stroke-[3]" />
               )}
             </button>
           )}
 
           {/* Category Icon */}
           <div 
-            className="flex-shrink-0 w-10 h-10 sm:w-9 sm:h-9 rounded-none flex items-center justify-center border border-subtle"
+            className="flex-shrink-0 w-8 h-8 rounded-none flex items-center justify-center border border-subtle"
             style={{ 
               backgroundColor: isDont 
                 ? isSlippedUp ? 'rgba(255, 59, 48, 0.15)' : 'rgba(255, 59, 48, 0.08)'
@@ -183,45 +179,45 @@ export function MinimalHabitItem({
                 : isCompleted ? '#FF3B30' : colorConfig.hex 
             }}
           >
-            <IconComponent className="w-5 h-5 sm:w-4 sm:h-4" />
+            <IconComponent className="w-3.5 h-3.5" />
           </div>
 
-          {/* Title and Streak */}
+          {/* Title & Streak */}
           <div className="min-w-0 flex-1 flex flex-col justify-center">
-            <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
               <span 
                 onClick={handleCheckboxClick}
-                className={`text-base sm:text-base font-black font-sans tracking-tight uppercase truncate cursor-pointer select-none transition-colors ${
+                className={`text-sm sm:text-sm font-bold font-sans tracking-tight uppercase truncate cursor-pointer select-none transition-colors ${
                   isDont
                     ? isSlippedUp ? 'text-[#FF3B30] line-through' : 'text-main'
-                    : isCompleted ? 'text-sub line-through opacity-75' : 'text-main'
+                    : isCompleted ? 'text-sub line-through opacity-70' : 'text-main'
                 }`}
               >
                 {habit.title}
               </span>
 
-              {/* DON'T Habit Status Badge */}
+              {/* Status Badge for DONT habits */}
               {isDont && (
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs sm:text-[10px] font-mono font-bold border ${
+                <span className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono border ${
                   isSlippedUp 
                     ? 'bg-[#FF3B30]/20 text-[#FF3B30] border-[#FF3B30]/40' 
-                    : 'bg-card text-main border-main'
+                    : 'bg-input text-sub border-subtle'
                 }`}>
-                  {isSlippedUp ? 'SLIPPED UP' : 'CLEAN TODAY'}
+                  {isSlippedUp ? 'Slipped Up' : 'Clean'}
                 </span>
               )}
               
-              {/* Clean Streak Tag */}
+              {/* Streak Badge */}
               {stats.currentStreak > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs sm:text-[10px] font-mono font-bold bg-card text-[#FF3B30] border border-main">
-                  <Flame className="w-3.5 h-3.5 sm:w-3 sm:h-3 fill-[#FF3B30]" />
-                  {stats.currentStreak}D {isDont ? 'CLEAN' : 'STREAK'}
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono font-bold text-[#FF3B30] bg-[#FF3B30]/5 border border-[#FF3B30]/20">
+                  <Flame className="w-3 h-3 fill-[#FF3B30]" />
+                  <span>{stats.currentStreak}d</span>
                 </span>
               )}
             </div>
 
             {habit.description && (
-              <p className="text-xs sm:text-[11px] font-mono text-sub truncate mt-0.5">
+              <p className="text-[11px] font-mono text-sub truncate mt-0.5">
                 {habit.description}
               </p>
             )}
@@ -229,19 +225,19 @@ export function MinimalHabitItem({
         </div>
 
         {/* Right Side: Quick Action Buttons (Edit / Delete) */}
-        <div className="flex items-center gap-1.5 sm:gap-1 flex-shrink-0">
+        <div className="flex items-center gap-1 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
           {isConfirmingDelete ? (
-            <div className="flex items-center gap-1.5 bg-rose-500/10 border border-rose-500/30 p-1.5 animate-in fade-in duration-100">
-              <span className="text-xs sm:text-[11px] text-rose-500 font-bold px-1">DELETE?</span>
+            <div className="flex items-center gap-1 bg-rose-500/10 border border-rose-500/30 p-1">
+              <span className="text-[10px] text-rose-500 font-bold px-1">DELETE?</span>
               <button
                 onClick={() => onDelete(habit.id)}
-                className="px-3 py-1.5 sm:px-2 sm:py-0.5 text-xs font-bold bg-rose-500 text-black hover:bg-rose-400 cursor-pointer touch-manipulation min-h-[38px] sm:min-h-0 flex items-center justify-center"
+                className="px-2 py-0.5 text-[10px] font-bold bg-rose-500 text-white hover:bg-rose-600 cursor-pointer"
               >
                 YES
               </button>
               <button
                 onClick={() => setIsConfirmingDelete(false)}
-                className="px-2.5 py-1.5 sm:px-1.5 sm:py-0.5 text-xs text-sub hover:text-main cursor-pointer touch-manipulation min-h-[38px] sm:min-h-0 flex items-center justify-center"
+                className="px-1.5 py-0.5 text-[10px] text-sub hover:text-main cursor-pointer"
               >
                 NO
               </button>
@@ -250,55 +246,54 @@ export function MinimalHabitItem({
             <>
               <button
                 onClick={() => onEdit(habit)}
-                className="w-10 h-10 sm:w-8 sm:h-8 flex items-center justify-center text-sub hover:text-main hover:bg-subtle transition-colors cursor-pointer touch-manipulation rounded-none active:scale-95"
+                className="w-7 h-7 flex items-center justify-center text-sub hover:text-main hover:bg-subtle transition-colors cursor-pointer"
                 title="Edit habit"
                 aria-label="Edit habit"
               >
-                <Edit3 className="w-5 h-5 sm:w-4 sm:h-4" />
+                <Edit3 className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={() => setIsConfirmingDelete(true)}
-                className="w-10 h-10 sm:w-8 sm:h-8 flex items-center justify-center text-sub hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer touch-manipulation rounded-none active:scale-95"
+                className="w-7 h-7 flex items-center justify-center text-sub hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
                 title="Delete habit"
                 aria-label="Delete habit"
               >
-                <Trash2 className="w-5 h-5 sm:w-4 sm:h-4" />
+                <Trash2 className="w-3.5 h-3.5" />
               </button>
             </>
           )}
         </div>
       </div>
 
-      {/* Numeric Progress Section (Clean & uncluttered with large touch steppers) */}
+      {/* Numeric Progress Section */}
       {habit.type === 'number' && (
-        <div className="mt-3.5 pt-3 border-t border-subtle/60 space-y-2.5">
+        <div className="mt-3 pt-2.5 border-t border-subtle/50 space-y-2">
           <div className="flex items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-2 text-xs sm:text-xs">
-              <span className="font-bold text-main">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="font-bold text-main font-mono">
                 {currentValue.toLocaleString()}
               </span>
-              <span className="text-sub">
+              <span className="text-sub font-mono text-[11px]">
                 / {habit.target_value.toLocaleString()} {habit.target_unit}
               </span>
-              <span className="text-xs sm:text-[10px] font-bold text-sub px-2 py-0.5 border border-subtle bg-subtle/50">
-                {progressPercent}%
+              <span className="text-[10px] font-mono text-sub">
+                ({progressPercent}%)
               </span>
             </div>
 
-            {/* Clean Mobile-Friendly Inline Steppers (44px on mobile) */}
-            <div className="flex items-center gap-2 sm:gap-1.5">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={(e) => handleIncrement(e, -stepAmount)}
-                className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center bg-input hover:bg-subtle active:bg-subtle border border-main text-sub hover:text-main transition-colors cursor-pointer touch-manipulation active:scale-95"
+                className="w-7 h-7 flex items-center justify-center bg-input hover:bg-subtle border border-main text-sub hover:text-main transition-colors cursor-pointer touch-manipulation"
                 title={`-${stepAmount}`}
                 aria-label={`-${stepAmount}`}
               >
-                <Minus className="w-5 h-5 sm:w-3.5 sm:h-3.5" />
+                <Minus className="w-3.5 h-3.5" />
               </button>
 
               <button
                 onClick={(e) => handleIncrement(e, stepAmount)}
-                className="h-11 px-4 sm:h-8 sm:px-3 text-xs sm:text-xs font-mono font-bold bg-[#FF3B30]/15 hover:bg-[#FF3B30]/25 active:bg-[#FF3B30]/30 border border-[#FF3B30]/30 text-[#FF3B30] transition-colors cursor-pointer touch-manipulation active:scale-95 flex items-center justify-center"
+                className="h-7 px-2.5 text-xs font-mono font-bold bg-[#FF3B30]/10 hover:bg-[#FF3B30]/20 border border-[#FF3B30]/30 text-[#FF3B30] transition-colors cursor-pointer touch-manipulation flex items-center justify-center"
                 title={`+${stepAmount}`}
                 aria-label={`+${stepAmount}`}
               >
@@ -307,7 +302,6 @@ export function MinimalHabitItem({
             </div>
           </div>
 
-          {/* Clean Progress Bar */}
           <Progress
             value={currentValue}
             max={habit.target_value}
@@ -319,25 +313,22 @@ export function MinimalHabitItem({
 
       {/* Weaning & Addiction Tapering Bar */}
       {isDont && weaningStatus.enabled && (
-        <div className="mt-3.5 pt-3 border-t border-subtle/60 space-y-2.5">
-          <div className="flex items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-2 text-xs sm:text-xs font-mono">
-              <span className="font-bold text-rose-400">
-                STAGE {weaningStatus.currentLevel}/{weaningStatus.totalLevels}:
+        <div className="mt-3 pt-2.5 border-t border-subtle/50 space-y-2">
+          <div className="flex items-center justify-between gap-2 text-xs font-mono">
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="text-rose-400 font-bold">
+                Level {weaningStatus.currentLevel}/{weaningStatus.totalLevels}:
               </span>
               <span className="text-main">
-                {weaningStatus.daysClean} / {weaningStatus.targetDaysClean}d Clean
-              </span>
-              <span className="text-xs sm:text-[10px] font-bold text-sub px-2 py-0.5 border border-subtle bg-subtle/50">
-                {weaningStatus.progressPercent}%
+                {weaningStatus.daysClean}/{weaningStatus.targetDaysClean}d clean
               </span>
             </div>
 
-            <div className="text-xs sm:text-xs font-mono font-bold">
+            <div className="text-[11px]">
               {weaningStatus.isGoalReached ? (
-                <span className="text-emerald-400">🎯 STAGE COMPLETE</span>
+                <span className="text-[#FF3B30] font-bold">Stage Complete</span>
               ) : (
-                <span className="text-sub">{weaningStatus.targetDaysClean - weaningStatus.daysClean}D TO NEXT STAGE</span>
+                <span className="text-sub">{weaningStatus.targetDaysClean - weaningStatus.daysClean}d left</span>
               )}
             </div>
           </div>
@@ -346,15 +337,8 @@ export function MinimalHabitItem({
             value={weaningStatus.daysClean}
             max={weaningStatus.targetDaysClean}
             size="sm"
-            indicatorColor={weaningStatus.isGoalReached ? '#10B981' : '#F43F5E'}
+            indicatorColor={weaningStatus.isGoalReached ? '#FF3B30' : '#F43F5E'}
           />
-
-          <div className="flex items-center justify-between text-xs sm:text-[10px] text-sub font-mono">
-            <span className="uppercase">Protocol: {habit.weaning?.protocol || 'EXPONENTIAL'} FADING</span>
-            <span>
-              {weaningStatus.nextLevelTarget ? `Next Goal: ${weaningStatus.nextLevelTarget}d Clean` : 'Freedom'}
-            </span>
-          </div>
         </div>
       )}
     </div>

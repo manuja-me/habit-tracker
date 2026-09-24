@@ -211,7 +211,7 @@ export interface MilestoneBadge {
 export const MILESTONE_DEFINITIONS = [
   { id: 'm-3', days: 3, title: 'SPARK', subtitle: '3 Days Consecutive', iconName: 'Zap', color: '#38BDF8' },
   { id: 'm-7', days: 7, title: 'IGNITION', subtitle: '1 Week Unbroken', iconName: 'Flame', color: '#F59E0B' },
-  { id: 'm-14', days: 14, title: 'MOMENTUM', subtitle: '2 Weeks Strong', iconName: 'TrendingUp', color: '#10B981' },
+  { id: 'm-14', days: 14, title: 'MOMENTUM', subtitle: '2 Weeks Strong', iconName: 'TrendingUp', color: '#FF3B30' },
   { id: 'm-21', days: 21, title: 'HABIT LOOP', subtitle: '21 Days Formed', iconName: 'Activity', color: '#06B6D4' },
   { id: 'm-30', days: 30, title: 'IRON WILL', subtitle: '1 Month Discipline', iconName: 'ShieldCheck', color: '#6366F1' },
   { id: 'm-60', days: 60, title: 'DIAMOND', subtitle: '60 Days Automatic', iconName: 'Sparkles', color: '#8B5CF6' },
@@ -219,7 +219,7 @@ export const MILESTONE_DEFINITIONS = [
   { id: 'm-180', days: 180, title: 'HALF YEAR', subtitle: '6 Months Mastery', iconName: 'Star', color: '#F43F5E' },
   { id: 'm-365', days: 365, title: 'LEGEND', subtitle: '1 Full Year Elite', iconName: 'Crown', color: '#EAB308' },
   { id: 'm-500', days: 500, title: 'TITAN', subtitle: '500 Days Unstoppable', iconName: 'Medal', color: '#F97316' },
-  { id: 'm-1000', days: 1000, title: 'IMMORTAL', subtitle: '1,000 Days Pantheon', iconName: 'Flame', color: '#10B981' },
+  { id: 'm-1000', days: 1000, title: 'IMMORTAL', subtitle: '1,000 Days Pantheon', iconName: 'Flame', color: '#FF3B30' },
 ];
 
 export function calculateMilestones(bestStreak: number): MilestoneBadge[] {

@@ -169,10 +169,9 @@ export function DailyPlanner({
       {/* Header & 7-Day Navigation */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-subtle">
         <div className="flex items-baseline gap-2">
-          <span className="text-xs font-mono font-black text-[#FF3B30]">02 //</span>
           <div>
             <h3 className="text-sm font-black font-sans uppercase tracking-tight text-main">
-              DAILY DIRECTIVES & TASKS
+              Daily Planner & Notes
             </h3>
             <p className="text-[11px] font-mono text-sub uppercase tracking-wider">
               {format(parseISO(days[0]), 'MMM dd')} – {format(parseISO(days[6]), 'MMM dd, yyyy')}

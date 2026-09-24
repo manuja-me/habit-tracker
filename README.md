@@ -11,7 +11,7 @@
 [![React](https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react)](https://react.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38bdf8?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
 [![Supabase](https://img.shields.io/badge/Supabase-Database-3ECF8E?style=flat-square&logo=supabase)](https://supabase.com/)
-[![License](https://img.shields.io/badge/License-MIT-emerald?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-FF3B30?style=flat-square)](LICENSE)
 
 </div>
 
@@ -20,7 +20,7 @@
 ## 🌟 Key Features
 
 ### 1. ⚡ Dual Routine Paradigms (DO & DON'T)
-- **🟢 DO Routines (Build)**: Positive daily habits (e.g. *Deep Work, 2.5L Hydration, Daily Workout, Reading*) with boolean check-offs or quantitative numeric steppers (`+250ml`, `-10 pages`).
+- **⚡ DO Routines (Build)**: Positive daily habits (e.g. *Deep Work, 2.5L Hydration, Daily Workout, Reading*) with boolean check-offs or quantitative numeric steppers (`+250ml`, `-10 pages`).
 - **🛑 DON'T Routines (Quit & Break Addictions)**: Designed specifically for stopping bad habits (e.g. *Smoking, Junk Food, Alcohol, Doomscrolling*).
   - **Auto-Clean Daily**: You succeed automatically by not doing the activity. Days remain clean by default with zero manual input required.
   - **1-Click Slip-Up Logging**: Log slip-ups with an instant undo safety buffer.

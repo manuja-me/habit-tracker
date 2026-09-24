@@ -1,28 +1,14 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { 
-  Flame, 
   Plus, 
-  Cloud, 
-  CloudOff, 
-  RefreshCw, 
-  Sun, 
-  Moon, 
+  Settings, 
   ChevronLeft, 
   ChevronRight,
-  Lock,
-  Keyboard,
-  Share2,
-  Bell,
-  Volume2,
-  VolumeX,
-  UserPlus,
-  Check
+  RefreshCw
 } from 'lucide-react';
 import { useHabitStore } from '../lib/store';
-import { useTheme } from '../lib/theme';
-import { isSoundEnabled, setSoundEnabled } from '../lib/utils/sound';
 import { formatDisplayDate, getTodayDateString, formatDate, parseDate } from '../lib/utils/date';
 import { addDays, subDays } from 'date-fns';
 import { Progress } from './ui/progress';
@@ -31,11 +17,7 @@ interface HeaderProps {
   selectedDate: string;
   onSelectDate: (date: string) => void;
   onOpenAddModal: () => void;
-  onOpenInviteModal?: () => void;
-  onOpenShortcutsModal?: () => void;
-  onOpenShareModal?: () => void;
-  onOpenNotificationModal?: () => void;
-  onLockApp: () => void;
+  onOpenSettingsModal: () => void;
   completedCount: number;
   totalCount: number;
 }
@@ -44,35 +26,11 @@ export function Header({
   selectedDate,
   onSelectDate,
   onOpenAddModal,
-  onOpenInviteModal,
-  onOpenShortcutsModal,
-  onOpenShareModal,
-  onOpenNotificationModal,
-  onLockApp,
+  onOpenSettingsModal,
   completedCount,
   totalCount,
 }: HeaderProps) {
-  const { isSyncing, isCloudReady, currentUser, syncWithCloud, syncError } = useHabitStore();
-  const { theme, toggleTheme } = useTheme();
-  const [soundOn, setSoundOn] = useState(true);
-  const [justSynced, setJustSynced] = useState(false);
-
-  useEffect(() => {
-    setSoundOn(isSoundEnabled());
-  }, []);
-
-  const handleSyncClick = async () => {
-    if (isSyncing) return;
-    await syncWithCloud();
-    setJustSynced(true);
-    setTimeout(() => setJustSynced(false), 2000);
-  };
-
-  const handleToggleSound = () => {
-    const next = !soundOn;
-    setSoundOn(next);
-    setSoundEnabled(next);
-  };
+  const { isSyncing, syncError } = useHabitStore();
 
   const todayStr = getTodayDateString();
   const isToday = selectedDate === todayStr;
@@ -90,242 +48,106 @@ export function Header({
   const percentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   return (
-    <header className="w-full max-w-6xl mx-auto pt-4 sm:pt-6 pb-3 sm:pb-4 px-3.5 sm:px-6">
-      {/* Top Swiss Masthead */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-5">
-        {/* Brand & Index */}
-        <div className="flex items-center justify-between w-full sm:w-auto">
-          <div className="flex items-center gap-3 flex-shrink-0">
-            {/* Swiss Cross / Block Icon */}
-            <div className="w-8 h-8 rounded-none bg-[#FF3B30] flex items-center justify-center text-white font-black text-sm shadow-xs select-none">
-              <span className="text-base font-black leading-none">✚</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold text-[#FF3B30]">
-                  {currentUser?.username ? `${currentUser.username.toUpperCase()} //` : '01 //'}
-                </span>
-                <h1 className="text-lg sm:text-xl font-black tracking-tight text-main uppercase font-sans">
-                  Zenith
-                </h1>
-              </div>
-              <div className="text-[10px] font-mono tracking-widest text-sub uppercase">
-                HABIT SYSTEM // MODULAR PROTOCOL
-              </div>
-            </div>
+    <header className="w-full max-w-4xl mx-auto pt-6 pb-2 px-4 sm:px-6">
+      {/* Top Bar: Brand, Action & Settings */}
+      <div className="flex items-center justify-between gap-4 mb-4">
+        {/* Brand */}
+        <div className="flex items-center gap-2.5 select-none">
+          <div className="w-6 h-6 bg-[#FF3B30] flex items-center justify-center text-white font-black text-xs">
+            ✚
           </div>
-
-          {/* Prominent Add Habit Button (Mobile) */}
-          <button
-            onClick={onOpenAddModal}
-            className="flex items-center gap-1.5 h-10 px-3.5 sm:h-8 sm:px-3 rounded-none text-xs font-mono font-bold bg-[#FF3B30] hover:bg-[#E02D24] text-white border border-[#FF3B30] shadow-xs transition-all active:scale-95 cursor-pointer touch-manipulation sm:hidden"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>NEW ROUTINE</span>
-          </button>
+          <span className="text-base font-black tracking-tight uppercase font-sans text-main">
+            Zenith
+          </span>
         </div>
 
-        {/* Action Utility Controls */}
-        <div className="flex items-center gap-2 sm:gap-1.5 flex-wrap justify-between sm:justify-end">
-          {/* Invite Friend Modal (Owner Only) */}
-          {onOpenInviteModal && (currentUser?.role === 'owner' || !currentUser) && (
-            <button
-              onClick={onOpenInviteModal}
-              className="flex items-center gap-1.5 h-10 px-3 sm:h-8 sm:px-2.5 rounded-none text-xs font-mono font-bold bg-card hover:bg-[#FF3B30]/10 border border-[#FF3B30] text-[#FF3B30] transition-all cursor-pointer touch-manipulation active:scale-95"
-              title="Invite Friend (Private Profile & PIN)"
-              aria-label="Invite Friend"
-            >
-              <UserPlus className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-              <span className="hidden md:inline">INVITE</span>
-            </button>
-          )}
-
-          {/* Cloud Sync Button (Direct 1-Click Sync) */}
+        {/* Essential Actions: + New Habit and Single Settings Button */}
+        <div className="flex items-center gap-2">
           <button
-            onClick={handleSyncClick}
-            disabled={isSyncing}
-            title={
-              syncError
-                ? `Sync error: ${syncError} (Click to retry)`
-                : isCloudReady
-                ? 'Cloud Synced — Click to Force Sync'
-                : 'Local Storage Mode — Click to sync'
-            }
-            className={`flex items-center gap-1.5 h-10 px-3 sm:h-8 sm:px-2.5 rounded-none text-xs font-mono border transition-all cursor-pointer touch-manipulation active:scale-95 select-none ${
-              isSyncing
-                ? 'bg-[#FF3B30]/10 border-[#FF3B30] text-[#FF3B30]'
-                : justSynced
-                ? 'bg-emerald-500/15 border-emerald-500 text-emerald-500'
-                : 'bg-card hover:bg-subtle border-main text-sub hover:text-main'
-            }`}
+            onClick={onOpenAddModal}
+            className="flex items-center gap-1.5 h-9 px-3.5 text-xs font-sans font-black tracking-tight uppercase bg-[#FF3B30] hover:bg-[#E02D24] text-white transition-all active:scale-95 cursor-pointer touch-manipulation"
           >
-            {isSyncing ? (
-              <RefreshCw className="w-4 h-4 sm:w-3.5 sm:h-3.5 animate-spin text-[#FF3B30]" />
-            ) : justSynced ? (
-              <Check className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-emerald-500 stroke-[3]" />
-            ) : isCloudReady ? (
-              <Cloud className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-neutral-300" />
-            ) : (
-              <CloudOff className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-muted-custom" />
-            )}
-            <span>
-              {isSyncing ? 'SYNCING...' : justSynced ? 'SYNCED' : isCloudReady ? 'SYNC' : 'LOCAL'}
-            </span>
+            <Plus className="w-3.5 h-3.5 stroke-[3]" />
+            <span>New Habit</span>
           </button>
 
-          <div className="flex items-center gap-1.5 sm:gap-1.5">
-            {/* Sound Toggle */}
-            <button
-              onClick={handleToggleSound}
-              className="w-10 h-10 sm:w-8 sm:h-8 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation active:scale-95"
-              title={soundOn ? 'Sound: ON (Click to mute)' : 'Sound: MUTED (Click to enable)'}
-              aria-label="Toggle Sound"
-            >
-              {soundOn ? (
-                <Volume2 className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5 text-[#FF3B30]" />
-              ) : (
-                <VolumeX className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5 text-sub" />
-              )}
-            </button>
-
-            {/* Share Modal */}
-            {onOpenShareModal && (
-              <button
-                onClick={onOpenShareModal}
-                className="w-10 h-10 sm:w-8 sm:h-8 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation active:scale-95"
-                title="Share Streak & Stats Card"
-                aria-label="Share Stats"
-              >
-                <Share2 className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5" />
-              </button>
+          <button
+            onClick={onOpenSettingsModal}
+            className="relative flex items-center justify-center w-9 h-9 border border-main bg-card hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer touch-manipulation active:scale-95"
+            title="Settings & Advanced Features"
+            aria-label="Settings"
+          >
+            {isSyncing ? (
+              <RefreshCw className="w-4 h-4 animate-spin text-[#FF3B30]" />
+            ) : (
+              <Settings className="w-4 h-4" />
             )}
-
-            {/* Reminder Notifications */}
-            {onOpenNotificationModal && (
-              <button
-                onClick={onOpenNotificationModal}
-                className="w-10 h-10 sm:w-8 sm:h-8 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation active:scale-95"
-                title="Daily Check-in Reminder"
-                aria-label="Daily Reminder"
-              >
-                <Bell className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5" />
-              </button>
+            {syncError && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-rose-500" />
             )}
-
-            {/* Shortcuts Modal (Desktop only) */}
-            {onOpenShortcutsModal && (
-              <button
-                onClick={onOpenShortcutsModal}
-                className="hidden sm:flex w-8 h-8 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all items-center justify-center cursor-pointer touch-manipulation active:scale-95"
-                title="Keyboard Shortcuts (Press ?)"
-                aria-label="Keyboard Shortcuts"
-              >
-                <Keyboard className="w-3.5 h-3.5" />
-              </button>
-            )}
-
-            {/* Theme Toggle */}
-            <button
-              onClick={toggleTheme}
-              className="w-10 h-10 sm:w-8 sm:h-8 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-main transition-all flex items-center justify-center cursor-pointer touch-manipulation active:scale-95"
-              title={`Theme: ${theme.toUpperCase()}`}
-              aria-label="Toggle Theme"
-            >
-              {theme === 'light' ? (
-                <Sun className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5 text-neutral-800" />
-              ) : theme === 'oled' ? (
-                <Moon className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5 text-neutral-100" />
-              ) : (
-                <Moon className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5 text-neutral-300" />
-              )}
-            </button>
-
-            {/* Lock App Button */}
-            <button
-              onClick={onLockApp}
-              className="w-10 h-10 sm:w-8 sm:h-8 rounded-none bg-card hover:bg-subtle border border-main text-sub hover:text-[#FF3B30] transition-all flex items-center justify-center cursor-pointer touch-manipulation active:scale-95"
-              title="Lock Session"
-              aria-label="Lock Session"
-            >
-              <Lock className="w-4.5 h-4.5 sm:w-3.5 sm:h-3.5" />
-            </button>
-
-            {/* Desktop Add Habit Button */}
-            <button
-              onClick={onOpenAddModal}
-              className="hidden sm:flex items-center gap-1.5 h-8 px-3 rounded-none text-xs font-mono font-bold bg-[#FF3B30] hover:bg-[#E02D24] text-white border border-[#FF3B30] shadow-xs transition-all active:scale-95 cursor-pointer touch-manipulation"
-            >
-              <Plus className="w-3.5 h-3.5 stroke-[3]" />
-              <span>NEW ROUTINE</span>
-            </button>
-          </div>
+          </button>
         </div>
       </div>
 
-      {/* Date & Progress Banner (Modular Grid Layout) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4 p-4 sm:p-5 rounded-none bg-card border border-main transition-colors">
-        {/* Date Selector */}
-        <div className="flex items-center justify-between sm:justify-start gap-3 sm:gap-4">
-          <div className="flex items-center bg-input rounded-none p-1 border border-subtle flex-shrink-0">
+      {/* Date & Progress Bar */}
+      <div className="p-4 bg-card border border-main flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* Date Navigator */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center bg-input border border-subtle">
             <button
               onClick={handlePrevDay}
-              className="w-11 h-11 sm:w-8 sm:h-8 rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer touch-manipulation flex items-center justify-center active:scale-95"
+              className="w-8 h-8 flex items-center justify-center text-sub hover:text-main hover:bg-subtle transition-colors cursor-pointer"
               title="Previous Day"
               aria-label="Previous Day"
             >
-              <ChevronLeft className="w-5 h-5 sm:w-4 sm:h-4" />
+              <ChevronLeft className="w-4 h-4" />
             </button>
-            
             <button
               onClick={() => onSelectDate(todayStr)}
-              className={`h-11 sm:h-8 px-3.5 sm:px-3 text-xs sm:text-xs font-mono font-bold rounded-none transition-all cursor-pointer touch-manipulation flex items-center justify-center ${
+              className={`h-8 px-2.5 text-xs font-mono font-bold transition-colors cursor-pointer ${
                 isToday
-                  ? 'bg-main text-main font-black border border-main'
+                  ? 'bg-subtle text-main border-x border-subtle'
                   : 'text-sub hover:text-main'
               }`}
             >
-              {isToday ? 'TODAY' : 'GO TO TODAY'}
+              TODAY
             </button>
-
             <button
               onClick={handleNextDay}
-              className="w-11 h-11 sm:w-8 sm:h-8 rounded-none hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer touch-manipulation flex items-center justify-center active:scale-95"
+              className="w-8 h-8 flex items-center justify-center text-sub hover:text-main hover:bg-subtle transition-colors cursor-pointer"
               title="Next Day"
               aria-label="Next Day"
             >
-              <ChevronRight className="w-5 h-5 sm:w-4 sm:h-4" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="min-w-0 text-right sm:text-left">
-            <div className="text-base sm:text-lg font-black text-main tracking-tight uppercase font-sans truncate">
+          <div>
+            <h1 className="text-sm sm:text-base font-black font-sans uppercase tracking-tight text-main">
               {formatDisplayDate(selectedDate)}
-            </div>
-            <div className="text-xs font-mono text-sub uppercase tracking-wider">
-              {totalCount === 0 
-                ? '00 / 00 PROTOCOLS' 
-                : `${String(completedCount).padStart(2, '0')} / ${String(totalCount).padStart(2, '0')} COMPLETED`}
-            </div>
+            </h1>
+            <p className="text-[11px] font-mono text-sub">
+              {totalCount === 0
+                ? 'No habits today'
+                : `${completedCount} of ${totalCount} completed`}
+            </p>
           </div>
         </div>
 
-        {/* Big Display Percentage & Progress Bar */}
-        <div className="flex flex-col sm:items-end gap-1.5 w-full sm:w-60 flex-shrink-0 pt-2 sm:pt-0 border-t border-subtle sm:border-t-0">
-          <div className="flex items-baseline justify-between sm:justify-end gap-2 w-full">
-            <span className="text-[10px] font-mono tracking-widest text-sub uppercase">COMPLIANCE</span>
-            <span className="text-2xl sm:text-3xl font-black font-sans tracking-tight text-main">
-              {percentage}<span className="text-sm font-mono text-[#FF3B30]">%</span>
-            </span>
-          </div>
-          <div className="w-full">
+        {/* Minimal Progress Bar */}
+        <div className="flex items-center gap-3 sm:w-48">
+          <div className="flex-1">
             <Progress
               value={completedCount}
               max={totalCount || 1}
-              size="md"
+              size="sm"
               indicatorColor="#FF3B30"
               showLabel={false}
             />
           </div>
+          <span className="text-xs font-mono font-bold text-main w-9 text-right">
+            {percentage}%
+          </span>
         </div>
       </div>
     </header>

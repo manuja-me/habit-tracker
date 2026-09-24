@@ -150,7 +150,7 @@ function JoinForm() {
       )}
 
       {isSuccess && (
-        <div className="p-3 bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-xs font-mono flex items-center gap-2">
+        <div className="p-3 bg-[#FF3B30]/15 border border-[#FF3B30]/40 text-[#FF3B30] text-xs font-mono flex items-center gap-2">
           <Check className="w-4 h-4 flex-shrink-0" />
           <span>Profile created successfully! Initializing workspace...</span>
         </div>
