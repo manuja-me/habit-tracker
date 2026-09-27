@@ -98,7 +98,7 @@ export function AnalyticsView({ habits, logs }: AnalyticsViewProps) {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-3.5 sm:px-6 space-y-4 sm:space-y-6">
+    <div className="w-full max-w-4xl xl:max-w-7xl mx-auto px-3.5 sm:px-6 space-y-4 sm:space-y-6">
       {/* Top 3 Swiss KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         {/* 30D Adherence */}

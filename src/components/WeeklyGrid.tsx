@@ -37,7 +37,7 @@ export function WeeklyGrid({
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-3.5 sm:px-6">
+    <div className="w-full max-w-4xl xl:max-w-7xl mx-auto px-3.5 sm:px-6">
       <div className="p-3.5 sm:p-5 rounded-none bg-card border border-main transition-colors">
         {/* Week Header & Navigation */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-5 pb-3 border-b border-subtle">

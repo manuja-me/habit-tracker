@@ -74,9 +74,11 @@ function DayNoteRow({
     >
       {/* Left Badge: Day number & English Day Name */}
       <div
-        className={`flex sm:flex-col justify-between sm:justify-center items-center sm:w-24 px-3 py-2 sm:py-3 flex-shrink-0 select-none ${
+        className={`flex sm:flex-col justify-between sm:justify-center items-center w-full sm:w-20 md:w-24 px-2.5 py-2 sm:py-2.5 flex-shrink-0 select-none ${
           isToday
             ? 'bg-[#FF3B30] text-white'
+            : isSelected
+            ? 'bg-subtle text-main border-b sm:border-b-0 sm:border-r border-main font-bold'
             : 'bg-subtle text-sub border-b sm:border-b-0 sm:border-r border-main'
         }`}
       >
@@ -85,7 +87,7 @@ function DayNoteRow({
             {dayNum}
           </span>
           <span className="text-xs sm:text-[10px] font-black font-sans uppercase tracking-wider mt-0.5">
-            {dayName}
+            {dayName.slice(0, 3)}
           </span>
         </div>
 
@@ -116,7 +118,10 @@ function DayNoteRow({
         />
 
         {/* Autosave status indicator */}
-        <div className="flex items-center justify-end h-3 text-[9px] font-mono text-sub">
+        <div className="flex items-center justify-between h-3 text-[9px] font-mono text-sub">
+          <span className="text-[8px] uppercase tracking-wider text-muted-custom">
+            {isSelected ? 'ACTIVE // SYNCED' : ''}
+          </span>
           {isSavedRecently && (
             <span className="inline-flex items-center gap-1 text-[#FF3B30] animate-in fade-in duration-150">
               <Check className="w-2.5 h-2.5 stroke-[3]" /> SAVED
@@ -142,6 +147,20 @@ export function DailyPlanner({
   const { dayNotes, saveDayNote } = useHabitStore();
   const todayStr = getTodayDateString();
   const [anchorDate, setAnchorDate] = useState<string>(selectedDate || todayStr);
+
+  // Keep anchorDate in sync if external selectedDate changes outside the current 7-day window
+  useEffect(() => {
+    if (selectedDate) {
+      try {
+        const currentStart = parseISO(anchorDate);
+        const sel = parseISO(selectedDate);
+        const diff = Math.floor((sel.getTime() - currentStart.getTime()) / (1000 * 3600 * 24));
+        if (diff < 0 || diff >= 7) {
+          setAnchorDate(selectedDate);
+        }
+      } catch {}
+    }
+  }, [selectedDate, anchorDate]);
 
   // Generate 7 consecutive days starting from anchorDate
   const currentRef = parseISO(anchorDate);

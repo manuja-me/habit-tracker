@@ -458,8 +458,11 @@ export default function HabitTrackerPage() {
       {/* Main View Content */}
       <main className="w-full">
         {activeTab === 'today' && (
-          <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 space-y-4">
-            {/* Filter pills & count */}
+          <div className="w-full max-w-4xl xl:max-w-7xl mx-auto px-4 sm:px-6">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 xl:gap-8 items-start">
+              {/* Left Column: Habits Section */}
+              <div className="xl:col-span-7 space-y-4">
+                {/* Filter pills & count */}
             <div className="flex items-center justify-between gap-3 mb-2">
               <div className="flex items-center bg-card p-0.5 border border-main">
                 {[
@@ -596,12 +599,24 @@ export default function HabitTrackerPage() {
                 )}
               </div>
             )}
+              </div>
+
+              {/* Right Column: Desktop Full-Screen Daily Planner & Notes Overview Sidebar */}
+              <div className="hidden xl:block xl:col-span-5 sticky top-4 space-y-4">
+                <div className="bg-card p-4 sm:p-5 border border-main shadow-xs">
+                  <DailyPlanner
+                    selectedDate={selectedDate}
+                    onSelectDate={setSelectedDate}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
         {activeTab === 'planner' && (
-          <div className="w-full max-w-4xl mx-auto px-4 sm:px-6">
-            <div className="bg-card p-4 sm:p-6 border border-main">
+          <div className="w-full max-w-4xl xl:max-w-5xl mx-auto px-4 sm:px-6">
+            <div className="bg-card p-4 sm:p-6 border border-main shadow-xs">
               <DailyPlanner
                 selectedDate={selectedDate}
                 onSelectDate={setSelectedDate}

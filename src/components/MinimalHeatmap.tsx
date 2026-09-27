@@ -84,7 +84,7 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-3.5 sm:px-6 space-y-4 sm:space-y-6">
+    <div className="w-full max-w-4xl xl:max-w-7xl mx-auto px-3.5 sm:px-6 space-y-4 sm:space-y-6">
       {/* 1. TOP SECTION: Overall Consistency Heatmap (All Habits) */}
       <div className="p-4 sm:p-5 rounded-none bg-card border border-main transition-colors space-y-4">
         {/* Header */}

@@ -20,7 +20,7 @@ export function ViewTabs({ activeTab, onTabChange }: ViewTabsProps) {
   ];
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 mb-5">
+    <div className="w-full max-w-4xl xl:max-w-7xl mx-auto px-4 sm:px-6 mb-5">
       <div className="flex items-center gap-1 border-b border-subtle overflow-x-auto scrollbar-none pb-px">
         {tabs.map((tab) => {
           const Icon = tab.icon;

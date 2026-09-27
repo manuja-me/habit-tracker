@@ -48,7 +48,7 @@ export function Header({
   const percentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   return (
-    <header className="w-full max-w-4xl mx-auto pt-6 pb-2 px-4 sm:px-6">
+    <header className="w-full max-w-4xl xl:max-w-7xl mx-auto pt-6 pb-2 px-4 sm:px-6">
       {/* Top Bar: Brand, Action & Settings */}
       <div className="flex items-center justify-between gap-4 mb-4">
         {/* Brand */}
