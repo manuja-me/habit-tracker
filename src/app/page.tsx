@@ -451,7 +451,7 @@ export default function HabitTrackerPage() {
   }
 
   return (
-    <div className="min-h-screen bg-main text-main pb-16 selection:bg-[#FF3B30] selection:text-white transition-colors font-mono">
+    <div className="min-h-screen bg-main text-main pb-16 transition-colors font-mono">
       {/* Top Header */}
       <Header
         selectedDate={selectedDate}

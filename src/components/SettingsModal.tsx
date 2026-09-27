@@ -154,12 +154,13 @@ export function SettingsModal({
             <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-sub block">
               Gruvbox Accent Tone
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               {[
                 { id: 'orange', label: 'Orange', color: '#FE8019' },
                 { id: 'aqua', label: 'Aqua', color: '#8EC07C' },
                 { id: 'yellow', label: 'Yellow', color: '#FABD2F' },
                 { id: 'green', label: 'Green', color: '#B8BB26' },
+                { id: 'blue', label: 'Blue', color: '#83A598' },
               ].map((acc) => {
                 const isSelected = (accent || 'orange') === acc.id;
                 return (
