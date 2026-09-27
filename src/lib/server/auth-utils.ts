@@ -1,9 +1,10 @@
 import crypto from 'crypto';
 
 export const OWNER_USER_ID = '00000000-0000-0000-0000-000000000001';
-export const PIN_SALT = 'zenith_server_salt_88f2_secret';
-export const SECRET_HMAC_KEY = 'zenith_session_hmac_secret_key_44b1c8';
-const configuredMasterPin = process.env.APP_SECRET_PIN || process.env.MASTER_PIN || '1001';
+export const PIN_SALT = process.env.PIN_SALT || 'zenith_server_salt_88f2_secret';
+export const SECRET_HMAC_KEY = process.env.SESSION_SECRET || process.env.SECRET_HMAC_KEY || 'zenith_session_hmac_secret_key_44b1c8';
+const rawMasterPin = process.env.APP_SECRET_PIN || process.env.MASTER_PIN || '1001';
+const configuredMasterPin = rawMasterPin.trim().replace(/^["']|["']$/g, '');
 export const MASTER_PIN_HASH = crypto.createHash('sha256').update(configuredMasterPin + PIN_SALT).digest('hex');
 export const COOKIE_NAME = 'zenith_session_v1';
 

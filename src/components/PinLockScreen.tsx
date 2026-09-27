@@ -22,17 +22,6 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   const lockoutSecondsRef = useRef(lockoutSeconds);
   lockoutSecondsRef.current = lockoutSeconds;
 
-  // Auto check URL query string ?pin= on mount
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const urlPin = params.get('pin');
-      if (urlPin && urlPin.length === 4) {
-        verifyAndSubmit(urlPin);
-      }
-    }
-  }, []);
-
   // Auto focus container on mount so key events work instantly without clicking
   useEffect(() => {
     containerRef.current?.focus();
@@ -42,7 +31,11 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   useEffect(() => {
     if (lockoutSeconds !== null && lockoutSeconds > 0) {
       const timer = setInterval(() => {
-        setLockoutSeconds((prev) => (prev !== null && prev > 1 ? prev - 1 : null));
+        setLockoutSeconds((prev) => {
+          const next = prev !== null && prev > 1 ? prev - 1 : null;
+          lockoutSecondsRef.current = next;
+          return next;
+        });
       }, 1000);
       return () => clearInterval(timer);
     }
@@ -50,28 +43,30 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
 
   const verifyAndSubmit = async (enteredPin: string) => {
     if (enteredPin.length !== 4 || isVerifyingRef.current || lockoutSecondsRef.current !== null) return;
+    isVerifyingRef.current = true;
     setIsVerifying(true);
     setErrorMsg(null);
 
     try {
       const result = await verifyPinAction(enteredPin);
       if (result.success) {
-        // Clean URL if ?pin= was used
-        if (typeof window !== 'undefined' && window.location.search.includes('pin=')) {
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
         onUnlock();
       } else {
         setErrorMsg(result.error || 'INVALID PIN // ACCESS DENIED');
         if (result.waitSeconds) {
           setLockoutSeconds(result.waitSeconds);
+          lockoutSecondsRef.current = result.waitSeconds;
         }
+        pinRef.current = '';
         setPin('');
       }
     } catch (err: any) {
-      setErrorMsg('SERVER VERIFICATION FAILED');
+      console.error('verifyPinAction client exception:', err);
+      setErrorMsg(err?.message ? `SERVER ERROR: ${err.message}` : 'SERVER VERIFICATION FAILED');
+      pinRef.current = '';
       setPin('');
     } finally {
+      isVerifyingRef.current = false;
       setIsVerifying(false);
     }
   };
@@ -81,6 +76,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
     const currentPin = pinRef.current;
     if (currentPin.length < 4) {
       const nextPin = currentPin + digit;
+      pinRef.current = nextPin;
       setPin(nextPin);
       if (nextPin.length === 4) {
         verifyAndSubmit(nextPin);
@@ -90,7 +86,16 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
 
   const handleBackspace = () => {
     if (lockoutSecondsRef.current !== null || isVerifyingRef.current) return;
-    setPin((prev) => prev.slice(0, -1));
+    const nextPin = pinRef.current.slice(0, -1);
+    pinRef.current = nextPin;
+    setPin(nextPin);
+    setErrorMsg(null);
+  };
+
+  const handleClear = () => {
+    if (lockoutSecondsRef.current !== null || isVerifyingRef.current) return;
+    pinRef.current = '';
+    setPin('');
     setErrorMsg(null);
   };
 
@@ -108,8 +113,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
         handleBackspace();
       } else if (e.key === 'Escape' || e.key.toLowerCase() === 'c') {
         e.preventDefault();
-        setPin('');
-        setErrorMsg(null);
+        handleClear();
       }
     };
 
@@ -121,6 +125,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
     const text = e.clipboardData.getData('text').trim();
     if (/^\d{4}$/.test(text) && lockoutSecondsRef.current === null && !isVerifyingRef.current) {
       e.preventDefault();
+      pinRef.current = text;
       setPin(text);
       verifyAndSubmit(text);
     }
@@ -231,10 +236,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
           <button
             type="button"
             disabled={lockoutSeconds !== null || isVerifying}
-            onClick={() => {
-              setPin('');
-              setErrorMsg(null);
-            }}
+            onClick={handleClear}
             className="h-14 sm:h-16 rounded-none bg-input hover:bg-subtle active:bg-neutral-800 border border-main text-xs font-mono font-black tracking-wider text-sub hover:text-main transition-all active:scale-[0.96] cursor-pointer flex items-center justify-center disabled:opacity-30 touch-manipulation select-none"
           >
             CLEAR

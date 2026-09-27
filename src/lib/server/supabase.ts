@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 
 // Server-side private credentials
 export function getCleanSupabaseConfig() {
-  let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
-  const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim();
+  let url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim().replace(/^["']|["']$/g, '');
+  let key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '').trim().replace(/^["']|["']$/g, '');
 
   if (!url || !key) return null;
 
@@ -27,12 +27,17 @@ export function getCleanSupabaseConfig() {
 }
 
 export function getServerSupabase() {
-  const config = getCleanSupabaseConfig();
-  if (!config) return null;
-  return createClient(config.url, config.key, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
+  try {
+    const config = getCleanSupabaseConfig();
+    if (!config) return null;
+    return createClient(config.url, config.key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
+  } catch (err) {
+    console.error('Failed to create Supabase client:', err);
+    return null;
+  }
 }

@@ -1,5 +1,5 @@
--- ==========================================================
--- ZENITH HABIT TRACKER — SECURE SUPABASE SCHEMA
+ï»¿-- ==========================================================
+-- ZENITH HABIT TRACKER ï¿½ SECURE SUPABASE SCHEMA
 -- Completely Protected Server Actions
 -- Supports Multi-User Privacy, One-Time Friend Invitations,
 -- and Dedicated DAY_NOTES Table (No notes in habit_logs)
@@ -159,14 +159,15 @@ ALTER TABLE public.habits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.habit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.day_notes ENABLE ROW LEVEL SECURITY;
 
--- 8. Access Policies (Allow server actions to read/write whether using service_role or anon key)
-DROP POLICY IF EXISTS  Allow service role only app_users ON public.app_users;
-DROP POLICY IF EXISTS Allow access app_users ON public.app_users;
-CREATE POLICY Allow access app_users ON public.app_users FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
+-- 8. Access Policies
+-- CRITICAL SECURITY: app_users and invitations are restricted to backend service_role ONLY (blocked from anon/public)
+DROP POLICY IF EXISTS "Allow service role only app_users" ON public.app_users;
+DROP POLICY IF EXISTS "Allow access app_users" ON public.app_users;
+CREATE POLICY "Allow service role only app_users" ON public.app_users FOR ALL TO service_role USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS Allow service role only invitations ON public.invitations;
-DROP POLICY IF EXISTS Allow access invitations ON public.invitations;
-CREATE POLICY Allow access invitations ON public.invitations FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow service role only invitations" ON public.invitations;
+DROP POLICY IF EXISTS "Allow access invitations" ON public.invitations;
+CREATE POLICY "Allow service role only invitations" ON public.invitations FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS Allow service role only habits ON public.habits;
 DROP POLICY IF EXISTS Allow access habits ON public.habits;

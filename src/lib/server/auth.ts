@@ -26,76 +26,96 @@ export async function verifyPinAction(enteredPin: string): Promise<{
   waitSeconds?: number;
   user?: SessionUser;
 }> {
-  const rateLimitKey = 'global_pin_attempt';
-  const rateCheck = checkRateLimit(rateLimitKey);
+  try {
+    const rateLimitKey = 'global_pin_attempt';
+    const rateCheck = checkRateLimit(rateLimitKey);
 
-  if (!rateCheck.allowed) {
-    return {
-      success: false,
-      error: `Too many failed attempts. Locked for ${rateCheck.waitSeconds}s.`,
-      waitSeconds: rateCheck.waitSeconds,
-    };
-  }
+    if (!rateCheck.allowed) {
+      return {
+        success: false,
+        error: `Too many failed attempts. Locked for ${rateCheck.waitSeconds}s.`,
+        waitSeconds: rateCheck.waitSeconds,
+      };
+    }
 
-  if (!enteredPin || enteredPin.length !== 4) {
-    recordFailedAttempt(rateLimitKey);
-    return { success: false, error: 'Invalid PIN length.' };
-  }
+    if (!enteredPin || enteredPin.length !== 4) {
+      recordFailedAttempt(rateLimitKey);
+      return { success: false, error: 'Invalid PIN length.' };
+    }
 
-  const computedHash = hashPin(enteredPin);
+    const cleanPin = enteredPin.trim();
+    const computedHash = hashPin(cleanPin);
 
-  // 1. Check Master Owner PIN
-  const isOwnerMatch = crypto.timingSafeEqual(Buffer.from(computedHash), Buffer.from(MASTER_PIN_HASH));
-  let matchedUser: SessionUser | null = null;
+    // 1. Check Master Owner PIN with buffer length check
+    const computedBuf = Buffer.from(computedHash);
+    const masterBuf = Buffer.from(MASTER_PIN_HASH);
+    const isOwnerMatch =
+      computedBuf.length === masterBuf.length &&
+      crypto.timingSafeEqual(computedBuf, masterBuf);
 
-  if (isOwnerMatch) {
-    matchedUser = {
-      userId: OWNER_USER_ID,
-      username: 'owner',
-      role: 'owner',
-    };
-  } else {
-    // 2. Query app_users table in Supabase
-    const supabase = getServerSupabase();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('app_users')
-          .select('id, username, role, pin_hash')
-          .eq('pin_hash', computedHash)
-          .maybeSingle();
+    let matchedUser: SessionUser | null = null;
 
-        if (data && !error) {
-          matchedUser = {
-            userId: data.id,
-            username: data.username,
-            role: (data.role as any) || 'member',
-          };
+    if (isOwnerMatch) {
+      matchedUser = {
+        userId: OWNER_USER_ID,
+        username: 'owner',
+        role: 'owner',
+      };
+    } else {
+      // 2. Query app_users table in Supabase
+      const supabase = getServerSupabase();
+      if (supabase) {
+        try {
+          const { data, error } = await supabase
+            .from('app_users')
+            .select('id, username, role, pin_hash')
+            .eq('pin_hash', computedHash)
+            .maybeSingle();
+
+          if (error) {
+            console.error('Supabase app_users query error:', error.message);
+            return { success: false, error: 'Database connection error. Please try again.' };
+          }
+
+          if (data) {
+            matchedUser = {
+              userId: data.id,
+              username: data.username,
+              role: (data.role as any) || 'member',
+            };
+          }
+        } catch (err: any) {
+          console.error('app_users table lookup exception:', err);
+          return { success: false, error: 'Database connection failed. Please retry in a moment.' };
         }
-      } catch (err) {
-        console.warn('app_users table lookup notice:', err);
       }
     }
+
+    if (!matchedUser) {
+      recordFailedAttempt(rateLimitKey);
+      return { success: false, error: 'Invalid PIN. Access denied.' };
+    }
+
+    // Success: Reset rate limits and issue secure HttpOnly cookie
+    resetFailedAttempts(rateLimitKey);
+    const token = createSessionToken(matchedUser);
+
+    const cookieStore = await cookies();
+    cookieStore.set(COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+    });
+
+    return { success: true, user: matchedUser };
+  } catch (err: any) {
+    console.error('Unhandled verifyPinAction error:', err);
+    return {
+      success: false,
+      error: err?.message || 'Internal authentication error. Please try again.',
+    };
   }
-
-  if (!matchedUser) {
-    recordFailedAttempt(rateLimitKey);
-    return { success: false, error: 'Invalid PIN. Access denied.' };
-  }
-
-  // Success: Reset rate limits and issue secure HttpOnly cookie
-  resetFailedAttempts(rateLimitKey);
-  const token = createSessionToken(matchedUser);
-
-  const cookieStore = await cookies();
-  cookieStore.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-  });
-
-  return { success: true, user: matchedUser };
 }
 
 /**
