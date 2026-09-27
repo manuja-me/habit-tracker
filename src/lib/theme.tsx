@@ -3,23 +3,30 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 export type Theme = 'gruvbox-dark' | 'gruvbox-light';
+export type GruvboxAccent = 'orange' | 'aqua' | 'yellow' | 'green' | 'blue';
 
 interface ThemeContextType {
   theme: Theme;
+  accent: GruvboxAccent;
   setTheme: (theme: Theme) => void;
+  setAccent: (accent: GruvboxAccent) => void;
   toggleTheme: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextType>({
   theme: 'gruvbox-dark',
+  accent: 'orange',
   setTheme: () => {},
+  setAccent: () => {},
   toggleTheme: () => {},
 });
 
 const THEME_KEY = 'zenith_theme_v2';
+const ACCENT_KEY = 'zenith_accent_v1';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('gruvbox-dark');
+  const [accent, setAccentState] = useState<GruvboxAccent>('orange');
 
   useEffect(() => {
     try {
@@ -39,6 +46,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         setThemeState(initial);
         document.documentElement.setAttribute('data-theme', initial);
       }
+
+      const savedAccent = (localStorage.getItem(ACCENT_KEY) as GruvboxAccent) || 'orange';
+      if (['orange', 'aqua', 'yellow', 'green', 'blue'].includes(savedAccent)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setAccentState(savedAccent);
+        document.documentElement.setAttribute('data-accent', savedAccent);
+      }
     } catch (e) {
       console.warn('Could not load theme from localStorage', e);
     }
@@ -54,13 +68,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const setAccent = (newAccent: GruvboxAccent) => {
+    setAccentState(newAccent);
+    document.documentElement.setAttribute('data-accent', newAccent);
+    try {
+      localStorage.setItem(ACCENT_KEY, newAccent);
+    } catch (e) {
+      console.warn('Could not save accent to localStorage', e);
+    }
+  };
+
   const toggleTheme = () => {
     const nextTheme: Theme = theme === 'gruvbox-dark' ? 'gruvbox-light' : 'gruvbox-dark';
     setTheme(nextTheme);
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, accent, setTheme, setAccent, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );

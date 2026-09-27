@@ -49,7 +49,7 @@ export function SettingsModal({
   onLockApp,
 }: SettingsModalProps) {
   const { isSyncing, isCloudReady, currentUser, syncWithCloud, syncError } = useHabitStore();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, accent, setAccent } = useTheme();
   const [soundOn, setSoundOn] = useState(true);
   const [justSynced, setJustSynced] = useState(false);
   const [lastVisitDisplay, setLastVisitDisplay] = useState('First recorded session');
@@ -147,6 +147,41 @@ export function SettingsModal({
                 </button>
               );
             })}
+          </div>
+
+          {/* Accent Tone Selection */}
+          <div className="pt-2 space-y-2">
+            <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-sub block">
+              Gruvbox Accent Tone
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { id: 'orange', label: 'Orange', color: '#FE8019' },
+                { id: 'aqua', label: 'Aqua', color: '#8EC07C' },
+                { id: 'yellow', label: 'Yellow', color: '#FABD2F' },
+                { id: 'green', label: 'Green', color: '#B8BB26' },
+              ].map((acc) => {
+                const isSelected = (accent || 'orange') === acc.id;
+                return (
+                  <button
+                    key={acc.id}
+                    type="button"
+                    onClick={() => setAccent(acc.id as any)}
+                    className={`flex items-center gap-2 p-2 border text-xs font-mono font-bold transition-all cursor-pointer ${
+                      isSelected
+                        ? 'border-main bg-card text-main shadow-xs ring-1 ring-main'
+                        : 'border-subtle bg-input text-sub hover:text-main hover:border-main'
+                    }`}
+                  >
+                    <span
+                      className="w-3.5 h-3.5 shrink-0 rounded-none shadow-xs border border-black/20"
+                      style={{ backgroundColor: acc.color }}
+                    />
+                    <span className="truncate">{acc.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 

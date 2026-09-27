@@ -101,7 +101,7 @@ function DayNoteRow({
       <div
         className={`flex sm:flex-col justify-between sm:justify-center items-center w-full sm:w-20 md:w-24 px-2.5 py-2 sm:py-2.5 flex-shrink-0 select-none ${
           isToday
-            ? 'bg-[#FF3B30] text-white'
+            ? 'bg-[#FF3B30] text-[var(--accent-fg)] font-bold'
             : isSelected
             ? 'bg-subtle text-main border-b sm:border-b-0 sm:border-r border-main font-bold'
             : 'bg-subtle text-sub border-b sm:border-b-0 sm:border-r border-main'
@@ -121,7 +121,7 @@ function DayNoteRow({
             {month}
           </span>
           {isToday && (
-            <span className="text-[8px] font-mono font-black uppercase px-1.5 py-0.2 bg-black/40 text-white border border-white/20">
+            <span className="text-[8px] font-mono font-black uppercase px-1.5 py-0.2 bg-black/15 text-[var(--accent-fg)] border border-black/25">
               TODAY
             </span>
           )}
