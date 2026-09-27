@@ -86,28 +86,53 @@ export function generateId(): string {
   });
 }
 
-function persistLocally(newHabits: Habit[], newLogs: Record<string, HabitLog>) {
+function getHabitsStorageKey(userId?: string) {
+  return userId ? `zenith_habits_${userId}` : HABITS_STORAGE_KEY;
+}
+
+function getLogsStorageKey(userId?: string) {
+  return userId ? `zenith_logs_${userId}` : LOGS_STORAGE_KEY;
+}
+
+function getDayNotesStorageKey(userId?: string) {
+  return userId ? `zenith_day_notes_${userId}` : DAY_NOTES_STORAGE_KEY;
+}
+
+export function clearLocalUserData() {
+  globalHabits = [];
+  globalLogs = {};
+  globalDayNotes = {};
+  globalCurrentUser = null;
+  lastLocalMutationTime = 0;
+  pendingDeletedHabitIds.clear();
+  pendingAddedHabits.clear();
+  isStorageLoaded = false;
+  emitChange();
+}
+
+function persistLocally(newHabits: Habit[], newLogs: Record<string, HabitLog>, userId?: string) {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(HABITS_STORAGE_KEY, JSON.stringify(newHabits));
-    localStorage.setItem(LOGS_STORAGE_KEY, JSON.stringify(newLogs));
+    const uid = userId || globalCurrentUser?.id;
+    localStorage.setItem(getHabitsStorageKey(uid), JSON.stringify(newHabits));
+    localStorage.setItem(getLogsStorageKey(uid), JSON.stringify(newLogs));
   } catch (e) {
     console.error('Failed to save to localStorage', e);
   }
 }
 
-function loadLocalDataFromStorage() {
-  if (typeof window === 'undefined' || isStorageLoaded) return;
+function loadLocalDataFromStorage(userId?: string) {
+  if (typeof window === 'undefined') return;
   try {
-    const storedHabits = localStorage.getItem(HABITS_STORAGE_KEY);
-    const storedLogs = localStorage.getItem(LOGS_STORAGE_KEY);
-    const storedDayNotes = localStorage.getItem(DAY_NOTES_STORAGE_KEY);
+    const uid = userId || globalCurrentUser?.id;
+    const storedHabits = localStorage.getItem(getHabitsStorageKey(uid));
+    const storedLogs = localStorage.getItem(getLogsStorageKey(uid));
+    const storedDayNotes = localStorage.getItem(getDayNotesStorageKey(uid));
 
     if (storedHabits) {
       globalHabits = JSON.parse(storedHabits);
     } else {
       globalHabits = INITIAL_DEFAULT_HABITS;
-      localStorage.setItem(HABITS_STORAGE_KEY, JSON.stringify(INITIAL_DEFAULT_HABITS));
     }
 
     if (storedLogs) {
@@ -162,6 +187,13 @@ async function executeCloudSync(isBackground = false) {
     globalSyncError = null;
 
     if (res.user) {
+      if (globalCurrentUser && globalCurrentUser.id !== res.user.id) {
+        globalHabits = [];
+        globalLogs = {};
+        globalDayNotes = {};
+        pendingDeletedHabitIds.clear();
+        pendingAddedHabits.clear();
+      }
       globalCurrentUser = res.user;
     }
 
@@ -244,7 +276,7 @@ async function executeCloudSync(isBackground = false) {
         globalDayNotes = mergedDayNotes;
         if (typeof window !== 'undefined') {
           try {
-            localStorage.setItem(DAY_NOTES_STORAGE_KEY, JSON.stringify(globalDayNotes));
+            localStorage.setItem(getDayNotesStorageKey(res.user?.id || globalCurrentUser?.id), JSON.stringify(globalDayNotes));
           } catch (e) {
             console.error('Failed to save day notes to localStorage', e);
           }
@@ -516,7 +548,7 @@ export function useHabitStore() {
     };
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem(DAY_NOTES_STORAGE_KEY, JSON.stringify(globalDayNotes));
+        localStorage.setItem(getDayNotesStorageKey(globalCurrentUser?.id), JSON.stringify(globalDayNotes));
       } catch (e) {
         console.error('Failed to save day notes to localStorage', e);
       }

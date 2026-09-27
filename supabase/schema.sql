@@ -1,4 +1,4 @@
-﻿-- ==========================================================
+-- ==========================================================
 -- ZENITH HABIT TRACKER � SECURE SUPABASE SCHEMA
 -- Completely Protected Server Actions
 -- Supports Multi-User Privacy, One-Time Friend Invitations,
@@ -11,9 +11,13 @@ CREATE TABLE IF NOT EXISTS public.app_users (
     username TEXT UNIQUE NOT NULL,
     pin_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'member', -- 'owner' | 'member'
+    last_login_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Safe migration for existing installations (Add last_login_at column if not exists)
+ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
 
 -- Ensure fixed Owner user exists (Default PIN 1001 with salt)
 INSERT INTO public.app_users (id, username, pin_hash, role)

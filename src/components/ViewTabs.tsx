@@ -1,16 +1,17 @@
 'use client';
 
 import React from 'react';
-import { CheckSquare, Calendar, PenLine, Activity, BarChart2 } from 'lucide-react';
+import { CheckSquare, Calendar, PenLine, Activity, BarChart2, Users } from 'lucide-react';
 
-export type ActiveTab = 'today' | 'week' | 'planner' | 'heatmap' | 'analytics';
+export type ActiveTab = 'today' | 'week' | 'planner' | 'heatmap' | 'analytics' | 'admin';
 
 interface ViewTabsProps {
   activeTab: ActiveTab;
   onTabChange: (tab: ActiveTab) => void;
+  isAdmin?: boolean;
 }
 
-export function ViewTabs({ activeTab, onTabChange }: ViewTabsProps) {
+export function ViewTabs({ activeTab, onTabChange, isAdmin = false }: ViewTabsProps) {
   const tabs: { id: ActiveTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'today', label: 'Today', icon: CheckSquare },
     { id: 'week', label: 'Week', icon: Calendar },
@@ -18,6 +19,10 @@ export function ViewTabs({ activeTab, onTabChange }: ViewTabsProps) {
     { id: 'heatmap', label: 'Heatmap', icon: Activity },
     { id: 'analytics', label: 'Stats', icon: BarChart2 },
   ];
+
+  if (isAdmin) {
+    tabs.push({ id: 'admin', label: 'Users', icon: Users });
+  }
 
   return (
     <div className="w-full max-w-4xl xl:max-w-7xl mx-auto px-4 sm:px-6 mb-5">

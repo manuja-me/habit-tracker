@@ -100,6 +100,22 @@ export async function verifyPinAction(enteredPin: string): Promise<{
     resetFailedAttempts(rateLimitKey);
     const token = createSessionToken(matchedUser);
 
+    // Record last login timestamp in app_users
+    const supabaseClient = getServerSupabase();
+    if (supabaseClient) {
+      try {
+        await supabaseClient
+          .from('app_users')
+          .update({
+            last_login_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', matchedUser.userId);
+      } catch (logErr) {
+        console.warn('Could not record last_login_at:', logErr);
+      }
+    }
+
     const cookieStore = await cookies();
     cookieStore.set(COOKIE_NAME, token, {
       httpOnly: true,
@@ -305,15 +321,25 @@ export async function completeInviteSetupAction(
     }
 
     // Insert new user
-    const { data: newUser, error: insertErr } = await supabase
+    const newUserPayload: any = {
+      username: cleanUsername,
+      pin_hash: hashedPin,
+      role: 'member',
+      last_login_at: new Date().toISOString(),
+    };
+
+    let { data: newUser, error: insertErr } = await supabase
       .from('app_users')
-      .insert({
-        username: cleanUsername,
-        pin_hash: hashedPin,
-        role: 'member',
-      })
+      .insert(newUserPayload)
       .select()
       .single();
+
+    if (insertErr && (insertErr.message?.includes('last_login_at') || insertErr.code === '42703')) {
+      delete newUserPayload.last_login_at;
+      const retry = await supabase.from('app_users').insert(newUserPayload).select().single();
+      newUser = retry.data;
+      insertErr = retry.error;
+    }
 
     if (insertErr || !newUser) {
       throw insertErr || new Error('Failed to create user');

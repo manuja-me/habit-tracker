@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { useHabitStore } from '../lib/store';
+import { useHabitStore, clearLocalUserData } from '../lib/store';
 import { Habit } from '../lib/types';
 import { calculateHabitStats, isDaySuccessful } from '../lib/utils/streaks';
 import { getTodayDateString, isHabitDueOnDate } from '../lib/utils/date';
@@ -15,6 +15,7 @@ import { WeeklyGrid } from '../components/WeeklyGrid';
 import { MinimalHeatmap } from '../components/MinimalHeatmap';
 import { AnalyticsView } from '../components/AnalyticsView';
 import { DailyPlanner } from '../components/DailyPlanner';
+import { AdminUsersView } from '../components/AdminUsersView';
 import { HabitModal } from '../components/HabitModal';
 import { SettingsModal } from '../components/SettingsModal';
 import { ShortcutsModal } from '../components/ShortcutsModal';
@@ -39,6 +40,7 @@ export default function HabitTrackerPage() {
   const {
     habits,
     logs,
+    currentUser,
     isLoading,
     toggleHabit,
     addHabit,
@@ -143,6 +145,7 @@ export default function HabitTrackerPage() {
       sessionStorage.getItem('zenith_session_unlocked') === 'true';
 
     if (!isSessionUnlocked) {
+      clearLocalUserData();
       setIsUnlocked(false);
       lockSessionAction().catch(() => {});
       return;
@@ -156,6 +159,7 @@ export default function HabitTrackerPage() {
             setIsUnlocked(true);
             syncWithCloud();
           } else {
+            clearLocalUserData();
             if (typeof window !== 'undefined') {
               sessionStorage.removeItem('zenith_session_unlocked');
             }
@@ -164,6 +168,7 @@ export default function HabitTrackerPage() {
         }
       } catch (err) {
         if (isMounted) {
+          clearLocalUserData();
           if (typeof window !== 'undefined') {
             sessionStorage.removeItem('zenith_session_unlocked');
           }
@@ -191,7 +196,9 @@ export default function HabitTrackerPage() {
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('zenith_session_unlocked');
     }
+    clearLocalUserData();
     await lockSessionAction();
+    setActiveTab('today');
     setIsUnlocked(false);
   };
 
@@ -387,6 +394,9 @@ export default function HabitTrackerPage() {
       } else if (e.key === '5') {
         e.preventDefault();
         setActiveTab('analytics');
+      } else if (e.key === '6' && currentUser?.role === 'owner') {
+        e.preventDefault();
+        setActiveTab('admin');
       }
       // Toggle Shortcuts modal: ?
       else if (e.key === '?') {
@@ -453,7 +463,7 @@ export default function HabitTrackerPage() {
       />
 
       {/* Navigation Tabs */}
-      <ViewTabs activeTab={activeTab} onTabChange={setActiveTab} />
+      <ViewTabs activeTab={activeTab} onTabChange={setActiveTab} isAdmin={currentUser?.role === 'owner'} />
 
       {/* Main View Content */}
       <main className="w-full">
@@ -641,6 +651,10 @@ export default function HabitTrackerPage() {
 
         {activeTab === 'analytics' && (
           <AnalyticsView habits={habits} logs={logs} />
+        )}
+
+        {activeTab === 'admin' && currentUser?.role === 'owner' && (
+          <AdminUsersView onOpenInvite={() => setIsInviteModalOpen(true)} />
         )}
       </main>
 

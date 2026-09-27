@@ -224,9 +224,25 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
  */
 export async function deleteHabitAction(habitId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAuth();
+    const user = await requireAuth();
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
+
+    const isOwner = user.role === 'owner' || user.userId === OWNER_USER_ID;
+
+    // Verify habit ownership before deleting
+    const { data: habitRecord } = await supabase
+      .from('habits')
+      .select('id, user_id')
+      .eq('id', habitId)
+      .maybeSingle();
+
+    if (habitRecord) {
+      const isOwnerOrSelf = habitRecord.user_id === user.userId || (isOwner && !habitRecord.user_id);
+      if (!isOwnerOrSelf) {
+        return { success: false, error: 'Unauthorized: Cannot modify other users data.' };
+      }
+    }
 
     // 1. Delete associated logs first to prevent foreign key errors
     await supabase.from('habit_logs').delete().eq('habit_id', habitId);
@@ -286,12 +302,18 @@ export async function saveHabitLogAction(log: HabitLog): Promise<{ success: bool
  */
 export async function reorderHabitsAction(orderedHabits: Habit[]): Promise<{ success: boolean; error?: string }> {
   try {
-    await requireAuth();
+    const user = await requireAuth();
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
+    const isOwner = user.role === 'owner' || user.userId === OWNER_USER_ID;
+
     for (const h of orderedHabits) {
-      await supabase.from('habits').update({ sort_order: h.order }).eq('id', h.id);
+      const query = supabase.from('habits').update({ sort_order: h.order }).eq('id', h.id);
+      if (!isOwner) {
+        query.eq('user_id', user.userId);
+      }
+      await query;
     }
     return { success: true };
   } catch (err: any) {
@@ -334,5 +356,84 @@ export async function saveDayNoteAction(date: string, content: string): Promise<
   } catch (err: any) {
     console.error('saveDayNoteAction catch error:', err);
     return { success: false, error: err?.message };
+  }
+}
+
+export interface AdminUserRecord {
+  id: string;
+  username: string;
+  role: 'owner' | 'member';
+  created_at: string;
+  last_login_at: string | null;
+}
+
+/**
+ * Server Action: Get List of System Users (Owner / Admin Only)
+ * Privacy Guarantee: Strictly excludes pin_hash and habit/note records.
+ */
+export async function getAdminUsersAction(): Promise<{
+  success: boolean;
+  users?: AdminUserRecord[];
+  error?: string;
+}> {
+  try {
+    const user = await requireAuth();
+    if (user.role !== 'owner') {
+      return { success: false, error: 'Unauthorized: Only the system owner can view user directory.' };
+    }
+
+    const supabase = getServerSupabase();
+    if (!supabase) {
+      return {
+        success: true,
+        users: [
+          {
+            id: user.userId,
+            username: user.username,
+            role: 'owner',
+            created_at: new Date().toISOString(),
+            last_login_at: new Date().toISOString(),
+          },
+        ],
+      };
+    }
+
+    // Select only safe directory fields (NEVER pin_hash, NEVER habits/logs)
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('id, username, role, created_at, last_login_at, updated_at')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      // Fallback if last_login_at column is not yet migrated in Supabase
+      const fallback = await supabase
+        .from('app_users')
+        .select('id, username, role, created_at, updated_at')
+        .order('created_at', { ascending: true });
+
+      if (fallback.error) throw fallback.error;
+
+      const fallbackUsers: AdminUserRecord[] = (fallback.data || []).map((u: any) => ({
+        id: u.id,
+        username: u.username,
+        role: u.role,
+        created_at: u.created_at,
+        last_login_at: u.updated_at || null,
+      }));
+
+      return { success: true, users: fallbackUsers };
+    }
+
+    const users: AdminUserRecord[] = (data || []).map((u: any) => ({
+      id: u.id,
+      username: u.username,
+      role: u.role,
+      created_at: u.created_at,
+      last_login_at: u.last_login_at || u.updated_at || null,
+    }));
+
+    return { success: true, users };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to retrieve system users' };
   }
 }
