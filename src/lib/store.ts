@@ -183,6 +183,7 @@ async function executeCloudSync(isBackground = false) {
       return;
     }
 
+    lastSuccessfulSyncTime = Date.now();
     globalIsCloudReady = Boolean(res.isConfigured);
     globalSyncError = null;
 
@@ -264,9 +265,13 @@ async function executeCloudSync(isBackground = false) {
       const serverDayNotes = res.dayNotes || {};
       const mergedDayNotes = { ...globalDayNotes, ...serverDayNotes };
 
-      // Backfill any local notes that do not exist on the server yet
+      // Backfill any local notes that do not exist on the server yet (scoped to 370 days)
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - 370);
+      const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
+
       Object.entries(globalDayNotes).forEach(([dateStr, content]) => {
-        if (content && !serverDayNotes[dateStr]) {
+        if (content && !serverDayNotes[dateStr] && dateStr >= cutoffDateStr) {
           saveDayNoteAction(dateStr, content).catch(() => {});
         }
       });
@@ -302,8 +307,11 @@ async function executeCloudSync(isBackground = false) {
   }
 }
 
-// Singleton Sync Loop (Runs once across all components)
+// Singleton Sync Coordinator
 let hasStartedSyncLoop = false;
+let lastSuccessfulSyncTime = 0;
+let lastUserInteractionTime = Date.now();
+
 function initGlobalSyncCoordinator() {
   if (typeof window === 'undefined' || hasStartedSyncLoop) return;
   hasStartedSyncLoop = true;
@@ -311,17 +319,40 @@ function initGlobalSyncCoordinator() {
   loadLocalDataFromStorage();
   executeCloudSync();
 
-  // Background polling every 5s when tab is active
-  setInterval(() => {
-    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+  // Track user presence to pause syncing when the user is away or tab left open overnight
+  const recordInteraction = () => {
+    const wasIdle = Date.now() - lastUserInteractionTime > 5 * 60 * 1000;
+    lastUserInteractionTime = Date.now();
+
+    // If user returns after being away (>5 min) and hasn't synced in the last 20s, sync now
+    if (wasIdle && Date.now() - lastSuccessfulSyncTime > 20000) {
       executeCloudSync(true);
     }
-  }, 5000);
+  };
 
-  // Sync on tab focus or visibility change only when no recent local action took place
+  window.addEventListener('mousemove', recordInteraction, { passive: true });
+  window.addEventListener('keydown', recordInteraction, { passive: true });
+  window.addEventListener('touchstart', recordInteraction, { passive: true });
+  window.addEventListener('click', recordInteraction, { passive: true });
+
+  // Intelligent Background Polling (every 60s instead of 5s):
+  // Saves over 92% of Vercel serverless invocations and Supabase egress bandwidth.
+  // Completely sleeps if the user is inactive/away (>5 min).
+  setInterval(() => {
+    if (typeof document === 'undefined') return;
+    if (document.visibilityState !== 'visible') return;
+    if (Date.now() - lastUserInteractionTime > 5 * 60 * 1000) return; // Sleep if idle
+    if (Date.now() - lastLocalMutationTime < 3500) return; // Don't clobber active local edits
+
+    executeCloudSync(true);
+  }, 60000);
+
+  // Sync on tab focus or visibility change with a 20s throttle cooldown
   const handleFocusOrVisibility = () => {
+    recordInteraction();
     if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
       if (Date.now() - lastLocalMutationTime < 3500) return;
+      if (Date.now() - lastSuccessfulSyncTime < 20000) return; // Prevent spam on rapid tab switches
       executeCloudSync(true);
     }
   };

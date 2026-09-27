@@ -75,7 +75,7 @@ function DayNoteRow({
       onSave(dateStr, nextVal);
       setIsSavedRecently(true);
       setTimeout(() => setIsSavedRecently(false), 1500);
-    }, 400);
+    }, 750);
   };
 
   const handleBlur = () => {

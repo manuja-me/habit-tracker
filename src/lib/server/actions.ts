@@ -59,20 +59,42 @@ export async function getHabitsAndLogsAction(): Promise<{
       habitsData = habitsRes.data || [];
     }
 
-    // 2. Fetch logs restricted to this user's habits (100% data isolation guarantee)
+    // 2. Compute date cutoff: past 370 days covers 52-week heatmap, year history, and day planner
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - 370);
+    const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
+
     const userHabitIds = habitsData.map((h: any) => h.id);
     let logsData: any[] = [];
+    const dayNotesMap: Record<string, string> = {};
 
-    if (userHabitIds.length > 0) {
-      const logsRes = await supabase
-        .from('habit_logs')
-        .select('*')
-        .in('habit_id', userHabitIds)
-        .limit(5000);
+    // Run habit_logs and day_notes queries concurrently to halve serverless latency
+    const [logsRes, notesRes] = await Promise.all([
+      userHabitIds.length > 0
+        ? supabase
+            .from('habit_logs')
+            .select('id, habit_id, date, completed, value, created_at, updated_at')
+            .in('habit_id', userHabitIds)
+            .gte('date', cutoffDateStr)
+            .order('date', { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
+      supabase
+        .from('day_notes')
+        .select('date, content')
+        .gte('date', cutoffDateStr)
+        .or(isOwner ? `user_id.eq.${user.userId},user_id.is.null` : `user_id.eq.${user.userId}`),
+    ]);
 
-      if (!logsRes.error && logsRes.data) {
-        logsData = logsRes.data;
-      }
+    if (!logsRes.error && logsRes.data) {
+      logsData = logsRes.data;
+    }
+
+    if (!notesRes.error && notesRes.data) {
+      notesRes.data.forEach((dn: any) => {
+        if (dn.date && dn.content !== undefined) {
+          dayNotesMap[dn.date] = dn.content;
+        }
+      });
     }
 
     const formattedHabits: Habit[] = (habitsData || []).map((h: any) => {
@@ -126,25 +148,6 @@ export async function getHabitsAndLogsAction(): Promise<{
         updated_at: l.updated_at,
       };
     });
-
-    // 3. Fetch day notes directly from day_notes table
-    const dayNotesMap: Record<string, string> = {};
-    try {
-      const notesRes = await supabase
-        .from('day_notes')
-        .select('date, content')
-        .or(isOwner ? `user_id.eq.${user.userId},user_id.is.null` : `user_id.eq.${user.userId}`);
-
-      if (!notesRes.error && notesRes.data) {
-        notesRes.data.forEach((dn: any) => {
-          if (dn.date && dn.content !== undefined) {
-            dayNotesMap[dn.date] = dn.content;
-          }
-        });
-      }
-    } catch (e) {
-      console.warn('day_notes fetch notice:', e);
-    }
 
     return {
       success: true,
@@ -308,13 +311,15 @@ export async function reorderHabitsAction(orderedHabits: Habit[]): Promise<{ suc
 
     const isOwner = user.role === 'owner' || user.userId === OWNER_USER_ID;
 
-    for (const h of orderedHabits) {
-      const query = supabase.from('habits').update({ sort_order: h.order }).eq('id', h.id);
-      if (!isOwner) {
-        query.eq('user_id', user.userId);
-      }
-      await query;
-    }
+    await Promise.all(
+      orderedHabits.map((h) => {
+        const query = supabase.from('habits').update({ sort_order: h.order }).eq('id', h.id);
+        if (!isOwner) {
+          query.eq('user_id', user.userId);
+        }
+        return query;
+      })
+    );
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message };
