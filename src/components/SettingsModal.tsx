@@ -124,21 +124,21 @@ export function SettingsModal({
           <label className="text-xs font-mono font-bold uppercase tracking-wider text-sub block">
             Appearance
           </label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2.5">
             {[
-              { id: 'dark', label: 'Dark', icon: Moon },
-              { id: 'oled', label: 'OLED Black', icon: Moon },
-              { id: 'light', label: 'Light', icon: Sun },
+              { id: 'gruvbox-dark', label: 'Gruvbox Dark', icon: Moon },
+              { id: 'gruvbox-light', label: 'Gruvbox Light', icon: Sun },
             ].map((t) => {
               const Icon = t.icon;
               const isSelected = theme === t.id;
               return (
                 <button
                   key={t.id}
+                  type="button"
                   onClick={() => setTheme(t.id as any)}
-                  className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 border text-xs font-sans font-bold transition-all cursor-pointer ${
+                  className={`flex flex-col items-center justify-center gap-1.5 py-3 px-3 border text-xs font-sans font-bold transition-all cursor-pointer ${
                     isSelected
-                      ? 'border-[#FF3B30] bg-[#FF3B30]/10 text-main font-black'
+                      ? 'border-[#FF3B30] bg-[#FF3B30]/10 text-main font-black shadow-xs'
                       : 'border-subtle bg-input text-sub hover:text-main hover:border-main'
                   }`}
                 >

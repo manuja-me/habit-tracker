@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-export type Theme = 'dark' | 'light' | 'oled';
+export type Theme = 'gruvbox-dark' | 'gruvbox-light';
 
 interface ThemeContextType {
   theme: Theme;
@@ -11,33 +11,36 @@ interface ThemeContextType {
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-  theme: 'dark',
+  theme: 'gruvbox-dark',
   setTheme: () => {},
   toggleTheme: () => {},
 });
 
-const THEME_KEY = 'zenith_theme_v1';
+const THEME_KEY = 'zenith_theme_v2';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('dark');
-  const [mounted, setMounted] = useState(false);
+  const [theme, setThemeState] = useState<Theme>('gruvbox-dark');
 
   useEffect(() => {
     try {
-      const savedTheme = localStorage.getItem(THEME_KEY) as Theme;
-      if (savedTheme && ['dark', 'light', 'oled'].includes(savedTheme)) {
-        setThemeState(savedTheme);
-        document.documentElement.setAttribute('data-theme', savedTheme);
+      const savedTheme = localStorage.getItem(THEME_KEY) || localStorage.getItem('zenith_theme_v1');
+      if (savedTheme === 'gruvbox-light' || savedTheme === 'light') {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setThemeState('gruvbox-light');
+        document.documentElement.setAttribute('data-theme', 'gruvbox-light');
+      } else if (savedTheme === 'gruvbox-dark' || savedTheme === 'dark' || savedTheme === 'oled') {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setThemeState('gruvbox-dark');
+        document.documentElement.setAttribute('data-theme', 'gruvbox-dark');
       } else {
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const initial = prefersDark ? 'dark' : 'light';
+        const initial: Theme = prefersDark ? 'gruvbox-dark' : 'gruvbox-light';
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setThemeState(initial);
         document.documentElement.setAttribute('data-theme', initial);
       }
     } catch (e) {
       console.warn('Could not load theme from localStorage', e);
-    } finally {
-      setMounted(true);
     }
   }, []);
 
@@ -52,7 +55,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleTheme = () => {
-    const nextTheme: Theme = theme === 'dark' ? 'light' : theme === 'light' ? 'oled' : 'dark';
+    const nextTheme: Theme = theme === 'gruvbox-dark' ? 'gruvbox-light' : 'gruvbox-dark';
     setTheme(nextTheme);
   };
 

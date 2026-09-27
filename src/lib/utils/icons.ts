@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Flame,
   Droplets,
@@ -67,13 +66,14 @@ export const AVAILABLE_ICONS: Record<string, LucideIcon> = {
 };
 
 export const COLOR_PALETTES = [
-  { name: 'Swiss Red', hex: '#FF3B30', bg: 'rgba(255, 59, 48, 0.15)', text: '#FF3B30' },
-  { name: 'Indigo', hex: '#6366F1', bg: 'rgba(99, 102, 241, 0.15)', text: '#818CF8' },
-  { name: 'Cyan', hex: '#06B6D4', bg: 'rgba(6, 182, 212, 0.15)', text: '#22D3EE' },
-  { name: 'Amber', hex: '#F59E0B', bg: 'rgba(245, 158, 11, 0.15)', text: '#FBBF24' },
-  { name: 'Rose', hex: '#F43F5E', bg: 'rgba(244, 63, 94, 0.15)', text: '#FB7185' },
-  { name: 'Violet', hex: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.15)', text: '#A78BFA' },
-  { name: 'Zinc', hex: '#71717A', bg: 'rgba(113, 113, 122, 0.15)', text: '#A1A1AA' },
+  { name: 'Gruvbox Red', hex: '#FB4934', bg: 'rgba(251, 73, 52, 0.15)', text: '#FB4934' },
+  { name: 'Gruvbox Orange', hex: '#FE8019', bg: 'rgba(254, 128, 25, 0.15)', text: '#FE8019' },
+  { name: 'Gruvbox Yellow', hex: '#FABD2F', bg: 'rgba(250, 189, 47, 0.15)', text: '#FABD2F' },
+  { name: 'Gruvbox Green', hex: '#B8BB26', bg: 'rgba(184, 187, 38, 0.15)', text: '#B8BB26' },
+  { name: 'Gruvbox Aqua', hex: '#8EC07C', bg: 'rgba(142, 192, 124, 0.15)', text: '#8EC07C' },
+  { name: 'Gruvbox Blue', hex: '#83A598', bg: 'rgba(131, 165, 152, 0.15)', text: '#83A598' },
+  { name: 'Gruvbox Purple', hex: '#D3869B', bg: 'rgba(211, 134, 155, 0.15)', text: '#D3869B' },
+  { name: 'Gruvbox Gray', hex: '#928374', bg: 'rgba(146, 131, 116, 0.15)', text: '#A89984' },
 ];
 
 export function getHabitIcon(iconName: string): LucideIcon {

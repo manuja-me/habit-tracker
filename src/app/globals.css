@@ -1,53 +1,43 @@
 @import "tailwindcss";
 
-:root {
-  --bg-main: #0A0A0D;
-  --bg-card: #121216;
-  --bg-subtle: #191921;
-  --bg-input: #0E0E13;
-  --border-main: #262630;
-  --border-subtle: #1B1B22;
-  --border-hover: #404050;
-  --text-main: #FFFFFF;
-  --text-sub: #9E9EA8;
-  --text-muted: #6E6E78;
-  --accent: #FF3B30;
-  --accent-glow: rgba(255, 59, 48, 0.16);
-  --heatmap-empty: #15151C;
+:root, [data-theme="gruvbox-dark"], [data-theme="dark"], [data-theme="oled"] {
+  --bg-main: #282828;
+  --bg-card: #32302f;
+  --bg-subtle: #3c3836;
+  --bg-input: #1d2021;
+  --border-main: #504945;
+  --border-subtle: #3c3836;
+  --border-hover: #7c6f64;
+  --text-main: #fbf1c7;
+  --text-sub: #ebdbb2;
+  --text-muted: #a89984;
+  --accent: #fb4934;
+  --accent-hover: #cc241d;
+  --accent-glow: rgba(251, 73, 52, 0.16);
+  --accent-border: rgba(251, 73, 52, 0.35);
+  --heatmap-empty: #3c3836;
   --font-family-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-family-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-[data-theme="light"] {
-  --bg-main: #F7F7F8;
-  --bg-card: #FFFFFF;
-  --bg-subtle: #EFEFF2;
-  --bg-input: #F3F3F6;
-  --border-main: #D4D4D8;
-  --border-subtle: #E4E4E7;
-  --border-hover: #A1A1AA;
-  --text-main: #09090B;
-  --text-sub: #52525B;
-  --text-muted: #71717A;
-  --accent: #E30613;
-  --accent-glow: rgba(227, 6, 19, 0.12);
-  --heatmap-empty: #E4E4E7;
-}
-
-[data-theme="oled"] {
-  --bg-main: #000000;
-  --bg-card: #080808;
-  --bg-subtle: #121212;
-  --bg-input: #000000;
-  --border-main: #242424;
-  --border-subtle: #161616;
-  --border-hover: #383838;
-  --text-main: #FFFFFF;
-  --text-sub: #A1A1AA;
-  --text-muted: #71717A;
-  --accent: #FF3B30;
-  --accent-glow: rgba(255, 59, 48, 0.2);
-  --heatmap-empty: #121212;
+[data-theme="gruvbox-light"], [data-theme="light"] {
+  --bg-main: #fbf1c7;
+  --bg-card: #f2e5bc;
+  --bg-subtle: #ebdbb2;
+  --bg-input: #f9f5d7;
+  --border-main: #d5c4a1;
+  --border-subtle: #ebdbb2;
+  --border-hover: #bdae93;
+  --text-main: #282828;
+  --text-sub: #3c3836;
+  --text-muted: #7c6f64;
+  --accent: #cc241d;
+  --accent-hover: #9d0006;
+  --accent-glow: rgba(204, 36, 29, 0.14);
+  --accent-border: rgba(204, 36, 29, 0.35);
+  --heatmap-empty: #ebdbb2;
+  --font-family-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-family-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 /* Sharp Architectural 0px Border-Radius Across Everything */
@@ -129,6 +119,59 @@ body {
 
 .border-swiss-red {
   border-color: var(--accent);
+}
+
+/* Dynamic Gruvbox Accent Overrides */
+[class*="text-[#FF3B30]"] {
+  color: var(--accent) !important;
+}
+
+[class*="bg-[#FF3B30]"]:not([class*="/"]) {
+  background-color: var(--accent) !important;
+}
+
+[class*="border-[#FF3B30]"]:not([class*="/"]) {
+  border-color: var(--accent) !important;
+}
+
+[class*="border-l-[#FF3B30]"] {
+  border-left-color: var(--accent) !important;
+}
+
+[class*="border-b-[#FF3B30]"] {
+  border-bottom-color: var(--accent) !important;
+}
+
+[class*="fill-[#FF3B30]"] {
+  fill: var(--accent) !important;
+}
+
+[class*="stroke-[#FF3B30]"] {
+  stroke: var(--accent) !important;
+}
+
+[class*="bg-[#FF3B30]/10"], [class*="bg-[#FF3B30]/15"], [class*="bg-[#FF3B30]/20"], [class*="bg-[#FF3B30]/25"] {
+  background-color: var(--accent-glow) !important;
+}
+
+[class*="border-[#FF3B30]/"] {
+  border-color: var(--accent-border) !important;
+}
+
+[class*="hover:border-[#FF3B30]"]:hover {
+  border-color: var(--accent) !important;
+}
+
+[class*="hover:bg-[#E02D24]"]:hover {
+  background-color: var(--accent-hover) !important;
+}
+
+[class*="active:bg-[#FF3B30]"]:active {
+  background-color: var(--accent) !important;
+}
+
+[class*="selection:bg-[#FF3B30]"]::selection {
+  background-color: var(--accent) !important;
 }
 
 /* Sharp Minimal Scrollbars */

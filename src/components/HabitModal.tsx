@@ -85,7 +85,7 @@ export function HabitModal({
       setTitle('');
       setDescription('');
       setCategory(defaultNat === 'dont' ? 'health' : 'productivity');
-      setColor(defaultNat === 'dont' ? '#F43F5E' : COLOR_PALETTES[0].hex);
+      setColor(defaultNat === 'dont' ? '#FB4934' : COLOR_PALETTES[0].hex);
       setIcon(defaultNat === 'dont' ? 'ShieldOff' : 'Flame');
       setType('boolean');
       setTargetValue(1);
@@ -154,7 +154,7 @@ export function HabitModal({
               type="button"
               onClick={() => {
                 setNature('do');
-                if (color === '#F43F5E') setColor(COLOR_PALETTES[0].hex);
+                if (color === '#FB4934') setColor(COLOR_PALETTES[0].hex);
               }}
               className={`p-2.5 text-left border transition-all cursor-pointer ${
                 nature === 'do'
@@ -175,7 +175,7 @@ export function HabitModal({
               type="button"
               onClick={() => {
                 setNature('dont');
-                setColor('#F43F5E');
+                setColor('#FB4934');
                 setIcon('ShieldOff');
               }}
               className={`p-2.5 text-left border transition-all cursor-pointer ${
