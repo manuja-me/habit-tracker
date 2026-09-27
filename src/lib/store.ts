@@ -121,7 +121,7 @@ function persistLocally(newHabits: Habit[], newLogs: Record<string, HabitLog>, u
   }
 }
 
-function loadLocalDataFromStorage(userId?: string) {
+export function loadLocalDataFromStorage(userId?: string) {
   if (typeof window === 'undefined') return;
   try {
     const uid = userId || globalCurrentUser?.id;
@@ -155,6 +155,8 @@ function loadLocalDataFromStorage(userId?: string) {
     emitChange();
   } catch (e) {
     console.error('Failed to read from localStorage', e);
+    isStorageLoaded = true;
+    emitChange();
   }
 }
 
@@ -300,10 +302,11 @@ async function executeCloudSync(isBackground = false) {
     console.warn('Server sync notice:', err?.message || err);
     globalSyncError = err?.message || 'Sync failed';
   } finally {
+    isStorageLoaded = true;
     if (!isBackground) {
       globalIsSyncing = false;
-      emitChange();
     }
+    emitChange();
   }
 }
 
@@ -410,6 +413,18 @@ export function useHabitStore() {
     return () => {
       listeners = listeners.filter((l) => l !== handleUpdate);
     };
+  }, []);
+
+  useEffect(() => {
+    // Safety fallback: Guarantee that loading screen never stays locked past 1.5s
+    const fallbackTimer = setTimeout(() => {
+      if (!isStorageLoaded) {
+        loadLocalDataFromStorage();
+        setIsLoading(false);
+      }
+    }, 1500);
+
+    return () => clearTimeout(fallbackTimer);
   }, []);
 
   const syncWithCloud = useCallback((isBackground = false) => {

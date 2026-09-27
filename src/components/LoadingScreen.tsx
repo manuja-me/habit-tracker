@@ -21,13 +21,13 @@ export function LoadingScreen({
       return;
     }
 
-    // Realistic progressive curve: advances quickly at first, then settles smoothly near 96%
+    // Realistic progressive curve: advances quickly at first, then settles smoothly to 100%
     const timer = setInterval(() => {
       setSimulatedProgress((prev) => {
-        if (prev >= 96) return 96;
-        const remaining = 96 - prev;
-        const step = Math.max(0.6, remaining * 0.08 + Math.random() * 1.2);
-        return Math.min(96, Number((prev + step).toFixed(1)));
+        if (prev >= 100) return 100;
+        const remaining = 100 - prev;
+        const step = Math.max(0.4, remaining * 0.06 + Math.random() * 0.8);
+        return Math.min(100, Number((prev + step).toFixed(1)));
       });
     }, 45);
 

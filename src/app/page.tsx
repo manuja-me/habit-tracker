@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { useHabitStore, clearLocalUserData } from '../lib/store';
+import { useHabitStore, clearLocalUserData, loadLocalDataFromStorage } from '../lib/store';
 import { Habit } from '../lib/types';
 import { calculateHabitStats, isDaySuccessful } from '../lib/utils/streaks';
 import { getTodayDateString, isHabitDueOnDate } from '../lib/utils/date';
@@ -157,6 +157,7 @@ export default function HabitTrackerPage() {
         if (isMounted) {
           if (authenticated) {
             setIsUnlocked(true);
+            loadLocalDataFromStorage();
             syncWithCloud();
           } else {
             clearLocalUserData();
@@ -189,6 +190,7 @@ export default function HabitTrackerPage() {
       sessionStorage.setItem('zenith_session_unlocked', 'true');
     }
     setIsUnlocked(true);
+    loadLocalDataFromStorage();
     syncWithCloud();
   };
 
