@@ -602,7 +602,7 @@ export default function HabitTrackerPage() {
               </div>
 
               {/* Right Column: Desktop Full-Screen Daily Planner & Notes Overview Sidebar */}
-              <div className="hidden xl:block xl:col-span-5 sticky top-4 space-y-4">
+              <div className="hidden xl:block xl:col-span-5 sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto space-y-4 pr-1">
                 <div className="bg-card p-4 sm:p-5 border border-main shadow-xs">
                   <DailyPlanner
                     selectedDate={selectedDate}

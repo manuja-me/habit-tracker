@@ -26,11 +26,19 @@ function DayNoteRow({
   const [value, setValue] = useState(initialValue);
   const [isSavedRecently, setIsSavedRecently] = useState(false);
   const isFocusedRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const dateObj = parseISO(dateStr);
   const dayNum = format(dateObj, 'dd');
   const dayName = format(dateObj, 'EEEE'); // Full English name e.g. FRIDAY
   const month = format(dateObj, 'MMM');
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const adjustHeight = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
 
   useEffect(() => {
     if (!isFocusedRef.current) {
@@ -38,9 +46,26 @@ function DayNoteRow({
     }
   }, [initialValue]);
 
+  useEffect(() => {
+    adjustHeight();
+    if (typeof document !== 'undefined' && document.fonts?.ready) {
+      document.fonts.ready.then(adjustHeight);
+    }
+  }, [value]);
+
+  useEffect(() => {
+    const handleResize = () => adjustHeight();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const nextVal = e.target.value;
     setValue(nextVal);
+
+    // Immediate auto-expand on typing without waiting for state effect
+    e.target.style.height = 'auto';
+    e.target.style.height = `${e.target.scrollHeight}px`;
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -104,8 +129,14 @@ function DayNoteRow({
       </div>
 
       {/* In Front: Text Area for Day Tasks & Notes */}
-      <div className="flex-1 p-3 flex flex-col justify-between min-h-[72px] relative bg-input/40">
+      <div 
+        onClick={() => {
+          textareaRef.current?.focus();
+        }}
+        className="flex-1 p-3 flex flex-col justify-between min-h-[72px] relative bg-input/40 cursor-text"
+      >
         <textarea
+          ref={textareaRef}
           rows={2}
           value={value}
           onChange={handleChange}
@@ -114,11 +145,12 @@ function DayNoteRow({
           }}
           onBlur={handleBlur}
           placeholder={`Directives & tasks for ${dayName}...`}
-          className="w-full bg-transparent text-xs font-mono text-main placeholder-muted-custom focus:outline-none resize-none leading-relaxed"
+          style={{ fieldSizing: 'content', overflow: 'hidden' } as React.CSSProperties}
+          className="w-full bg-transparent text-xs font-mono text-main placeholder-muted-custom focus:outline-none resize-none leading-relaxed overflow-hidden p-0 border-0 min-h-[38px] break-words"
         />
 
         {/* Autosave status indicator */}
-        <div className="flex items-center justify-between h-3 text-[9px] font-mono text-sub">
+        <div className="flex items-center justify-between h-3 text-[9px] font-mono text-sub mt-2">
           <span className="text-[8px] uppercase tracking-wider text-muted-custom">
             {isSelected ? 'ACTIVE // SYNCED' : ''}
           </span>
