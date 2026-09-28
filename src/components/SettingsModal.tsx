@@ -21,13 +21,16 @@ import {
   Sliders,
   Laptop,
   Clock,
-  ExternalLink
+  ExternalLink,
+  AlertTriangle,
+  UserX,
 } from 'lucide-react';
 import { GithubIcon } from './ui/GithubIcon';
 import { useHabitStore } from '../lib/store';
 import { useTheme } from '../lib/theme';
 import { isSoundEnabled, setSoundEnabled } from '../lib/utils/sound';
 import { LAST_VISIT_STORAGE_KEY, formatLastVisitReadable } from '../lib/utils/presence';
+import { deactivateAccountAction } from '../lib/server/auth';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -55,12 +58,21 @@ export function SettingsModal({
   const [soundOn, setSoundOn] = useState(true);
   const [justSynced, setJustSynced] = useState(false);
   const [lastVisitDisplay, setLastVisitDisplay] = useState('First recorded session');
+  const [showDeactivatePrompt, setShowDeactivatePrompt] = useState(false);
+  const [deactivatePin, setDeactivatePin] = useState('');
+  const [isDeactivating, setIsDeactivating] = useState(false);
+  const [deactivateError, setDeactivateError] = useState<string | null>(null);
 
   useEffect(() => {
     setSoundOn(isSoundEnabled());
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(LAST_VISIT_STORAGE_KEY);
       setLastVisitDisplay(formatLastVisitReadable(stored));
+    }
+    if (!isOpen) {
+      setShowDeactivatePrompt(false);
+      setDeactivatePin('');
+      setDeactivateError(null);
     }
   }, [isOpen]);
 
@@ -89,6 +101,28 @@ export function SettingsModal({
     const next = !soundOn;
     setSoundOn(next);
     setSoundEnabled(next);
+  };
+
+  const handleDeactivateConfirm = async () => {
+    if (deactivatePin.length !== 4 || isDeactivating) return;
+    setIsDeactivating(true);
+    setDeactivateError(null);
+
+    try {
+      const res = await deactivateAccountAction(deactivatePin);
+      if (res.success) {
+        setShowDeactivatePrompt(false);
+        setDeactivatePin('');
+        onClose();
+        onLockApp();
+      } else {
+        setDeactivateError(res.error || 'Failed to deactivate account.');
+      }
+    } catch (err: any) {
+      setDeactivateError(err?.message || 'Error occurred while deactivating account.');
+    } finally {
+      setIsDeactivating(false);
+    }
   };
 
   return (
@@ -438,6 +472,104 @@ export function SettingsModal({
             </div>
           </div>
         </div>
+
+        {/* Danger Zone: Account Deactivation (Members Only) */}
+        {currentUser && currentUser.role !== 'owner' && (
+          <div className="space-y-3 pt-3 border-t border-rose-500/30">
+            <label className="text-xs font-mono font-bold uppercase tracking-wider text-rose-500 block">
+              Danger Zone // Account Deactivation
+            </label>
+            <div className="p-3.5 bg-rose-500/5 border border-rose-500/30 space-y-3">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="text-xs font-sans font-bold text-rose-500 uppercase">
+                    Deactivate Personal Account
+                  </div>
+                  <p className="text-[11px] font-mono text-sub leading-relaxed">
+                    Deactivating starts an automatic <strong className="text-main">7-day grace period</strong> before your account, habits, completions, and notes are <strong className="text-rose-400">permanently wiped</strong>. You can cancel this at any time by logging in during the 7 days.
+                  </p>
+                </div>
+              </div>
+
+              {!showDeactivatePrompt ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeactivatePrompt(true);
+                    setDeactivatePin('');
+                    setDeactivateError(null);
+                  }}
+                  className="w-full sm:w-auto h-8 px-3 border border-rose-500 text-rose-500 hover:bg-rose-500 hover:text-white text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <UserX className="w-3.5 h-3.5" />
+                  <span>DEACTIVATE MY ACCOUNT</span>
+                </button>
+              ) : (
+                <div className="p-3 bg-card border border-rose-500/50 space-y-2.5 animate-in fade-in">
+                  <div className="text-xs font-mono font-bold text-main">
+                    ENTER 4-DIGIT PIN TO CONFIRM DEACTIVATION:
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={deactivatePin}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                        setDeactivatePin(val);
+                        setDeactivateError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && deactivatePin.length === 4 && !isDeactivating) {
+                          e.preventDefault();
+                          handleDeactivateConfirm();
+                        }
+                      }}
+                      placeholder="••••"
+                      className="w-28 h-8 px-2.5 bg-input border border-main text-center text-sm font-mono tracking-widest text-main focus:outline-none focus:border-rose-500"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      disabled={deactivatePin.length !== 4 || isDeactivating}
+                      onClick={handleDeactivateConfirm}
+                      className="h-8 px-3 bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white font-mono font-bold text-xs uppercase cursor-pointer flex items-center gap-1.5 transition-colors"
+                    >
+                      {isDeactivating ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>DEACTIVATING...</span>
+                        </>
+                      ) : (
+                        <span>CONFIRM DEACTIVATION</span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isDeactivating}
+                      onClick={() => {
+                        setShowDeactivatePrompt(false);
+                        setDeactivatePin('');
+                        setDeactivateError(null);
+                      }}
+                      className="h-8 px-2.5 border border-subtle hover:border-main text-sub hover:text-main text-xs font-mono cursor-pointer transition-colors"
+                    >
+                      CANCEL
+                    </button>
+                  </div>
+
+                  {deactivateError && (
+                    <div className="text-[11px] font-mono text-rose-500 font-bold">
+                      {deactivateError}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Section 6: Open Source & Repository */}
         <div className="pt-3 border-t border-subtle flex items-center justify-between text-xs font-mono">

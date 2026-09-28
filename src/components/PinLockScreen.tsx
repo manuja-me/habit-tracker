@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { verifyPinAction } from '../lib/server/auth';
+import { verifyPinAction, reactivateAccountAction, lockSessionAction } from '../lib/server/auth';
 import { Lock, ShieldAlert, Delete, Clock, ShieldCheck, ArrowRight } from 'lucide-react';
+import { ReactivationModal } from './ReactivationModal';
 
 interface PinLockScreenProps {
   onUnlock: () => void;
@@ -13,6 +14,12 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
+  const [reactivationInfo, setReactivationInfo] = useState<{
+    username: string;
+    deactivatedAt: string;
+    remainingMs: number;
+  } | null>(null);
+  const [isReactivating, setIsReactivating] = useState<boolean>(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const pinRef = useRef(pin);
@@ -21,6 +28,8 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   isVerifyingRef.current = isVerifying;
   const lockoutSecondsRef = useRef(lockoutSeconds);
   lockoutSecondsRef.current = lockoutSeconds;
+  const reactivationInfoRef = useRef(reactivationInfo);
+  reactivationInfoRef.current = reactivationInfo;
 
   // Auto focus container on mount so key events work instantly without clicking
   useEffect(() => {
@@ -42,7 +51,14 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   }, [lockoutSeconds]);
 
   const verifyAndSubmit = async (enteredPin: string) => {
-    if (enteredPin.length !== 4 || isVerifyingRef.current || lockoutSecondsRef.current !== null) return;
+    if (
+      enteredPin.length !== 4 ||
+      isVerifyingRef.current ||
+      lockoutSecondsRef.current !== null ||
+      reactivationInfoRef.current !== null
+    ) {
+      return;
+    }
     isVerifyingRef.current = true;
     setIsVerifying(true);
     setErrorMsg(null);
@@ -50,6 +66,14 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
     try {
       const result = await verifyPinAction(enteredPin);
       if (result.success) {
+        if (result.requiresReactivation && result.deactivatedAt) {
+          setReactivationInfo({
+            username: result.user?.username || 'member',
+            deactivatedAt: result.deactivatedAt,
+            remainingMs: result.remainingMs || 0,
+          });
+          return;
+        }
         onUnlock();
       } else {
         setErrorMsg(result.error || 'INVALID PIN // ACCESS DENIED');
@@ -69,6 +93,42 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
       isVerifyingRef.current = false;
       setIsVerifying(false);
     }
+  };
+
+  const handleConfirmReactivation = async () => {
+    if (isReactivating) return;
+    setIsReactivating(true);
+    try {
+      const res = await reactivateAccountAction();
+      if (res.success) {
+        setReactivationInfo(null);
+        pinRef.current = '';
+        setPin('');
+        onUnlock();
+      } else {
+        setErrorMsg(res.error || 'Failed to reactivate account.');
+        setReactivationInfo(null);
+        pinRef.current = '';
+        setPin('');
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Error occurred during account reactivation.');
+      setReactivationInfo(null);
+      pinRef.current = '';
+      setPin('');
+    } finally {
+      setIsReactivating(false);
+    }
+  };
+
+  const handleKeepDeactivated = async () => {
+    setReactivationInfo(null);
+    pinRef.current = '';
+    setPin('');
+    try {
+      await lockSessionAction();
+    } catch {}
+    setErrorMsg('ACCOUNT REMAINS DEACTIVATED // Countdown continues.');
   };
 
   const handleDigitPress = (digit: string) => {
@@ -103,7 +163,13 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.altKey || e.metaKey) return;
-      if (lockoutSecondsRef.current !== null || isVerifyingRef.current) return;
+      if (
+        lockoutSecondsRef.current !== null ||
+        isVerifyingRef.current ||
+        reactivationInfoRef.current !== null
+      ) {
+        return;
+      }
 
       if (e.key >= '0' && e.key <= '9') {
         e.preventDefault();
@@ -271,6 +337,18 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
           </span>
         </div>
       </div>
+
+      {reactivationInfo && (
+        <ReactivationModal
+          isOpen={Boolean(reactivationInfo)}
+          username={reactivationInfo.username}
+          deactivatedAt={reactivationInfo.deactivatedAt}
+          initialRemainingMs={reactivationInfo.remainingMs}
+          onReactivate={handleConfirmReactivation}
+          onKeepDeactivated={handleKeepDeactivated}
+          isProcessing={isReactivating}
+        />
+      )}
     </div>
   );
 }

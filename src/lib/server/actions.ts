@@ -3,7 +3,10 @@
 import { requireAuth } from './auth';
 import { OWNER_USER_ID } from './auth-utils';
 import { getCleanSupabaseConfig, getServerSupabase } from './supabase';
+import { purgeUserData, purgeExpiredDeactivatedUsers } from './user-management';
 import { Habit, HabitLog } from '../types';
+
+export { purgeExpiredDeactivatedUsers };
 
 /**
  * Server Action: Fetch habits and logs scoped to the authenticated user
@@ -370,6 +373,61 @@ export interface AdminUserRecord {
   role: 'owner' | 'member';
   created_at: string;
   last_login_at: string | null;
+  deactivated_at?: string | null;
+}
+
+/**
+ * Server Action: Hard delete a user without requiring their PIN (Owner Only)
+ * Permanently removes user, habits, habit_logs, day_notes, and invitations.
+ */
+export async function adminDeleteUserAction(targetUserId: string): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    const caller = await requireAuth();
+
+    if (caller.role !== 'owner' && caller.userId !== OWNER_USER_ID) {
+      return { success: false, error: 'Unauthorized: Only the system owner can delete users.' };
+    }
+
+    if (!targetUserId || targetUserId === OWNER_USER_ID || targetUserId === caller.userId) {
+      return { success: false, error: 'The Master Owner account cannot be deleted.' };
+    }
+
+    const supabase = getServerSupabase();
+    if (!supabase) {
+      return { success: false, error: 'Database connection failed.' };
+    }
+
+    // Verify user exists and is not owner
+    const { data: targetUser, error: checkErr } = await supabase
+      .from('app_users')
+      .select('id, role')
+      .eq('id', targetUserId)
+      .maybeSingle();
+
+    if (checkErr) {
+      return { success: false, error: checkErr.message };
+    }
+
+    if (!targetUser) {
+      return { success: false, error: 'User not found in system directory.' };
+    }
+
+    if (targetUser.role === 'owner') {
+      return { success: false, error: 'Owner accounts cannot be deleted.' };
+    }
+
+    const deleted = await purgeUserData(supabase, targetUserId);
+    if (!deleted) {
+      return { success: false, error: 'Failed to purge user records.' };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to delete user.' };
+  }
 }
 
 /**
@@ -398,19 +456,41 @@ export async function getAdminUsersAction(): Promise<{
             role: 'owner',
             created_at: new Date().toISOString(),
             last_login_at: new Date().toISOString(),
+            deactivated_at: null,
           },
         ],
       };
     }
 
+    // Trigger automatic purge of users whose 7-day deactivation period has expired
+    await purgeExpiredDeactivatedUsers(supabase);
+
     // Select only safe directory fields (NEVER pin_hash, NEVER habits/logs)
     const { data, error } = await supabase
       .from('app_users')
-      .select('id, username, role, created_at, last_login_at, updated_at')
+      .select('id, username, role, created_at, last_login_at, updated_at, deactivated_at')
       .order('created_at', { ascending: true });
 
     if (error) {
-      // Fallback if last_login_at column is not yet migrated in Supabase
+      // Tier 1 Fallback: deactivated_at is not yet migrated, but last_login_at is present
+      const fallbackWithLogin = await supabase
+        .from('app_users')
+        .select('id, username, role, created_at, last_login_at, updated_at')
+        .order('created_at', { ascending: true });
+
+      if (!fallbackWithLogin.error && fallbackWithLogin.data) {
+        const users: AdminUserRecord[] = fallbackWithLogin.data.map((u: any) => ({
+          id: u.id,
+          username: u.username,
+          role: u.role,
+          created_at: u.created_at,
+          last_login_at: u.last_login_at || u.updated_at || null,
+          deactivated_at: null,
+        }));
+        return { success: true, users };
+      }
+
+      // Tier 2 Fallback: neither deactivated_at nor last_login_at are migrated
       const fallback = await supabase
         .from('app_users')
         .select('id, username, role, created_at, updated_at')
@@ -424,6 +504,7 @@ export async function getAdminUsersAction(): Promise<{
         role: u.role,
         created_at: u.created_at,
         last_login_at: u.updated_at || null,
+        deactivated_at: null,
       }));
 
       return { success: true, users: fallbackUsers };
@@ -435,6 +516,7 @@ export async function getAdminUsersAction(): Promise<{
       role: u.role,
       created_at: u.created_at,
       last_login_at: u.last_login_at || u.updated_at || null,
+      deactivated_at: u.deactivated_at || null,
     }));
 
     return { success: true, users };

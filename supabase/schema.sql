@@ -1,5 +1,5 @@
 -- ==========================================================
--- ZENITH HABIT TRACKER � SECURE SUPABASE SCHEMA
+-- ZENITH HABIT TRACKER -- SECURE SUPABASE SCHEMA
 -- Completely Protected Server Actions
 -- Supports Multi-User Privacy, One-Time Friend Invitations,
 -- and Dedicated DAY_NOTES Table (No notes in habit_logs)
@@ -12,12 +12,14 @@ CREATE TABLE IF NOT EXISTS public.app_users (
     pin_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'member', -- 'owner' | 'member'
     last_login_at TIMESTAMPTZ,
+    deactivated_at TIMESTAMPTZ DEFAULT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Safe migration for existing installations (Add last_login_at column if not exists)
+-- Safe migration for existing installations (Add last_login_at and deactivated_at columns if not exists)
 ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS deactivated_at TIMESTAMPTZ DEFAULT NULL;
 
 -- Ensure fixed Owner user exists (Default PIN 1001 with salt)
 INSERT INTO public.app_users (id, username, pin_hash, role)
@@ -154,6 +156,7 @@ CREATE INDEX IF NOT EXISTS idx_habit_logs_user_id ON public.habit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_habit_logs_habit_date ON public.habit_logs(habit_id, date);
 CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON public.habit_logs(date);
 CREATE INDEX IF NOT EXISTS idx_day_notes_user_date ON public.day_notes(user_id, date);
+CREATE INDEX IF NOT EXISTS idx_app_users_deactivated_at ON public.app_users(deactivated_at);
 CREATE INDEX IF NOT EXISTS idx_invitations_token ON public.invitations(token);
 
 -- 7. Row Level Security (RLS)

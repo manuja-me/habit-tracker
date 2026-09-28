@@ -12,6 +12,7 @@ export interface SessionUser {
   userId: string;
   username: string;
   role: 'owner' | 'member';
+  isDeactivated?: boolean;
 }
 
 // In-memory rate limiting map for failed attempts
@@ -62,6 +63,7 @@ export function createSessionToken(user: SessionUser): string {
       userId: user.userId,
       username: user.username,
       role: user.role,
+      isDeactivated: Boolean(user.isDeactivated),
       ts: Date.now(),
     })
   ).toString('base64url');
@@ -90,6 +92,7 @@ export function getSessionUserFromToken(token: string): SessionUser | null {
         userId: data.userId,
         username: data.username || 'user',
         role: data.role || 'member',
+        isDeactivated: Boolean(data.isDeactivated),
       };
     }
   } catch {
