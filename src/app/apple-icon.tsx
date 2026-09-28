@@ -16,17 +16,17 @@ export default function AppleIcon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#FE8019',
-          border: '10px solid #D65D0E',
+          backgroundColor: '#1D2021',
+          border: '8px solid #3C3836',
           borderRadius: '0px',
         }}
       >
         <svg
-          width="110"
-          height="110"
+          width="118"
+          height="118"
           viewBox="0 0 24 24"
-          fill="#000000"
-          stroke="#000000"
+          fill="#FE8019"
+          stroke="#FE8019"
           strokeWidth="0.5"
           strokeLinecap="round"
           strokeLinejoin="round"
