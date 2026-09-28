@@ -12,6 +12,7 @@ import { useHabitStore } from '../lib/store';
 import { formatDisplayDate, getTodayDateString, formatDate, parseDate } from '../lib/utils/date';
 import { addDays, subDays } from 'date-fns';
 import { Progress } from './ui/progress';
+import { GithubIcon } from './ui/GithubIcon';
 
 interface HeaderProps {
   selectedDate: string;
@@ -86,6 +87,17 @@ export function Header({
               <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-rose-500" />
             )}
           </button>
+
+          <a
+            href="https://github.com/manuja-me/habit-tracker"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center w-9 h-9 border border-main bg-card hover:bg-subtle text-sub hover:text-main transition-colors cursor-pointer touch-manipulation active:scale-95"
+            title="View on GitHub"
+            aria-label="GitHub Repository"
+          >
+            <GithubIcon className="w-4 h-4" />
+          </a>
         </div>
       </div>
 

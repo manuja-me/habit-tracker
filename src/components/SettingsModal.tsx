@@ -20,8 +20,10 @@ import {
   Sparkles,
   Sliders,
   Laptop,
-  Clock
+  Clock,
+  ExternalLink
 } from 'lucide-react';
+import { GithubIcon } from './ui/GithubIcon';
 import { useHabitStore } from '../lib/store';
 import { useTheme } from '../lib/theme';
 import { isSoundEnabled, setSoundEnabled } from '../lib/utils/sound';
@@ -435,6 +437,21 @@ export function SettingsModal({
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Section 6: Open Source & Repository */}
+        <div className="pt-3 border-t border-subtle flex items-center justify-between text-xs font-mono">
+          <span className="text-sub uppercase text-[10px] tracking-wider">Zenith // Open Source</span>
+          <a
+            href="https://github.com/manuja-me/habit-tracker"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-sub hover:text-main transition-colors text-[11px] font-bold uppercase underline-offset-4 hover:underline"
+          >
+            <GithubIcon className="w-3.5 h-3.5" />
+            <span>GitHub Repository</span>
+            <ExternalLink className="w-3 h-3 opacity-60" />
+          </a>
         </div>
       </div>
     </div>
