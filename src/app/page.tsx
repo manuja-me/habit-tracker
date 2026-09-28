@@ -36,12 +36,14 @@ import { Plus } from 'lucide-react';
 
 export default function HabitTrackerPage() {
   const [isUnlocked, setIsUnlocked] = useState<boolean | null>(null);
+  const [isVaultReady, setIsVaultReady] = useState<boolean>(false);
 
   const {
     habits,
     logs,
     currentUser,
     isLoading,
+    isInitialSyncDone,
     toggleHabit,
     addHabit,
     updateHabit,
@@ -190,6 +192,7 @@ export default function HabitTrackerPage() {
       sessionStorage.setItem('zenith_session_unlocked', 'true');
     }
     setIsUnlocked(true);
+    setIsVaultReady(false);
     loadLocalDataFromStorage();
     syncWithCloud();
   };
@@ -202,6 +205,7 @@ export default function HabitTrackerPage() {
     await lockSessionAction();
     setActiveTab('today');
     setIsUnlocked(false);
+    setIsVaultReady(false);
   };
 
   const dueHabits = useMemo(() => {
@@ -430,24 +434,17 @@ export default function HabitTrackerPage() {
     isNotificationModalOpen
   ]);
 
-  if (isUnlocked === null) {
-    return (
-      <LoadingScreen
-        message="VALIDATING SECURE SESSION..."
-        statusText="ZENITH // AUTH GATE"
-      />
-    );
-  }
-
-  if (!isUnlocked) {
+  if (isUnlocked === false) {
     return <PinLockScreen onUnlock={handleUnlockSuccess} />;
   }
 
-  if (isLoading) {
+  if (isUnlocked === null || !isVaultReady) {
     return (
       <LoadingScreen
-        message="LOADING HABIT VAULT..."
-        statusText="ZENITH // ENGINE BOOT"
+        message={isUnlocked === null ? 'VALIDATING SECURE SESSION...' : 'CONNECTING TO DATABASE...'}
+        statusText="ZENITH // SUPABASE CLOUD"
+        isReady={isUnlocked === true && isInitialSyncDone}
+        onComplete={() => setIsVaultReady(true)}
       />
     );
   }

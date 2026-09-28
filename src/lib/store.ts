@@ -27,6 +27,7 @@ let globalIsCloudReady = true;
 let globalIsSyncing = false;
 let globalSyncError: string | null = null;
 let isStorageLoaded = false;
+let isInitialSyncDone = false;
 let listeners: Array<() => void> = [];
 
 // Mutation Safety Trackers (Prevents split-second disappear/reappear race conditions)
@@ -107,6 +108,7 @@ export function clearLocalUserData() {
   pendingDeletedHabitIds.clear();
   pendingAddedHabits.clear();
   isStorageLoaded = false;
+  isInitialSyncDone = false;
   emitChange();
 }
 
@@ -303,6 +305,7 @@ async function executeCloudSync(isBackground = false) {
     globalSyncError = err?.message || 'Sync failed';
   } finally {
     isStorageLoaded = true;
+    isInitialSyncDone = true;
     if (!isBackground) {
       globalIsSyncing = false;
     }
@@ -394,6 +397,7 @@ export function useHabitStore() {
   const [isSyncing, setIsSyncing] = useState<boolean>(globalIsSyncing);
   const [syncError, setSyncError] = useState<string | null>(globalSyncError);
   const [isCloudReady, setIsCloudReady] = useState<boolean>(globalIsCloudReady);
+  const [isInitialSyncDoneState, setIsInitialSyncDoneState] = useState<boolean>(isInitialSyncDone);
 
   useEffect(() => {
     initGlobalSyncCoordinator();
@@ -407,6 +411,7 @@ export function useHabitStore() {
       setIsSyncing(globalIsSyncing);
       setSyncError(globalSyncError);
       setIsCloudReady(globalIsCloudReady);
+      setIsInitialSyncDoneState(isInitialSyncDone);
     };
 
     listeners.push(handleUpdate);
@@ -416,13 +421,15 @@ export function useHabitStore() {
   }, []);
 
   useEffect(() => {
-    // Safety fallback: Guarantee that loading screen never stays locked past 1.5s
+    // Safety fallback: Guarantee that loading screen never stays locked past 5s
     const fallbackTimer = setTimeout(() => {
-      if (!isStorageLoaded) {
-        loadLocalDataFromStorage();
+      if (!isInitialSyncDone) {
+        isInitialSyncDone = true;
+        isStorageLoaded = true;
+        setIsInitialSyncDoneState(true);
         setIsLoading(false);
       }
-    }, 1500);
+    }, 5000);
 
     return () => clearTimeout(fallbackTimer);
   }, []);
@@ -615,6 +622,7 @@ export function useHabitStore() {
     dayNotes,
     currentUser,
     isLoading,
+    isInitialSyncDone: isInitialSyncDoneState,
     isSyncing,
     syncError,
     isCloudReady,
