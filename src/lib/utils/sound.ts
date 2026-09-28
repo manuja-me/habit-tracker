@@ -127,3 +127,87 @@ export function playMilestoneSound(): void {
     });
   } catch (e) {}
 }
+
+/**
+ * 5-note triumphant fanfare for Leveling Up (G4-C5-E5-G5-C6)
+ */
+export function playLevelUpSound(): void {
+  if (!isSoundEnabled()) return;
+  triggerHaptic([30, 60, 30, 100]);
+
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    // G4, C5, E5, G5, C6
+    const notes = [
+      { freq: 392.00, dur: 0.12, gain: 0.18 },
+      { freq: 523.25, dur: 0.12, gain: 0.20 },
+      { freq: 659.25, dur: 0.12, gain: 0.22 },
+      { freq: 783.99, dur: 0.15, gain: 0.24 },
+      { freq: 1046.50, dur: 0.45, gain: 0.28 },
+    ];
+
+    let offset = 0;
+    notes.forEach((note, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      const startTime = ctx.currentTime + offset;
+      const stopTime = startTime + note.dur;
+
+      osc.type = idx === notes.length - 1 ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(note.freq, startTime);
+
+      gain.gain.setValueAtTime(note.gain, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, stopTime);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(startTime);
+      osc.stop(stopTime);
+
+      offset += (idx === notes.length - 2 ? 0.14 : 0.09);
+    });
+  } catch (e) {}
+}
+
+/**
+ * Dual-bell chime for Achievement Codex unlocks (A5-D6)
+ */
+export function playAchievementSound(): void {
+  if (!isSoundEnabled()) return;
+  triggerHaptic([25, 50, 25]);
+
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const bells = [
+      { freq: 880.00, time: 0, dur: 0.35 },    // A5
+      { freq: 1174.66, time: 0.10, dur: 0.5 }, // D6
+    ];
+
+    bells.forEach((bell) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      const startTime = ctx.currentTime + bell.time;
+      const stopTime = startTime + bell.dur;
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(bell.freq, startTime);
+
+      gain.gain.setValueAtTime(0.18, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, stopTime);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(startTime);
+      osc.stop(stopTime);
+    });
+  } catch (e) {}
+}
+

@@ -13,6 +13,7 @@ import { formatDisplayDate, getTodayDateString, formatDate, parseDate } from '..
 import { addDays, subDays } from 'date-fns';
 import { Progress } from './ui/progress';
 import { GithubIcon } from './ui/GithubIcon';
+import { PrestigeTier } from '../lib/utils/gamification';
 
 interface HeaderProps {
   selectedDate: string;
@@ -21,6 +22,10 @@ interface HeaderProps {
   onOpenSettingsModal: () => void;
   completedCount: number;
   totalCount: number;
+  playerLevel?: number;
+  prestigeTier?: PrestigeTier;
+  totalXp?: number;
+  progressPercent?: number;
 }
 
 export function Header({
@@ -30,6 +35,10 @@ export function Header({
   onOpenSettingsModal,
   completedCount,
   totalCount,
+  playerLevel,
+  prestigeTier,
+  totalXp,
+  progressPercent,
 }: HeaderProps) {
   const { isSyncing, syncError } = useHabitStore();
 
@@ -52,7 +61,7 @@ export function Header({
     <header className="w-full max-w-4xl xl:max-w-7xl mx-auto pt-6 pb-2 px-4 sm:px-6">
       {/* Top Bar: Brand, Action & Settings */}
       <div className="flex items-center justify-between gap-4 mb-4">
-        {/* Brand */}
+        {/* Brand & Gamification Level Chip */}
         <div className="flex items-center gap-2.5 select-none">
           <div className="w-6 h-6 bg-[#FF3B30] flex items-center justify-center text-white font-black text-xs">
             ✚
@@ -60,6 +69,21 @@ export function Header({
           <span className="text-base font-black tracking-tight uppercase font-sans text-main">
             Zenith
           </span>
+          {playerLevel !== undefined && prestigeTier && (
+            <div
+              className="flex items-center gap-1.5 px-2 py-0.5 border text-[10px] font-mono font-bold tracking-wider transition-colors cursor-default"
+              style={{
+                borderColor: `${prestigeTier.color}60`,
+                backgroundColor: `${prestigeTier.color}15`,
+                color: prestigeTier.color,
+              }}
+              title={`Level ${playerLevel} • ${prestigeTier.name} (${prestigeTier.title}) • ${totalXp?.toLocaleString() || 0} Total XP${progressPercent !== undefined ? ` (${progressPercent}% to Next Level)` : ''}`}
+            >
+              <span>LVL {playerLevel}</span>
+              <span className="opacity-40">•</span>
+              <span className="uppercase">{prestigeTier.name}</span>
+            </div>
+          )}
         </div>
 
         {/* Essential Actions: + New Habit and Single Settings Button */}

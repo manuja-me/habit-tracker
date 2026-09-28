@@ -1,51 +1,60 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Habit, HabitLog } from '../lib/types';
-import { calculateHabitStats } from '../lib/utils/streaks';
-import { formatDisplayDate, getTodayDateString, getLastNDays, formatShortDate } from '../lib/utils/date';
-import { Flame, Download, Check, X, Share2, Copy, Terminal } from 'lucide-react';
+import { calculateHabitStats, isDaySuccessful } from '../lib/utils/streaks';
+import { formatDisplayDate, getTodayDateString, formatShortDate } from '../lib/utils/date';
+import { calculateGamificationProfile, GamificationProfile } from '../lib/utils/gamification';
+import { Flame, Download, Check, X, Share2, Copy } from 'lucide-react';
 
 interface ShareStreakModalProps {
   isOpen: boolean;
   onClose: () => void;
   habits: Habit[];
   logs: Record<string, HabitLog>;
+  profile?: GamificationProfile;
 }
 
-export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakModalProps) {
+export function ShareStreakModal({
+  isOpen,
+  onClose,
+  habits,
+  logs,
+  profile: propProfile,
+}: ShareStreakModalProps) {
   const [copied, setCopied] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const todayStr = getTodayDateString();
+
+  const profile = useMemo(() => {
+    return propProfile || calculateGamificationProfile(habits, logs, todayStr);
+  }, [propProfile, habits, logs, todayStr]);
 
   if (!isOpen) return null;
 
-  const todayStr = getTodayDateString();
-  const last7Days = getLastNDays(7);
-
-  const activeHabits = habits.filter(h => !h.archived);
-  const statsList = activeHabits.map(h => ({
+  const activeHabits = habits.filter((h) => !h.archived);
+  const statsList = activeHabits.map((h) => ({
     habit: h,
     stats: calculateHabitStats(h, logs),
   }));
 
-  const bestStreak = Math.max(0, ...statsList.map(s => s.stats.longestStreak));
-  const activeStreak = Math.max(0, ...statsList.map(s => s.stats.currentStreak));
-  const avg30DayRate = statsList.length > 0
-    ? Math.round(statsList.reduce((acc, s) => acc + s.stats.completionRate30Days, 0) / statsList.length)
-    : 0;
+  const bestStreak = profile.stats.bestStreak;
+  const activeStreak = profile.stats.activeStreak;
+  const avg30DayRate = profile.stats.avg30DayRate;
 
-  const completedToday = activeHabits.filter(h => logs[`${h.id}_${todayStr}`]?.completed).length;
+  const completedToday = activeHabits.filter((h) => isDaySuccessful(h, todayStr, logs)).length;
 
   const handleCopyText = async () => {
     const lines = [
       `⚡ ZENITH HABIT REPORT — ${formatDisplayDate(todayStr)}`,
-      `🔥 Active Streak: ${activeStreak} days | Longest: ${bestStreak} days`,
-      `📈 30-Day Adherence: ${avg30DayRate}%`,
-      `✅ Today's Score: ${completedToday}/${activeHabits.length} completed`,
+      `🎖️ Level ${profile.level} ${profile.tier.name} (${profile.tier.title}) • ${profile.totalXp.toLocaleString()} XP`,
+      `🛡️ Discipline Rating: ${profile.discipline.totalScore}/1,000 [Grade ${profile.discipline.grade}]`,
+      `🔥 Active Streak: ${activeStreak} days (${profile.comboMultiplier.toFixed(1)}x Combo) | Longest: ${bestStreak} days`,
+      `📈 30-Day Adherence: ${avg30DayRate}% | Today: ${completedToday}/${activeHabits.length} completed`,
       '',
-      ...activeHabits.slice(0, 5).map(h => {
-        const s = statsList.find(x => x.habit.id === h.id)?.stats;
+      ...activeHabits.slice(0, 5).map((h) => {
+        const s = statsList.find((x) => x.habit.id === h.id)?.stats;
         return `• ${h.title}: ${s?.currentStreak || 0}D streak (${s?.completionRate30Days || 0}%)`;
       }),
       '',
@@ -56,7 +65,7 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
       await navigator.clipboard.writeText(lines.join('\n'));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {}
+    } catch {}
   };
 
   const handleDownloadImage = () => {
@@ -74,7 +83,7 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
     ctx.fillStyle = '#090A0F';
     ctx.fillRect(0, 0, 1200, 680);
 
-    // 2. Border
+    // 2. Outer Border
     ctx.strokeStyle = '#FF3B30';
     ctx.lineWidth = 4;
     ctx.strokeRect(24, 24, 1152, 632);
@@ -97,9 +106,14 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
     ctx.font = 'bold 26px monospace';
     ctx.fillText('ZENITH // TERMINAL REPORT', 120, 97);
 
+    // Level & Tier badge in header
+    ctx.fillStyle = profile.tier.color;
+    ctx.font = 'bold 16px monospace';
+    ctx.fillText(`LVL ${profile.level} • ${profile.tier.name.toUpperCase()}`, 640, 97);
+
     ctx.fillStyle = '#64748B';
-    ctx.font = '16px monospace';
-    ctx.fillText(formatDisplayDate(todayStr).toUpperCase(), 780, 97);
+    ctx.font = '15px monospace';
+    ctx.fillText(formatDisplayDate(todayStr).toUpperCase(), 920, 97);
 
     // 5. Divider
     ctx.strokeStyle = '#272A38';
@@ -108,28 +122,52 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
     ctx.lineTo(1130, 130);
     ctx.stroke();
 
-    // 6. Metrics Grid
+    // 6. Metrics Grid (4 Swiss Cards)
     const metrics = [
-      { label: 'ACTIVE STREAK', val: `${activeStreak} DAYS`, color: '#F59E0B' },
-      { label: 'BEST STREAK', val: `${bestStreak} DAYS`, color: '#FF3B30' },
-      { label: '30D ADHERENCE', val: `${avg30DayRate}%`, color: '#6366F1' },
-      { label: 'TODAY SCORE', val: `${completedToday} / ${activeHabits.length}`, color: '#EC4899' },
+      {
+        label: 'STREAK & COMBO',
+        val: `${activeStreak} DAYS`,
+        sub: `${profile.comboMultiplier.toFixed(1)}x MULTIPLIER`,
+        color: '#F59E0B',
+      },
+      {
+        label: 'PLAYER RANK',
+        val: `LVL ${profile.level}`,
+        sub: `${profile.tier.name.toUpperCase()} TIER`,
+        color: profile.tier.color,
+      },
+      {
+        label: 'DISCIPLINE RATING',
+        val: `${profile.discipline.totalScore} PTS`,
+        sub: `GRADE ${profile.discipline.grade} [${profile.discipline.consistency}/400 30D]`,
+        color: profile.discipline.gradeColor,
+      },
+      {
+        label: '30D ADHERENCE',
+        val: `${avg30DayRate}%`,
+        sub: `${completedToday} / ${activeHabits.length} COMPLETED TODAY`,
+        color: '#38BDF8',
+      },
     ];
 
     metrics.forEach((m, idx) => {
       const x = 70 + idx * 270;
       ctx.fillStyle = '#171923';
-      ctx.fillRect(x, 155, 250, 100);
+      ctx.fillRect(x, 155, 250, 105);
       ctx.strokeStyle = '#272A38';
-      ctx.strokeRect(x, 155, 250, 100);
+      ctx.strokeRect(x, 155, 250, 105);
 
       ctx.fillStyle = '#94A3B8';
-      ctx.font = 'bold 12px monospace';
-      ctx.fillText(m.label, x + 18, 185);
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText(m.label, x + 16, 180);
 
       ctx.fillStyle = m.color;
-      ctx.font = 'bold 28px monospace';
-      ctx.fillText(m.val, x + 18, 228);
+      ctx.font = '900 26px monospace';
+      ctx.fillText(m.val, x + 16, 218);
+
+      ctx.fillStyle = '#64748B';
+      ctx.font = 'bold 10px monospace';
+      ctx.fillText(m.sub, x + 16, 243);
     });
 
     // 7. Habit Rows
@@ -138,8 +176,8 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
     ctx.fillText('ACTIVE ROUTINES & STREAKS:', 70, 295);
 
     activeHabits.slice(0, 5).forEach((h, idx) => {
-      const y = 325 + idx * 52;
-      const s = statsList.find(x => x.habit.id === h.id)?.stats;
+      const y = 320 + idx * 52;
+      const s = statsList.find((x) => x.habit.id === h.id)?.stats;
 
       ctx.fillStyle = '#171923';
       ctx.fillRect(70, y, 1060, 42);
@@ -176,6 +214,14 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
     ctx.font = '13px monospace';
     ctx.fillText('Built with Zenith Minimal Habit Tracker', 70, 615);
 
+    ctx.fillStyle = '#64748B';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText(
+      `${profile.totalXp.toLocaleString()} TOTAL XP • TIER: ${profile.tier.title.toUpperCase()}`,
+      740,
+      615
+    );
+
     const link = document.createElement('a');
     link.download = `zenith-streak-${todayStr}.png`;
     link.href = canvas.toDataURL('image/png');
@@ -198,7 +244,7 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-sub hover:text-main hover:bg-input transition-colors"
+            className="p-1 text-sub hover:text-main hover:bg-input transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -213,35 +259,63 @@ export function ShareStreakModal({ isOpen, onClose, habits, logs }: ShareStreakM
               </div>
               <span className="text-xs font-bold text-main">ZENITH REPORT</span>
             </div>
-            <span className="text-[10px] text-sub">{formatShortDate(todayStr)}</span>
+            <div className="flex items-center gap-2">
+              <span
+                className="text-[10px] font-bold px-1.5 py-0.5 border"
+                style={{
+                  color: profile.tier.color,
+                  borderColor: `${profile.tier.color}60`,
+                  backgroundColor: `${profile.tier.color}15`,
+                }}
+              >
+                LVL {profile.level} • {profile.tier.name}
+              </span>
+              <span className="text-[10px] text-sub">{formatShortDate(todayStr)}</span>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <div className="p-2 bg-card border border-subtle">
               <div className="text-[9px] text-sub uppercase">CURRENT</div>
               <div className="text-sm font-bold text-amber-500">{activeStreak} DAYS</div>
+              <div className="text-[9px] text-sub mt-0.5">{profile.comboMultiplier.toFixed(1)}x COMBO</div>
             </div>
             <div className="p-2 bg-card border border-subtle">
-              <div className="text-[9px] text-sub uppercase">BEST</div>
-              <div className="text-sm font-bold text-[#FF3B30]">{bestStreak} DAYS</div>
+              <div className="text-[9px] text-sub uppercase">DISCIPLINE</div>
+              <div
+                className="text-sm font-bold"
+                style={{ color: profile.discipline.gradeColor }}
+              >
+                {profile.discipline.totalScore} PTS
+              </div>
+              <div className="text-[9px] text-sub mt-0.5">GRADE {profile.discipline.grade}</div>
             </div>
             <div className="p-2 bg-card border border-subtle">
-              <div className="text-[9px] text-sub uppercase">30D ADHERENCE</div>
+              <div className="text-[9px] text-sub uppercase">30D RATE</div>
               <div className="text-sm font-bold text-indigo-400">{avg30DayRate}%</div>
+              <div className="text-[9px] text-sub mt-0.5">ADHERENCE</div>
             </div>
             <div className="p-2 bg-card border border-subtle">
               <div className="text-[9px] text-sub uppercase">TODAY</div>
-              <div className="text-sm font-bold text-pink-400">{completedToday}/{activeHabits.length}</div>
+              <div className="text-sm font-bold text-pink-400">
+                {completedToday}/{activeHabits.length}
+              </div>
+              <div className="text-[9px] text-sub mt-0.5">CHECK-INS</div>
             </div>
           </div>
 
           <div className="space-y-1.5 pt-1">
             {activeHabits.slice(0, 4).map((h) => {
-              const s = statsList.find(x => x.habit.id === h.id)?.stats;
+              const s = statsList.find((x) => x.habit.id === h.id)?.stats;
               return (
-                <div key={h.id} className="flex items-center justify-between text-xs py-1 px-2 bg-card/60 border border-subtle">
+                <div
+                  key={h.id}
+                  className="flex items-center justify-between text-xs py-1 px-2 bg-card/60 border border-subtle"
+                >
                   <span className="text-main font-bold truncate max-w-[200px]">{h.title}</span>
-                  <span className="text-amber-500 text-[11px] font-bold">🔥 {s?.currentStreak || 0}D</span>
+                  <span className="text-amber-500 text-[11px] font-bold">
+                    🔥 {s?.currentStreak || 0}D
+                  </span>
                 </div>
               );
             })}

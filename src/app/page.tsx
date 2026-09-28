@@ -6,7 +6,16 @@ import { Habit } from '../lib/types';
 import { calculateHabitStats, isDaySuccessful } from '../lib/utils/streaks';
 import { getTodayDateString, isHabitDueOnDate } from '../lib/utils/date';
 import { triggerDailyCelebration } from '../lib/utils/confetti';
-import { playCheckSound, playUncheckSound, playMilestoneSound, isSoundEnabled, setSoundEnabled } from '../lib/utils/sound';
+import { 
+  playCheckSound, 
+  playUncheckSound, 
+  playMilestoneSound, 
+  playLevelUpSound,
+  playAchievementSound,
+  isSoundEnabled, 
+  setSoundEnabled 
+} from '../lib/utils/sound';
+import { calculateGamificationProfile } from '../lib/utils/gamification';
 import { checkSessionAction, lockSessionAction } from '../lib/server/auth';
 import { Header } from '../components/Header';
 import { ViewTabs, ActiveTab } from '../components/ViewTabs';
@@ -65,6 +74,7 @@ export default function HabitTrackerPage() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [absenceInfo, setAbsenceInfo] = useState<AbsenceDetectionResult | null>(null);
   const [isAbsenceModalOpen, setIsAbsenceModalOpen] = useState(false);
+  const [levelUpToast, setLevelUpToast] = useState<{ level: number; tierName: string } | null>(null);
 
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
   const [draggedHabitId, setDraggedHabitId] = useState<string | null>(null);
@@ -237,6 +247,74 @@ export default function HabitTrackerPage() {
     }
     prevCompletionRef.current = isAllDone;
   }, [completedCount, totalCount]);
+
+  const gamificationProfile = useMemo(() => {
+    return calculateGamificationProfile(habits, logs, selectedDate);
+  }, [habits, logs, selectedDate]);
+
+  useEffect(() => {
+    if (!isUnlocked || typeof window === 'undefined') return;
+
+    const storedLevelStr = localStorage.getItem('zenith_player_level');
+    const currentLevel = gamificationProfile.level;
+
+    if (storedLevelStr === null) {
+      localStorage.setItem('zenith_player_level', String(currentLevel));
+      return;
+    }
+
+    const prevLevel = parseInt(storedLevelStr, 10);
+    if (!isNaN(prevLevel) && currentLevel > prevLevel) {
+      localStorage.setItem('zenith_player_level', String(currentLevel));
+      playLevelUpSound();
+      triggerDailyCelebration();
+      const toastTimer = setTimeout(() => {
+        setLevelUpToast({
+          level: currentLevel,
+          tierName: gamificationProfile.tier.name,
+        });
+      }, 50);
+
+      const hideTimer = setTimeout(() => {
+        setLevelUpToast(null);
+      }, 4550);
+      return () => {
+        clearTimeout(toastTimer);
+        clearTimeout(hideTimer);
+      };
+    } else if (!isNaN(prevLevel) && currentLevel !== prevLevel) {
+      localStorage.setItem('zenith_player_level', String(currentLevel));
+    }
+  }, [gamificationProfile.level, gamificationProfile.tier.name, isUnlocked]);
+
+  // Track achievement codex unlocks
+  const prevUnlockedRef = useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    if (!isUnlocked || typeof window === 'undefined') return;
+
+    const currentUnlocked = new Set(
+      gamificationProfile.achievements.filter((a) => a.unlocked).map((a) => a.id)
+    );
+
+    if (prevUnlockedRef.current === null) {
+      prevUnlockedRef.current = currentUnlocked;
+      return;
+    }
+
+    let hasNewUnlock = false;
+    currentUnlocked.forEach((id) => {
+      if (!prevUnlockedRef.current?.has(id)) {
+        hasNewUnlock = true;
+      }
+    });
+
+    if (hasNewUnlock) {
+      playAchievementSound();
+    }
+
+    prevUnlockedRef.current = currentUnlocked;
+  }, [gamificationProfile.achievements, isUnlocked]);
 
   const displayedDailyHabits = useMemo(() => {
     return dueHabits.filter((h) => {
@@ -460,6 +538,10 @@ export default function HabitTrackerPage() {
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         completedCount={completedCount}
         totalCount={totalCount}
+        playerLevel={gamificationProfile.level}
+        prestigeTier={gamificationProfile.tier}
+        totalXp={gamificationProfile.totalXp}
+        progressPercent={gamificationProfile.progressPercent}
       />
 
       {/* Navigation Tabs */}
@@ -650,7 +732,7 @@ export default function HabitTrackerPage() {
         )}
 
         {activeTab === 'analytics' && (
-          <AnalyticsView habits={habits} logs={logs} />
+          <AnalyticsView habits={habits} logs={logs} profile={gamificationProfile} />
         )}
 
         {activeTab === 'admin' && currentUser?.role === 'owner' && (
@@ -717,6 +799,7 @@ export default function HabitTrackerPage() {
         onClose={() => setIsShareModalOpen(false)}
         habits={habits}
         logs={logs}
+        profile={gamificationProfile}
       />
 
       {/* Daily Reminder Notification Modal */}
@@ -741,6 +824,23 @@ export default function HabitTrackerPage() {
           onClose={() => setIsAbsenceModalOpen(false)}
           onSaveLogs={handleSaveAbsenceLogs}
         />
+      )}
+
+      {/* Level Up Celebratory Toast */}
+      {levelUpToast && (
+        <div className="fixed bottom-6 right-6 z-50 p-4 bg-card border-2 border-[#FF3B30] shadow-2xl animate-in slide-in-from-bottom-5 duration-200 flex items-center gap-3">
+          <div className="w-8 h-8 bg-[#FF3B30] text-white flex items-center justify-center font-black text-sm">
+            ★
+          </div>
+          <div>
+            <div className="text-[10px] font-mono text-[#FF3B30] uppercase font-bold tracking-widest">
+              LEVEL UP ACHIEVED
+            </div>
+            <div className="text-sm font-black font-sans uppercase text-main">
+              LEVEL {levelUpToast.level} • {levelUpToast.tierName}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
