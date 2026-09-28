@@ -110,14 +110,12 @@ export function MinimalHabitItem({
       onDrop={onDrop}
       onDragEnd={onDragEnd}
       className={`group relative flex flex-col p-3.5 sm:p-4 rounded-none transition-all duration-150 border ${
-        isFocused ? 'border-l-4 border-l-[#FF3B30] bg-card' : ''
-      } ${
         isDont
           ? isSlippedUp
             ? 'bg-[#FF3B30]/10 border-[#FF3B30]/30'
             : 'bg-card border-main hover:border-subtle'
           : isCompleted
-          ? 'bg-card/70 border-main border-l-2 border-l-[#FF3B30]'
+          ? 'bg-card/70 border-main'
           : 'bg-card border-main hover:border-subtle'
       }`}
     >
