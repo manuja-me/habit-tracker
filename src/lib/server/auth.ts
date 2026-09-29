@@ -1,6 +1,6 @@
 'use server';
 
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import crypto from 'crypto';
 import { getServerSupabase } from './supabase';
 import { purgeUserData } from './user-management';
@@ -8,6 +8,7 @@ import {
   OWNER_USER_ID,
   MASTER_PIN_HASH,
   COOKIE_NAME,
+  RL_COOKIE_NAME,
   SECRET_HMAC_KEY,
   SessionUser,
   checkRateLimit,
@@ -31,20 +32,38 @@ export async function verifyPinAction(enteredPin: string): Promise<{
   remainingMs?: number;
 }> {
   try {
-    const rateLimitKey = 'global_pin_attempt';
-    const rateCheck = checkRateLimit(rateLimitKey);
+    const headerList = await headers();
+    const forwarded = headerList.get('x-forwarded-for');
+    const realIp = headerList.get('x-real-ip');
+    const clientIp = (forwarded ? forwarded.split(',')[0].trim() : realIp) || '127.0.0.1';
+    const rateLimitKey = `pin_rl_${clientIp}`;
+
+    const cookieStore = await cookies();
+    const rlCookie = cookieStore.get(RL_COOKIE_NAME)?.value;
+    const rateCheck = checkRateLimit(rateLimitKey, rlCookie);
 
     if (!rateCheck.allowed) {
       return {
         success: false,
-        error: `Too many failed attempts. Locked for ${rateCheck.waitSeconds}s.`,
+        error: `SECURITY LOCKOUT ACTIVE // ${rateCheck.waitSeconds}s remaining.`,
         waitSeconds: rateCheck.waitSeconds,
       };
     }
 
     if (!enteredPin || enteredPin.length !== 4) {
-      recordFailedAttempt(rateLimitKey);
-      return { success: false, error: 'Invalid PIN length.' };
+      const fail = recordFailedAttempt(rateLimitKey, rlCookie);
+      cookieStore.set(RL_COOKIE_NAME, fail.token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: Math.max(86400, fail.waitSeconds || 3600),
+      });
+      return {
+        success: false,
+        error: 'Invalid PIN length.',
+        waitSeconds: fail.waitSeconds > 0 ? fail.waitSeconds : undefined,
+      };
     }
 
     const cleanPin = enteredPin.trim();
@@ -114,8 +133,30 @@ export async function verifyPinAction(enteredPin: string): Promise<{
     }
 
     if (!matchedUser) {
-      recordFailedAttempt(rateLimitKey);
-      return { success: false, error: 'Invalid PIN. Access denied.' };
+      const fail = recordFailedAttempt(rateLimitKey, rlCookie);
+      cookieStore.set(RL_COOKIE_NAME, fail.token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: Math.max(86400, fail.waitSeconds || 3600),
+      });
+
+      if (fail.waitSeconds > 0) {
+        return {
+          success: false,
+          error: `TOO MANY FAILED ATTEMPTS // Locked out for ${fail.waitSeconds}s.`,
+          waitSeconds: fail.waitSeconds,
+        };
+      }
+
+      const attemptsLeft = Math.max(0, 3 - fail.count);
+      return {
+        success: false,
+        error: attemptsLeft > 0
+          ? `INVALID PIN // ACCESS DENIED (${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} before lockout)`
+          : 'INVALID PIN // ACCESS DENIED',
+      };
     }
 
     // Check if account has been soft-deleted / deactivated
@@ -131,18 +172,26 @@ export async function verifyPinAction(enteredPin: string): Promise<{
         if (supabaseClient) {
           await purgeUserData(supabaseClient, matchedUser.userId);
         }
-        recordFailedAttempt(rateLimitKey);
+        const fail = recordFailedAttempt(rateLimitKey, rlCookie);
+        cookieStore.set(RL_COOKIE_NAME, fail.token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          path: '/',
+          maxAge: Math.max(86400, fail.waitSeconds || 3600),
+        });
         return {
           success: false,
           error: 'ACCOUNT EXPIRED // This account was permanently deleted after 7 days of inactivity.',
+          waitSeconds: fail.waitSeconds > 0 ? fail.waitSeconds : undefined,
         };
       }
 
       // Within 7 days: User can reactivate
       resetFailedAttempts(rateLimitKey);
+      cookieStore.delete(RL_COOKIE_NAME);
       const token = createSessionToken({ ...matchedUser, isDeactivated: true });
 
-      const cookieStore = await cookies();
       cookieStore.set(COOKIE_NAME, token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
@@ -161,6 +210,7 @@ export async function verifyPinAction(enteredPin: string): Promise<{
 
     // Normal active login: Reset rate limits and issue secure HttpOnly cookie
     resetFailedAttempts(rateLimitKey);
+    cookieStore.delete(RL_COOKIE_NAME);
     const token = createSessionToken(matchedUser);
 
     // Record last login timestamp in app_users
@@ -179,7 +229,6 @@ export async function verifyPinAction(enteredPin: string): Promise<{
       }
     }
 
-    const cookieStore = await cookies();
     cookieStore.set(COOKIE_NAME, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

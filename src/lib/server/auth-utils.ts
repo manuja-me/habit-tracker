@@ -15,38 +15,85 @@ export interface SessionUser {
   isDeactivated?: boolean;
 }
 
-// In-memory rate limiting map for failed attempts
-const rateLimitMap = new Map<string, { count: number; lockedUntil: number }>();
+export const RL_COOKIE_NAME = 'zenith_rl_v1';
 
-export function checkRateLimit(key: string): { allowed: boolean; waitSeconds?: number } {
-  const now = Date.now();
-  const record = rateLimitMap.get(key);
-
-  if (!record) return { allowed: true };
-
-  if (record.lockedUntil > now) {
-    const waitSeconds = Math.ceil((record.lockedUntil - now) / 1000);
-    return { allowed: false, waitSeconds };
-  }
-
-  if (record.lockedUntil <= now && record.count >= 5) {
-    rateLimitMap.delete(key);
-    return { allowed: true };
-  }
-
-  return { allowed: true };
+export function getBackoffSeconds(failedCount: number): number {
+  if (failedCount < 3) return 0;
+  if (failedCount === 3) return 60; // 1 min lockout on 3rd failure
+  if (failedCount === 4) return 300; // 5 min lockout on 4th failure
+  if (failedCount === 5) return 900; // 15 min lockout on 5th failure
+  if (failedCount < 10) return 1800; // 30 min lockout for 6-9 failures
+  return 86400; // 24 hours lockout on 10+ failures
 }
 
-export function recordFailedAttempt(key: string) {
-  const now = Date.now();
-  const record = rateLimitMap.get(key) || { count: 0, lockedUntil: 0 };
-  record.count += 1;
+// In-memory rate limiting map for failed attempts (keyed by client identifier)
+const rateLimitMap = new Map<string, { count: number; lockedUntil: number }>();
 
-  if (record.count >= 5) {
-    record.lockedUntil = now + 10 * 60 * 1000; // 10 min lockout
+export function signRateLimitToken(count: number, lockedUntil: number): string {
+  const payload = `${count}:${lockedUntil}`;
+  const sig = crypto.createHmac('sha256', SECRET_HMAC_KEY).update(payload).digest('hex');
+  return `${payload}.${sig}`;
+}
+
+export function parseRateLimitToken(token?: string): { count: number; lockedUntil: number } | null {
+  if (!token || !token.includes('.')) return null;
+  const [payload, sig] = token.split('.');
+  const expectedSig = crypto.createHmac('sha256', SECRET_HMAC_KEY).update(payload).digest('hex');
+  if (
+    sig.length !== expectedSig.length ||
+    !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))
+  ) {
+    return null;
+  }
+  const [countStr, lockedUntilStr] = payload.split(':');
+  const count = parseInt(countStr, 10);
+  const lockedUntil = parseInt(lockedUntilStr, 10);
+  if (isNaN(count) || isNaN(lockedUntil)) return null;
+  return { count, lockedUntil };
+}
+
+export function checkRateLimit(
+  key: string,
+  cookieToken?: string
+): { allowed: boolean; waitSeconds?: number; currentCount: number; lockedUntil: number } {
+  const now = Date.now();
+  const memoryRecord = rateLimitMap.get(key) || { count: 0, lockedUntil: 0 };
+  const cookieRecord = parseRateLimitToken(cookieToken) || { count: 0, lockedUntil: 0 };
+
+  const effectiveCount = Math.max(memoryRecord.count, cookieRecord.count);
+  const effectiveLockedUntil = Math.max(memoryRecord.lockedUntil, cookieRecord.lockedUntil);
+
+  if (effectiveLockedUntil > now) {
+    const waitSeconds = Math.ceil((effectiveLockedUntil - now) / 1000);
+    return { allowed: false, waitSeconds, currentCount: effectiveCount, lockedUntil: effectiveLockedUntil };
   }
 
-  rateLimitMap.set(key, record);
+  // If lockout expired, reset stale count if it has passed
+  if (effectiveLockedUntil <= now && effectiveLockedUntil > 0) {
+    rateLimitMap.delete(key);
+    return { allowed: true, currentCount: 0, lockedUntil: 0 };
+  }
+
+  return { allowed: true, currentCount: effectiveCount, lockedUntil: 0 };
+}
+
+export function recordFailedAttempt(
+  key: string,
+  cookieToken?: string
+): { count: number; lockedUntil: number; waitSeconds: number; token: string } {
+  const now = Date.now();
+  const memoryRecord = rateLimitMap.get(key) || { count: 0, lockedUntil: 0 };
+  const cookieRecord = parseRateLimitToken(cookieToken) || { count: 0, lockedUntil: 0 };
+
+  const nextCount = Math.max(memoryRecord.count, cookieRecord.count) + 1;
+  const backoffSec = getBackoffSeconds(nextCount);
+  const lockedUntil = backoffSec > 0 ? now + backoffSec * 1000 : 0;
+
+  const newRecord = { count: nextCount, lockedUntil };
+  rateLimitMap.set(key, newRecord);
+
+  const token = signRateLimitToken(nextCount, lockedUntil);
+  return { count: nextCount, lockedUntil, waitSeconds: backoffSec, token };
 }
 
 export function resetFailedAttempts(key: string) {

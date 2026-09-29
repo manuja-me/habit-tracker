@@ -272,9 +272,15 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
           )}
 
           {lockoutSeconds !== null && (
-            <div className="p-2.5 bg-amber-500/10 border border-amber-500 text-amber-500 text-xs font-mono font-bold text-center flex items-center justify-center gap-1.5">
-              <Clock className="w-4 h-4 flex-shrink-0" />
-              <span>LOCKOUT ACTIVE // {lockoutSeconds}s REMAINING</span>
+            <div className="p-2.5 bg-amber-500/10 border border-amber-500 text-amber-500 text-xs font-mono font-bold text-center flex items-center justify-center gap-1.5 animate-in fade-in">
+              <Clock className="w-4 h-4 flex-shrink-0 animate-pulse" />
+              <span>
+                LOCKOUT ACTIVE // {lockoutSeconds >= 3600
+                  ? `${Math.floor(lockoutSeconds / 3600)}h ${Math.floor((lockoutSeconds % 3600) / 60)}m`
+                  : lockoutSeconds >= 60
+                  ? `${Math.floor(lockoutSeconds / 60)}m ${String(lockoutSeconds % 60).padStart(2, '0')}s`
+                  : `${lockoutSeconds}s`} REMAINING
+              </span>
             </div>
           )}
 
