@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useSyncExternalStore } from 'react';
 import { Habit, HabitLog } from './types';
 import { 
   getHabitsAndLogsAction, 
@@ -10,13 +10,28 @@ import {
   reorderHabitsAction,
   saveDayNoteAction
 } from './server/actions';
+import {
+  generateId,
+  INITIALIZED_KEY,
+  persistLocalData,
+  persistDayNotes,
+  loadLocalData,
+} from './utils/storage';
 
-const HABITS_STORAGE_KEY = 'zenith_habits_v1';
-const LOGS_STORAGE_KEY = 'zenith_logs_v1';
-const DAY_NOTES_STORAGE_KEY = 'zenith_day_notes_v1';
-const INITIALIZED_KEY = 'zenith_initialized_v1';
+export { generateId };
 
-const INITIAL_DEFAULT_HABITS: Habit[] = [];
+export interface HabitStoreState {
+  habits: Habit[];
+  activeHabits: Habit[];
+  logs: Record<string, HabitLog>;
+  dayNotes: Record<string, string>;
+  currentUser: { id: string; username: string; role: string } | null;
+  isLoading: boolean;
+  isInitialSyncDone: boolean;
+  isSyncing: boolean;
+  syncError: string | null;
+  isCloudReady: boolean;
+}
 
 // Global in-memory state
 let globalHabits: Habit[] = [];
@@ -30,16 +45,43 @@ let isStorageLoaded = false;
 let isInitialSyncDone = false;
 let listeners: Array<() => void> = [];
 
-// Mutation Safety Trackers (Prevents split-second disappear/reappear race conditions)
-const pendingDeletedHabitIds = new Set<string>();
-const pendingAddedHabits = new Map<string, Habit>();
-let lastLocalMutationTime = 0;
+const INITIAL_STATE: HabitStoreState = {
+  habits: [],
+  activeHabits: [],
+  logs: {},
+  dayNotes: {},
+  currentUser: null,
+  isLoading: true,
+  isInitialSyncDone: false,
+  isSyncing: false,
+  syncError: null,
+  isCloudReady: true,
+};
 
-function emitChange() {
+let storeSnapshot: HabitStoreState = INITIAL_STATE;
+
+function updateStoreSnapshot() {
+  storeSnapshot = {
+    habits: globalHabits,
+    activeHabits: globalHabits.filter((h) => !h.archived).sort((a, b) => a.order - b.order),
+    logs: globalLogs,
+    dayNotes: globalDayNotes,
+    currentUser: globalCurrentUser,
+    isLoading: !isStorageLoaded,
+    isInitialSyncDone,
+    isSyncing: globalIsSyncing,
+    syncError: globalSyncError,
+    isCloudReady: globalIsCloudReady,
+  };
   for (const listener of listeners) {
     listener();
   }
 }
+
+// Mutation Safety Trackers (Prevents split-second disappear/reappear race conditions)
+const pendingDeletedHabitIds = new Set<string>();
+const pendingAddedHabits = new Map<string, Habit>();
+let lastLocalMutationTime = 0;
 
 // Cross-tab synchronization via BroadcastChannel
 let broadcastChannel: BroadcastChannel | null = null;
@@ -57,7 +99,7 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         if (event.data.dayNotes) {
           globalDayNotes = event.data.dayNotes;
         }
-        emitChange();
+        updateStoreSnapshot();
       }
     };
   } catch {}
@@ -76,29 +118,6 @@ function broadcastLocalUpdate() {
   }
 }
 
-export function generateId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
-
-function getHabitsStorageKey(userId?: string) {
-  return userId ? `zenith_habits_${userId}` : HABITS_STORAGE_KEY;
-}
-
-function getLogsStorageKey(userId?: string) {
-  return userId ? `zenith_logs_${userId}` : LOGS_STORAGE_KEY;
-}
-
-function getDayNotesStorageKey(userId?: string) {
-  return userId ? `zenith_day_notes_${userId}` : DAY_NOTES_STORAGE_KEY;
-}
-
 export function clearLocalUserData() {
   globalHabits = [];
   globalLogs = {};
@@ -109,57 +128,18 @@ export function clearLocalUserData() {
   pendingAddedHabits.clear();
   isStorageLoaded = false;
   isInitialSyncDone = false;
-  emitChange();
-}
-
-function persistLocally(newHabits: Habit[], newLogs: Record<string, HabitLog>, userId?: string) {
-  if (typeof window === 'undefined') return;
-  try {
-    const uid = userId || globalCurrentUser?.id;
-    localStorage.setItem(getHabitsStorageKey(uid), JSON.stringify(newHabits));
-    localStorage.setItem(getLogsStorageKey(uid), JSON.stringify(newLogs));
-  } catch (e) {
-    console.error('Failed to save to localStorage', e);
-  }
+  updateStoreSnapshot();
 }
 
 export function loadLocalDataFromStorage(userId?: string) {
   if (typeof window === 'undefined') return;
-  try {
-    const uid = userId || globalCurrentUser?.id;
-    const storedHabits = localStorage.getItem(getHabitsStorageKey(uid));
-    const storedLogs = localStorage.getItem(getLogsStorageKey(uid));
-    const storedDayNotes = localStorage.getItem(getDayNotesStorageKey(uid));
-
-    if (storedHabits) {
-      globalHabits = JSON.parse(storedHabits);
-    } else {
-      globalHabits = INITIAL_DEFAULT_HABITS;
-    }
-
-    if (storedLogs) {
-      globalLogs = JSON.parse(storedLogs);
-    } else {
-      globalLogs = {};
-    }
-
-    if (storedDayNotes) {
-      try {
-        globalDayNotes = JSON.parse(storedDayNotes);
-      } catch {
-        globalDayNotes = {};
-      }
-    } else {
-      globalDayNotes = {};
-    }
-
-    isStorageLoaded = true;
-    emitChange();
-  } catch (e) {
-    console.error('Failed to read from localStorage', e);
-    isStorageLoaded = true;
-    emitChange();
-  }
+  const uid = userId || globalCurrentUser?.id;
+  const { habits, logs, dayNotes } = loadLocalData(uid);
+  globalHabits = habits;
+  globalLogs = logs;
+  globalDayNotes = dayNotes;
+  isStorageLoaded = true;
+  updateStoreSnapshot();
 }
 
 // Unified Single Cloud Sync Executor
@@ -177,7 +157,7 @@ async function executeCloudSync(isBackground = false) {
   const requestStartTime = Date.now();
   if (!isBackground) {
     globalIsSyncing = true;
-    emitChange();
+    updateStoreSnapshot();
   }
 
   try {
@@ -283,20 +263,14 @@ async function executeCloudSync(isBackground = false) {
       const dayNotesChanged = JSON.stringify(mergedDayNotes) !== JSON.stringify(globalDayNotes);
       if (dayNotesChanged) {
         globalDayNotes = mergedDayNotes;
-        if (typeof window !== 'undefined') {
-          try {
-            localStorage.setItem(getDayNotesStorageKey(res.user?.id || globalCurrentUser?.id), JSON.stringify(globalDayNotes));
-          } catch (e) {
-            console.error('Failed to save day notes to localStorage', e);
-          }
-        }
+        persistDayNotes(globalDayNotes, res.user?.id || globalCurrentUser?.id);
       }
 
       if (habitsChanged || logsChanged || dayNotesChanged) {
         globalHabits = mergedHabits;
         globalLogs = cleanLogs;
-        persistLocally(globalHabits, globalLogs);
-        emitChange();
+        persistLocalData(globalHabits, globalLogs);
+        updateStoreSnapshot();
         broadcastLocalUpdate();
       }
     }
@@ -310,7 +284,7 @@ async function executeCloudSync(isBackground = false) {
     if (!isBackground) {
       globalIsSyncing = false;
     }
-    emitChange();
+    updateStoreSnapshot();
   }
 }
 
@@ -342,14 +316,12 @@ function initGlobalSyncCoordinator() {
   window.addEventListener('touchstart', recordInteraction, { passive: true });
   window.addEventListener('click', recordInteraction, { passive: true });
 
-  // Intelligent Background Polling (every 60s instead of 5s):
-  // Saves over 92% of Vercel serverless invocations and Supabase egress bandwidth.
-  // Completely sleeps if the user is inactive/away (>5 min).
+  // Intelligent Background Polling (every 60s instead of 5s)
   setInterval(() => {
     if (typeof document === 'undefined') return;
     if (document.visibilityState !== 'visible') return;
-    if (Date.now() - lastUserInteractionTime > 5 * 60 * 1000) return; // Sleep if idle
-    if (Date.now() - lastLocalMutationTime < 3500) return; // Don't clobber active local edits
+    if (Date.now() - lastUserInteractionTime > 5 * 60 * 1000) return;
+    if (Date.now() - lastLocalMutationTime < 3500) return;
 
     executeCloudSync(true);
   }, 60000);
@@ -359,7 +331,7 @@ function initGlobalSyncCoordinator() {
     recordInteraction();
     if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
       if (Date.now() - lastLocalMutationTime < 3500) return;
-      if (Date.now() - lastSuccessfulSyncTime < 20000) return; // Prevent spam on rapid tab switches
+      if (Date.now() - lastSuccessfulSyncTime < 20000) return;
       executeCloudSync(true);
     }
   };
@@ -367,72 +339,31 @@ function initGlobalSyncCoordinator() {
   window.addEventListener('focus', handleFocusOrVisibility);
   document.addEventListener('visibilitychange', handleFocusOrVisibility);
 
-  window.addEventListener('storage', (e: StorageEvent) => {
-    if (e.key === HABITS_STORAGE_KEY && e.newValue) {
-      try {
-        globalHabits = JSON.parse(e.newValue);
-        emitChange();
-      } catch {}
-    }
-    if (e.key === LOGS_STORAGE_KEY && e.newValue) {
-      try {
-        globalLogs = JSON.parse(e.newValue);
-        emitChange();
-      } catch {}
-    }
-    if (e.key === DAY_NOTES_STORAGE_KEY && e.newValue) {
-      try {
-        globalDayNotes = JSON.parse(e.newValue);
-        emitChange();
-      } catch {}
-    }
+  window.addEventListener('storage', () => {
+    loadLocalDataFromStorage();
   });
 }
 
+function subscribe(listener: () => void) {
+  listeners.push(listener);
+  return () => {
+    listeners = listeners.filter((l) => l !== listener);
+  };
+}
+
+function getSnapshot() {
+  return storeSnapshot;
+}
+
+function getServerSnapshot() {
+  return INITIAL_STATE;
+}
+
 export function useHabitStore() {
-  const [habits, setHabits] = useState<Habit[]>(globalHabits);
-  const [logs, setLogs] = useState<Record<string, HabitLog>>(globalLogs);
-  const [dayNotes, setDayNotes] = useState<Record<string, string>>(globalDayNotes);
-  const [currentUser, setCurrentUser] = useState<{ id: string; username: string; role: string } | null>(globalCurrentUser);
-  const [isLoading, setIsLoading] = useState<boolean>(!isStorageLoaded);
-  const [isSyncing, setIsSyncing] = useState<boolean>(globalIsSyncing);
-  const [syncError, setSyncError] = useState<string | null>(globalSyncError);
-  const [isCloudReady, setIsCloudReady] = useState<boolean>(globalIsCloudReady);
-  const [isInitialSyncDoneState, setIsInitialSyncDoneState] = useState<boolean>(isInitialSyncDone);
+  const store = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   useEffect(() => {
     initGlobalSyncCoordinator();
-
-    const handleUpdate = () => {
-      setHabits([...globalHabits]);
-      setLogs({ ...globalLogs });
-      setDayNotes({ ...globalDayNotes });
-      setCurrentUser(globalCurrentUser);
-      setIsLoading(!isStorageLoaded);
-      setIsSyncing(globalIsSyncing);
-      setSyncError(globalSyncError);
-      setIsCloudReady(globalIsCloudReady);
-      setIsInitialSyncDoneState(isInitialSyncDone);
-    };
-
-    listeners.push(handleUpdate);
-    return () => {
-      listeners = listeners.filter((l) => l !== handleUpdate);
-    };
-  }, []);
-
-  useEffect(() => {
-    // Safety fallback: Guarantee that loading screen never stays locked past 5s
-    const fallbackTimer = setTimeout(() => {
-      if (!isInitialSyncDone) {
-        isInitialSyncDone = true;
-        isStorageLoaded = true;
-        setIsInitialSyncDoneState(true);
-        setIsLoading(false);
-      }
-    }, 5000);
-
-    return () => clearTimeout(fallbackTimer);
   }, []);
 
   const syncWithCloud = useCallback((isBackground = false) => {
@@ -467,8 +398,8 @@ export function useHabitStore() {
       ...globalLogs,
       [key]: updatedLog,
     };
-    persistLocally(globalHabits, globalLogs);
-    emitChange();
+    persistLocalData(globalHabits, globalLogs);
+    updateStoreSnapshot();
     broadcastLocalUpdate();
 
     // Background Server Action
@@ -491,8 +422,8 @@ export function useHabitStore() {
     pendingAddedHabits.set(newHabit.id, newHabit);
 
     globalHabits = [...globalHabits, newHabit];
-    persistLocally(globalHabits, globalLogs);
-    emitChange();
+    persistLocalData(globalHabits, globalLogs);
+    updateStoreSnapshot();
     broadcastLocalUpdate();
 
     saveHabitAction(newHabit)
@@ -527,8 +458,8 @@ export function useHabitStore() {
       return h;
     });
 
-    persistLocally(globalHabits, globalLogs);
-    emitChange();
+    persistLocalData(globalHabits, globalLogs);
+    updateStoreSnapshot();
     broadcastLocalUpdate();
 
     if (updatedHabitObj) {
@@ -557,8 +488,8 @@ export function useHabitStore() {
     globalLogs = newLogs;
 
     // 3. Persist and notify other open tabs
-    persistLocally(globalHabits, globalLogs);
-    emitChange();
+    persistLocalData(globalHabits, globalLogs);
+    updateStoreSnapshot();
     broadcastLocalUpdate();
 
     // 4. Delete on the server cloud database
@@ -585,8 +516,8 @@ export function useHabitStore() {
     lastLocalMutationTime = Date.now();
     const updated = orderedHabits.map((h, index) => ({ ...h, order: index }));
     globalHabits = updated;
-    persistLocally(globalHabits, globalLogs);
-    emitChange();
+    persistLocalData(globalHabits, globalLogs);
+    updateStoreSnapshot();
     broadcastLocalUpdate();
 
     reorderHabitsAction(updated).catch((e) => {
@@ -601,14 +532,8 @@ export function useHabitStore() {
       ...globalDayNotes,
       [dateStr]: content,
     };
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(getDayNotesStorageKey(globalCurrentUser?.id), JSON.stringify(globalDayNotes));
-      } catch (e) {
-        console.error('Failed to save day notes to localStorage', e);
-      }
-    }
-    emitChange();
+    persistDayNotes(globalDayNotes, globalCurrentUser?.id);
+    updateStoreSnapshot();
     broadcastLocalUpdate();
 
     // Persist to server in background
@@ -618,16 +543,16 @@ export function useHabitStore() {
   };
 
   return {
-    habits: habits.filter((h) => !h.archived).sort((a, b) => a.order - b.order),
-    allHabits: habits,
-    logs,
-    dayNotes,
-    currentUser,
-    isLoading,
-    isInitialSyncDone: isInitialSyncDoneState,
-    isSyncing,
-    syncError,
-    isCloudReady,
+    habits: store.activeHabits,
+    allHabits: store.habits,
+    logs: store.logs,
+    dayNotes: store.dayNotes,
+    currentUser: store.currentUser,
+    isLoading: store.isLoading,
+    isInitialSyncDone: store.isInitialSyncDone,
+    isSyncing: store.isSyncing,
+    syncError: store.syncError,
+    isCloudReady: store.isCloudReady,
     toggleHabit,
     addHabit,
     updateHabit,
