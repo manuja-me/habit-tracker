@@ -42,6 +42,69 @@ interface DbDayNoteRecord {
   content: string;
 }
 
+export interface AdminUserRecord {
+  id: string;
+  username: string;
+  role: 'owner' | 'member';
+  created_at: string;
+  last_login_at: string | null;
+  deactivated_at?: string | null;
+}
+
+interface DbAdminUserRow {
+  id: string;
+  username: string;
+  role: 'owner' | 'member';
+  created_at: string;
+  last_login_at?: string | null;
+  updated_at?: string | null;
+  deactivated_at?: string | null;
+}
+
+function getErrorMessage(err: unknown, defaultMessage = 'An unexpected error occurred'): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  return defaultMessage;
+}
+
+function parseHabitDescription(rawDesc?: string | null): {
+  cleanDescription: string;
+  isDont: boolean;
+  weaningConfig?: Habit['weaning'];
+} {
+  const desc = rawDesc || '';
+  const isDont = desc.includes('[NATURE:DONT]');
+  let weaningConfig: Habit['weaning'] = undefined;
+  const weaningMatch = desc.match(/\[WEANING:(.*?)\]/);
+  if (weaningMatch && weaningMatch[1]) {
+    try {
+      weaningConfig = JSON.parse(weaningMatch[1]);
+    } catch {}
+  }
+  const cleanDescription = desc
+    .replace(/\s*\[NATURE:DONT\]/g, '')
+    .replace(/\s*\[WEANING:.*?\]/g, '')
+    .trim();
+
+  return { cleanDescription, isDont, weaningConfig };
+}
+
+function serializeHabitDescription(habit: Habit): string {
+  const rawDesc = habit.description || '';
+  let storedDesc = rawDesc
+    .replace(/\s*\[NATURE:DONT\]/g, '')
+    .replace(/\s*\[WEANING:.*?\]/g, '')
+    .trim();
+
+  if (habit.nature === 'dont') {
+    storedDesc = storedDesc ? `${storedDesc} [NATURE:DONT]` : '[NATURE:DONT]';
+    if (habit.weaning?.enabled) {
+      storedDesc += ` [WEANING:${JSON.stringify(habit.weaning)}]`;
+    }
+  }
+  return storedDesc;
+}
+
 /**
  * Server Action: Fetch habits and logs scoped to the authenticated user
  */
@@ -135,27 +198,12 @@ export async function getHabitsAndLogsAction(): Promise<{
     }
 
     const formattedHabits: Habit[] = habitsData.map((h) => {
-      const rawDesc = h.description || '';
-      const isDont = rawDesc.includes('[NATURE:DONT]');
-
-      // Parse weaning config if present
-      let weaningConfig = undefined;
-      const weaningMatch = rawDesc.match(/\[WEANING:(.*?)\]/);
-      if (weaningMatch && weaningMatch[1]) {
-        try {
-          weaningConfig = JSON.parse(weaningMatch[1]);
-        } catch {}
-      }
-
-      const cleanDesc = rawDesc
-        .replace(/\s*\[NATURE:DONT\]/g, '')
-        .replace(/\s*\[WEANING:.*?\]/g, '')
-        .trim();
+      const { cleanDescription, isDont, weaningConfig } = parseHabitDescription(h.description);
 
       return {
         id: h.id,
         title: h.title,
-        description: cleanDesc,
+        description: cleanDescription,
         category: h.category,
         color: h.color,
         icon: h.icon,
@@ -195,11 +243,10 @@ export async function getHabitsAndLogsAction(): Promise<{
       user: { id: user.userId, username: user.username, role: user.role },
     };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
     return {
       success: false,
       isConfigured: Boolean(getCleanSupabaseConfig()),
-      error: message || 'Failed to fetch data',
+      error: getErrorMessage(err, 'Failed to fetch data'),
     };
   }
 }
@@ -213,18 +260,7 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
-    const rawDesc = habit.description || '';
-    let storedDesc = rawDesc
-      .replace(/\s*\[NATURE:DONT\]/g, '')
-      .replace(/\s*\[WEANING:.*?\]/g, '')
-      .trim();
-
-    if (habit.nature === 'dont') {
-      storedDesc = storedDesc ? `${storedDesc} [NATURE:DONT]` : '[NATURE:DONT]';
-      if (habit.weaning?.enabled) {
-        storedDesc += ` [WEANING:${JSON.stringify(habit.weaning)}]`;
-      }
-    }
+    const storedDesc = serializeHabitDescription(habit);
 
     const habitPayload = {
       id: habit.id,
@@ -257,8 +293,7 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
     if (error) throw error;
     return { success: true };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { success: false, error: message };
+    return { success: false, error: getErrorMessage(err, 'Failed to save habit') };
   }
 }
 
@@ -301,9 +336,7 @@ export async function deleteHabitAction(habitId: string): Promise<{ success: boo
 
     return { success: true };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('deleteHabitAction error:', message);
-    return { success: false, error: message };
+    return { success: false, error: getErrorMessage(err, 'Failed to delete habit') };
   }
 }
 
@@ -338,8 +371,7 @@ export async function saveHabitLogAction(log: HabitLog): Promise<{ success: bool
     if (error) throw error;
     return { success: true };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { success: false, error: message };
+    return { success: false, error: getErrorMessage(err, 'Failed to save habit log') };
   }
 }
 
@@ -365,8 +397,7 @@ export async function reorderHabitsAction(orderedHabits: Habit[]): Promise<{ suc
     );
     return { success: true };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { success: false, error: message };
+    return { success: false, error: getErrorMessage(err, 'Failed to reorder habits') };
   }
 }
 
@@ -398,25 +429,13 @@ export async function saveDayNoteAction(date: string, content: string): Promise<
     }
 
     if (error) {
-      console.error('saveDayNoteAction error:', error.message);
       return { success: false, error: error.message };
     }
 
     return { success: true };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('saveDayNoteAction catch error:', message);
-    return { success: false, error: message };
+    return { success: false, error: getErrorMessage(err, 'Failed to save note') };
   }
-}
-
-export interface AdminUserRecord {
-  id: string;
-  username: string;
-  role: 'owner' | 'member';
-  created_at: string;
-  last_login_at: string | null;
-  deactivated_at?: string | null;
 }
 
 /**
@@ -469,19 +488,8 @@ export async function adminDeleteUserAction(targetUserId: string): Promise<{
 
     return { success: true };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { success: false, error: message || 'Failed to delete user.' };
+    return { success: false, error: getErrorMessage(err, 'Failed to delete user.') };
   }
-}
-
-interface DbAdminUserRow {
-  id: string;
-  username: string;
-  role: 'owner' | 'member';
-  created_at: string;
-  last_login_at?: string | null;
-  updated_at?: string | null;
-  deactivated_at?: string | null;
 }
 
 /**
@@ -575,7 +583,6 @@ export async function getAdminUsersAction(): Promise<{
 
     return { success: true, users };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { success: false, error: message || 'Failed to retrieve system users' };
+    return { success: false, error: getErrorMessage(err, 'Failed to retrieve system users') };
   }
 }
