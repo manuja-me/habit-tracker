@@ -1,4 +1,4 @@
-import { format, parseISO, subDays, addDays, startOfWeek, isSameDay, getDay } from 'date-fns';
+import { format, parseISO, subDays, addDays, startOfWeek, getDay } from 'date-fns';
 import { Habit } from '../types';
 
 export function getTodayDateString(): string {

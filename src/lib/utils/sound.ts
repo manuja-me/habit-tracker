@@ -6,7 +6,7 @@ const SOUND_KEY = 'zenith_sound_enabled';
 function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   if (!audioCtx) {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (AudioContextClass) {
       audioCtx = new AudioContextClass();
     }
@@ -32,7 +32,7 @@ export function triggerHaptic(duration: number | number[] = 15): void {
   if (typeof window !== 'undefined' && 'vibrate' in navigator) {
     try {
       navigator.vibrate(duration);
-    } catch (e) {}
+    } catch {}
   }
 }
 
@@ -63,7 +63,7 @@ export function playCheckSound(): void {
 
     osc.start(now);
     osc.stop(now + 0.08);
-  } catch (e) {}
+  } catch {}
 }
 
 /**
@@ -93,7 +93,7 @@ export function playUncheckSound(): void {
 
     osc.start(now);
     osc.stop(now + 0.06);
-  } catch (e) {}
+  } catch {}
 }
 
 /**
@@ -125,7 +125,7 @@ export function playMilestoneSound(): void {
       osc.start(startTime);
       osc.stop(startTime + 0.25);
     });
-  } catch (e) {}
+  } catch {}
 }
 
 /**
@@ -170,7 +170,7 @@ export function playLevelUpSound(): void {
 
       offset += (idx === notes.length - 2 ? 0.14 : 0.09);
     });
-  } catch (e) {}
+  } catch {}
 }
 
 /**
@@ -208,6 +208,6 @@ export function playAchievementSound(): void {
       osc.start(startTime);
       osc.stop(stopTime);
     });
-  } catch (e) {}
+  } catch {}
 }
 

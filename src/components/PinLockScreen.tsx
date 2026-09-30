@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { verifyPinAction, reactivateAccountAction, lockSessionAction } from '../lib/server/auth';
-import { Lock, ShieldAlert, Delete, Clock, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Lock, ShieldAlert, Delete, Clock, ShieldCheck } from 'lucide-react';
 import { ReactivationModal } from './ReactivationModal';
 
 interface PinLockScreenProps {
@@ -23,13 +23,16 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const pinRef = useRef(pin);
-  pinRef.current = pin;
   const isVerifyingRef = useRef(isVerifying);
-  isVerifyingRef.current = isVerifying;
   const lockoutSecondsRef = useRef(lockoutSeconds);
-  lockoutSecondsRef.current = lockoutSeconds;
   const reactivationInfoRef = useRef(reactivationInfo);
-  reactivationInfoRef.current = reactivationInfo;
+
+  useEffect(() => {
+    pinRef.current = pin;
+    isVerifyingRef.current = isVerifying;
+    lockoutSecondsRef.current = lockoutSeconds;
+    reactivationInfoRef.current = reactivationInfo;
+  }, [pin, isVerifying, lockoutSeconds, reactivationInfo]);
 
   // Auto focus container on mount so key events work instantly without clicking
   useEffect(() => {
@@ -50,7 +53,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
     }
   }, [lockoutSeconds]);
 
-  const verifyAndSubmit = async (enteredPin: string) => {
+  const verifyAndSubmit = useCallback(async (enteredPin: string) => {
     if (
       enteredPin.length !== 4 ||
       isVerifyingRef.current ||
@@ -84,16 +87,17 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
         pinRef.current = '';
         setPin('');
       }
-    } catch (err: any) {
-      console.error('verifyPinAction client exception:', err);
-      setErrorMsg(err?.message ? `SERVER ERROR: ${err.message}` : 'SERVER VERIFICATION FAILED');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('verifyPinAction client exception:', message);
+      setErrorMsg(message ? `SERVER ERROR: ${message}` : 'SERVER VERIFICATION FAILED');
       pinRef.current = '';
       setPin('');
     } finally {
       isVerifyingRef.current = false;
       setIsVerifying(false);
     }
-  };
+  }, [onUnlock]);
 
   const handleConfirmReactivation = async () => {
     if (isReactivating) return;
@@ -111,8 +115,9 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
         pinRef.current = '';
         setPin('');
       }
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Error occurred during account reactivation.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setErrorMsg(message || 'Error occurred during account reactivation.');
       setReactivationInfo(null);
       pinRef.current = '';
       setPin('');
@@ -131,7 +136,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
     setErrorMsg('ACCOUNT REMAINS DEACTIVATED // Countdown continues.');
   };
 
-  const handleDigitPress = (digit: string) => {
+  const handleDigitPress = useCallback((digit: string) => {
     if (lockoutSecondsRef.current !== null || isVerifyingRef.current) return;
     const currentPin = pinRef.current;
     if (currentPin.length < 4) {
@@ -142,22 +147,22 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
         verifyAndSubmit(nextPin);
       }
     }
-  };
+  }, [verifyAndSubmit]);
 
-  const handleBackspace = () => {
+  const handleBackspace = useCallback(() => {
     if (lockoutSecondsRef.current !== null || isVerifyingRef.current) return;
     const nextPin = pinRef.current.slice(0, -1);
     pinRef.current = nextPin;
     setPin(nextPin);
     setErrorMsg(null);
-  };
+  }, []);
 
-  const handleClear = () => {
+  const handleClear = useCallback(() => {
     if (lockoutSecondsRef.current !== null || isVerifyingRef.current) return;
     pinRef.current = '';
     setPin('');
     setErrorMsg(null);
-  };
+  }, []);
 
   // Global window listener: allows immediate typing anywhere on the page without clicking
   useEffect(() => {
@@ -185,7 +190,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, []);
+  }, [handleDigitPress, handleBackspace, handleClear]);
 
   const handlePaste = (e: React.ClipboardEvent) => {
     const text = e.clipboardData.getData('text').trim();

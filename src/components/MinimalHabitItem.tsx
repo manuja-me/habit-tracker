@@ -6,19 +6,21 @@ import {
   Flame, 
   Edit3, 
   Trash2, 
-  Plus, 
   Minus, 
-  AlertCircle, 
   GripVertical,
   ShieldCheck,
-  ShieldAlert,
-  RotateCcw
+  ShieldAlert
 } from 'lucide-react';
 import { Habit, HabitLog, HabitStats } from '../lib/types';
-import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
+import { AVAILABLE_ICONS, COLOR_PALETTES } from '../lib/utils/icons';
 import { playCheckSound, playUncheckSound } from '../lib/utils/sound';
 import { calculateWeaningStatus } from '../lib/utils/tapering';
 import { Progress } from './ui/progress';
+
+function HabitIconDisplay({ iconName, className }: { iconName: string; className?: string }) {
+  const Icon = AVAILABLE_ICONS[iconName] || Flame;
+  return <Icon className={className} />;
+}
 
 interface MinimalHabitItemProps {
   habit: Habit;
@@ -43,7 +45,6 @@ export function MinimalHabitItem({
   stats,
   allLogs = {},
   dateStr,
-  isFocused = false,
   isDraggable = true,
   onToggle,
   onEdit,
@@ -61,7 +62,6 @@ export function MinimalHabitItem({
 
   const weaningStatus = calculateWeaningStatus(habit, allLogs);
   const currentValue = log?.value ?? (isCompleted ? habit.target_value : 0);
-  const IconComponent = getHabitIcon(habit.icon);
   const colorConfig = COLOR_PALETTES.find(c => c.hex.toLowerCase() === habit.color.toLowerCase()) || COLOR_PALETTES[0];
 
   const handleCheckboxClick = (e: React.MouseEvent) => {
@@ -177,7 +177,7 @@ export function MinimalHabitItem({
                 : isCompleted ? '#FF3B30' : colorConfig.hex 
             }}
           >
-            <IconComponent className="w-3.5 h-3.5" />
+            <HabitIconDisplay iconName={habit.icon} className="w-3.5 h-3.5" />
           </div>
 
           {/* Title & Streak */}

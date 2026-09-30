@@ -5,7 +5,7 @@ import { Habit, HabitLog } from '../lib/types';
 import { generateHeatmapData, calculateHabitStats } from '../lib/utils/streaks';
 import { formatDisplayDate } from '../lib/utils/date';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
-import { Activity, Flame, Info, Layers } from 'lucide-react';
+import { Flame, Info, Layers } from 'lucide-react';
 
 interface MinimalHeatmapProps {
   habits: Habit[];
@@ -75,7 +75,7 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
     }
   };
 
-  const getIndividualDayStyle = (level: number, hexColor: string) => {
+  const getIndividualDayStyle = (level: number) => {
     if (level === 0) {
       return 'bg-[var(--heatmap-empty)] border-subtle hover:border-main';
     }
@@ -238,8 +238,7 @@ export function MinimalHeatmap({ habits, logs }: MinimalHeatmapProps) {
                             }
                             onMouseLeave={() => setHoveredDay(null)}
                             className={`w-3 h-3 rounded-none border transition-all duration-100 cursor-pointer touch-manipulation ${getIndividualDayStyle(
-                              day.level,
-                              habit.color
+                              day.level
                             )}`}
                             style={{
                               backgroundColor: isDone ? habit.color : undefined,

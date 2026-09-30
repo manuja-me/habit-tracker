@@ -25,38 +25,34 @@ const THEME_KEY = 'zenith_theme_v2';
 const ACCENT_KEY = 'zenith_accent_v1';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('gruvbox-dark');
-  const [accent, setAccentState] = useState<GruvboxAccent>('orange');
-
-  useEffect(() => {
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof window === 'undefined') return 'gruvbox-dark';
     try {
       const savedTheme = localStorage.getItem(THEME_KEY) || localStorage.getItem('zenith_theme_v1');
-      if (savedTheme === 'gruvbox-light' || savedTheme === 'light') {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setThemeState('gruvbox-light');
-        document.documentElement.setAttribute('data-theme', 'gruvbox-light');
-      } else if (savedTheme === 'gruvbox-dark' || savedTheme === 'dark' || savedTheme === 'oled') {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setThemeState('gruvbox-dark');
-        document.documentElement.setAttribute('data-theme', 'gruvbox-dark');
-      } else {
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const initial: Theme = prefersDark ? 'gruvbox-dark' : 'gruvbox-light';
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setThemeState(initial);
-        document.documentElement.setAttribute('data-theme', initial);
-      }
-
-      const savedAccent = (localStorage.getItem(ACCENT_KEY) as GruvboxAccent) || 'orange';
-      if (['orange', 'aqua', 'yellow', 'green', 'blue'].includes(savedAccent)) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setAccentState(savedAccent);
-        document.documentElement.setAttribute('data-accent', savedAccent);
-      }
-    } catch (e) {
-      console.warn('Could not load theme from localStorage', e);
+      if (savedTheme === 'gruvbox-light' || savedTheme === 'light') return 'gruvbox-light';
+      if (savedTheme === 'gruvbox-dark' || savedTheme === 'dark' || savedTheme === 'oled') return 'gruvbox-dark';
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      return prefersDark ? 'gruvbox-dark' : 'gruvbox-light';
+    } catch {
+      return 'gruvbox-dark';
     }
-  }, []);
+  });
+
+  const [accent, setAccentState] = useState<GruvboxAccent>(() => {
+    if (typeof window === 'undefined') return 'orange';
+    try {
+      const savedAccent = (localStorage.getItem(ACCENT_KEY) as GruvboxAccent) || 'orange';
+      if (['orange', 'aqua', 'yellow', 'green', 'blue'].includes(savedAccent)) return savedAccent;
+      return 'orange';
+    } catch {
+      return 'orange';
+    }
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.setAttribute('data-accent', accent);
+  }, [theme, accent]);
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);

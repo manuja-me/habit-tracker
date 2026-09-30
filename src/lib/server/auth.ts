@@ -121,12 +121,13 @@ export async function verifyPinAction(enteredPin: string): Promise<{
             matchedUser = {
               userId: userData.id,
               username: userData.username,
-              role: (userData.role as any) || 'member',
+              role: (userData.role as 'owner' | 'member') || 'member',
             };
             userDeactivatedAt = userData.deactivated_at || null;
           }
-        } catch (err: any) {
-          console.error('app_users table lookup exception:', err);
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error('app_users table lookup exception:', message);
           return { success: false, error: 'Database connection failed. Please retry in a moment.' };
         }
       }
@@ -237,11 +238,12 @@ export async function verifyPinAction(enteredPin: string): Promise<{
     });
 
     return { success: true, user: matchedUser };
-  } catch (err: any) {
-    console.error('Unhandled verifyPinAction error:', err);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('Unhandled verifyPinAction error:', message);
     return {
       success: false,
-      error: err?.message || 'Internal authentication error. Please try again.',
+      error: message || 'Internal authentication error. Please try again.',
     };
   }
 }
@@ -325,8 +327,9 @@ export async function generateInviteAction(): Promise<{
     const fullToken = `${rawToken}.${signature}`;
 
     return { success: true, token: fullToken };
-  } catch (err: any) {
-    return { success: false, error: err?.message || 'Failed to generate invite' };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: message || 'Failed to generate invite' };
   }
 }
 
@@ -368,7 +371,7 @@ export async function validateInviteTokenAction(fullToken: string): Promise<{
           return { valid: false, error: 'This invitation has expired.' };
         }
       }
-    } catch (e) {
+    } catch {
       // Allow fallback if table not yet migrated
     }
   }
@@ -438,10 +441,10 @@ export async function completeInviteSetupAction(
     }
 
     // Insert new user
-    const newUserPayload: any = {
+    const newUserPayload = {
       username: cleanUsername,
       pin_hash: hashedPin,
-      role: 'member',
+      role: 'member' as const,
       last_login_at: new Date().toISOString(),
     };
 
@@ -452,8 +455,9 @@ export async function completeInviteSetupAction(
       .single();
 
     if (insertErr && (insertErr.message?.includes('last_login_at') || insertErr.code === '42703')) {
-      delete newUserPayload.last_login_at;
-      const retry = await supabase.from('app_users').insert(newUserPayload).select().single();
+      const fallbackPayload: Record<string, unknown> = { ...newUserPayload };
+      delete fallbackPayload.last_login_at;
+      const retry = await supabase.from('app_users').insert(fallbackPayload).select().single();
       newUser = retry.data;
       insertErr = retry.error;
     }
@@ -489,8 +493,9 @@ export async function completeInviteSetupAction(
     });
 
     return { success: true, user: sessionUser };
-  } catch (err: any) {
-    return { success: false, error: err?.message || 'Failed to complete registration' };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: message || 'Failed to complete registration' };
   }
 }
 
@@ -542,7 +547,7 @@ export async function reactivateAccountAction(): Promise<{
     const sessionUser: SessionUser = {
       userId: updatedUser?.id || currentUser.userId,
       username: updatedUser?.username || currentUser.username,
-      role: (updatedUser?.role as any) || currentUser.role,
+      role: (updatedUser?.role as 'owner' | 'member') || currentUser.role,
       isDeactivated: false,
     };
 
@@ -556,8 +561,9 @@ export async function reactivateAccountAction(): Promise<{
     });
 
     return { success: true, user: sessionUser };
-  } catch (err: any) {
-    return { success: false, error: err?.message || 'Failed to reactivate account.' };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: message || 'Failed to reactivate account.' };
   }
 }
 
@@ -633,8 +639,9 @@ export async function deactivateAccountAction(enteredPin: string): Promise<{
     cookieStore.delete(COOKIE_NAME);
 
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message || 'Failed to deactivate account.' };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: message || 'Failed to deactivate account.' };
   }
 }
 

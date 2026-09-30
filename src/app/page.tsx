@@ -25,7 +25,7 @@ import { MinimalHeatmap } from '../components/MinimalHeatmap';
 import { AnalyticsView } from '../components/AnalyticsView';
 import { DailyPlanner } from '../components/DailyPlanner';
 import { AdminUsersView } from '../components/AdminUsersView';
-import { HabitModal } from '../components/HabitModal';
+import { HabitModal, HabitFormData } from '../components/HabitModal';
 import { SettingsModal } from '../components/SettingsModal';
 import { ShortcutsModal } from '../components/ShortcutsModal';
 import { ShareStreakModal } from '../components/ShareStreakModal';
@@ -45,14 +45,21 @@ import { GithubIcon } from '../components/ui/GithubIcon';
 import { Plus } from 'lucide-react';
 
 export default function HabitTrackerPage() {
-  const [isUnlocked, setIsUnlocked] = useState<boolean | null>(null);
+  const [isUnlocked, setIsUnlocked] = useState<boolean | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const isSessionUnlocked = sessionStorage.getItem('zenith_session_unlocked') === 'true';
+    if (!isSessionUnlocked) {
+      clearLocalUserData();
+      return false;
+    }
+    return null;
+  });
   const [isVaultReady, setIsVaultReady] = useState<boolean>(false);
 
   const {
     habits,
     logs,
     currentUser,
-    isLoading,
     isInitialSyncDone,
     toggleHabit,
     addHabit,
@@ -85,24 +92,27 @@ export default function HabitTrackerPage() {
   // Inactivity / 24-hour absence check upon session unlock
   useEffect(() => {
     if (isUnlocked) {
-      if (typeof window !== 'undefined') {
-        const urlParams = new URLSearchParams(window.location.search);
-        const simulatedHours = urlParams.get('absence');
-        if (simulatedHours) {
-          const hours = parseInt(simulatedHours, 10) || 24;
-          const fakePast = new Date(Date.now() - hours * 3600 * 1000).toISOString();
-          localStorage.setItem(LAST_VISIT_STORAGE_KEY, fakePast);
-          localStorage.removeItem(LAST_ACKNOWLEDGED_ABSENCE_KEY);
+      const timer = setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          const urlParams = new URLSearchParams(window.location.search);
+          const simulatedHours = urlParams.get('absence');
+          if (simulatedHours) {
+            const hours = parseInt(simulatedHours, 10) || 24;
+            const fakePast = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+            localStorage.setItem(LAST_VISIT_STORAGE_KEY, fakePast);
+            localStorage.removeItem(LAST_ACKNOWLEDGED_ABSENCE_KEY);
+          }
         }
-      }
 
-      const result = checkInactivity(24);
-      if (result.wasAway && (result.missedDates.length > 0 || result.hoursAway >= 24)) {
-        setAbsenceInfo(result);
-        setIsAbsenceModalOpen(true);
-      } else {
-        recordCurrentVisit();
-      }
+        const result = checkInactivity(24);
+        if (result.wasAway && (result.missedDates.length > 0 || result.hoursAway >= 24)) {
+          setAbsenceInfo(result);
+          setIsAbsenceModalOpen(true);
+        } else {
+          recordCurrentVisit();
+        }
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [isUnlocked]);
 
@@ -151,18 +161,12 @@ export default function HabitTrackerPage() {
 
   // Validate session on mount
   useEffect(() => {
-    let isMounted = true;
-
-    const isSessionUnlocked =
-      typeof window !== 'undefined' &&
-      sessionStorage.getItem('zenith_session_unlocked') === 'true';
-
-    if (!isSessionUnlocked) {
-      clearLocalUserData();
-      setIsUnlocked(false);
+    if (isUnlocked === false) {
       lockSessionAction().catch(() => {});
       return;
     }
+
+    let isMounted = true;
 
     const checkAuth = async () => {
       try {
@@ -180,7 +184,7 @@ export default function HabitTrackerPage() {
             setIsUnlocked(false);
           }
         }
-      } catch (err) {
+      } catch {
         if (isMounted) {
           clearLocalUserData();
           if (typeof window !== 'undefined') {
@@ -196,7 +200,7 @@ export default function HabitTrackerPage() {
     return () => {
       isMounted = false;
     };
-  }, [syncWithCloud]);
+  }, [isUnlocked, syncWithCloud]);
 
   const handleUnlockSuccess = () => {
     if (typeof window !== 'undefined') {
@@ -374,7 +378,7 @@ export default function HabitTrackerPage() {
     setIsHabitModalOpen(true);
   };
 
-  const handleSaveHabit = (data: any) => {
+  const handleSaveHabit = (data: HabitFormData) => {
     if (editingHabit) {
       updateHabit(editingHabit.id, data);
     } else {
@@ -510,7 +514,9 @@ export default function HabitTrackerPage() {
     isInviteModalOpen,
     isShortcutsModalOpen,
     isShareModalOpen,
-    isNotificationModalOpen
+    isNotificationModalOpen,
+    isAbsenceModalOpen,
+    currentUser?.role,
   ]);
 
   if (isUnlocked === false) {

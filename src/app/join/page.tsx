@@ -3,16 +3,18 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { validateInviteTokenAction, completeInviteSetupAction } from '../../lib/server/auth';
-import { ShieldCheck, ShieldAlert, ArrowRight, Lock, User, KeyRound, Check } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, ArrowRight, User, KeyRound, Check } from 'lucide-react';
 
 function JoinForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get('token') || '';
 
-  const [isValidating, setIsValidating] = useState<boolean>(true);
+  const [isValidating, setIsValidating] = useState<boolean>(() => Boolean(token));
   const [isValidToken, setIsValidToken] = useState<boolean>(false);
-  const [tokenError, setTokenError] = useState<string | null>(null);
+  const [tokenError, setTokenError] = useState<string | null>(() => {
+    return token ? null : 'No invitation token was provided in the link.';
+  });
 
   const [username, setUsername] = useState<string>('');
   const [pin, setPin] = useState<string>('');
@@ -22,15 +24,12 @@ function JoinForm() {
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!token) {
-      setIsValidating(false);
-      setIsValidToken(false);
-      setTokenError('No invitation token was provided in the link.');
-      return;
-    }
+    if (!token) return;
 
+    let ignore = false;
     validateInviteTokenAction(token)
       .then((res) => {
+        if (ignore) return;
         setIsValidating(false);
         if (res.valid) {
           setIsValidToken(true);
@@ -40,10 +39,15 @@ function JoinForm() {
         }
       })
       .catch(() => {
+        if (ignore) return;
         setIsValidating(false);
         setIsValidToken(false);
         setTokenError('Failed to validate invitation token.');
       });
+
+    return () => {
+      ignore = true;
+    };
   }, [token]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -76,15 +80,15 @@ function JoinForm() {
           sessionStorage.setItem('zenith_session_unlocked', 'true');
         }
         setTimeout(() => {
-          // Hard reload to root to ensure fresh auth session cookie loads
-          window.location.href = '/';
+          router.push('/');
         }, 800);
       } else {
         setErrorMsg(res.error || 'Failed to complete registration.');
         setIsSubmitting(false);
       }
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'A network error occurred.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setErrorMsg(message || 'A network error occurred.');
       setIsSubmitting(false);
     }
   };

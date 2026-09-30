@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Bell, BellOff, Check, X, Clock, ShieldAlert } from 'lucide-react';
+import React, { useState } from 'react';
+import { Bell, Check, X, Clock, ShieldAlert } from 'lucide-react';
 
 interface NotificationModalProps {
   isOpen: boolean;
@@ -12,22 +12,25 @@ const NOTIF_TIME_KEY = 'zenith_reminder_time';
 const NOTIF_ENABLED_KEY = 'zenith_reminder_enabled';
 
 export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
-  const [permission, setPermission] = useState<NotificationPermission>('default');
-  const [enabled, setEnabled] = useState(false);
-  const [time, setTime] = useState('20:30');
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      if ('Notification' in window) {
-        setPermission(Notification.permission);
-      }
-      const storedEnabled = localStorage.getItem(NOTIF_ENABLED_KEY) === 'true';
-      const storedTime = localStorage.getItem(NOTIF_TIME_KEY) || '20:30';
-      setEnabled(storedEnabled);
-      setTime(storedTime);
+  const [permission, setPermission] = useState<NotificationPermission>(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission;
     }
-  }, [isOpen]);
+    return 'default';
+  });
+  const [enabled, setEnabled] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(NOTIF_ENABLED_KEY) === 'true';
+    }
+    return false;
+  });
+  const [time, setTime] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(NOTIF_TIME_KEY) || '20:30';
+    }
+    return '20:30';
+  });
+  const [saved, setSaved] = useState(false);
 
   if (!isOpen) return null;
 
@@ -44,7 +47,7 @@ export function NotificationModal({ isOpen, onClose }: NotificationModalProps) {
           icon: '/icon.png',
         });
       }
-    } catch (e) {}
+    } catch {}
   };
 
   const handleSave = () => {

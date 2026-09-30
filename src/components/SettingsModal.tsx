@@ -17,9 +17,7 @@ import {
   UserPlus, 
   Lock, 
   Shield, 
-  Sparkles,
   Sliders,
-  Laptop,
   Clock,
   ExternalLink,
   AlertTriangle,
@@ -27,7 +25,7 @@ import {
 } from 'lucide-react';
 import { GithubIcon } from './ui/GithubIcon';
 import { useHabitStore } from '../lib/store';
-import { useTheme } from '../lib/theme';
+import { useTheme, Theme, GruvboxAccent } from '../lib/theme';
 import { isSoundEnabled, setSoundEnabled } from '../lib/utils/sound';
 import { LAST_VISIT_STORAGE_KEY, formatLastVisitReadable } from '../lib/utils/presence';
 import { deactivateAccountAction } from '../lib/server/auth';
@@ -43,8 +41,12 @@ interface SettingsModalProps {
   onLockApp: () => void;
 }
 
-export function SettingsModal({
-  isOpen,
+export function SettingsModal(props: SettingsModalProps) {
+  if (!props.isOpen) return null;
+  return <SettingsModalDialog {...props} />;
+}
+
+function SettingsModalDialog({
   onClose,
   onOpenInviteModal,
   onOpenShortcutsModal,
@@ -55,40 +57,29 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const { isSyncing, isCloudReady, currentUser, syncWithCloud, syncError } = useHabitStore();
   const { theme, setTheme, accent, setAccent } = useTheme();
-  const [soundOn, setSoundOn] = useState(true);
+  const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
   const [justSynced, setJustSynced] = useState(false);
-  const [lastVisitDisplay, setLastVisitDisplay] = useState('First recorded session');
+  const [lastVisitDisplay] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(LAST_VISIT_STORAGE_KEY);
+      return formatLastVisitReadable(stored);
+    }
+    return 'First recorded session';
+  });
   const [showDeactivatePrompt, setShowDeactivatePrompt] = useState(false);
   const [deactivatePin, setDeactivatePin] = useState('');
   const [isDeactivating, setIsDeactivating] = useState(false);
   const [deactivateError, setDeactivateError] = useState<string | null>(null);
 
   useEffect(() => {
-    setSoundOn(isSoundEnabled());
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem(LAST_VISIT_STORAGE_KEY);
-      setLastVisitDisplay(formatLastVisitReadable(stored));
-    }
-    if (!isOpen) {
-      setShowDeactivatePrompt(false);
-      setDeactivatePin('');
-      setDeactivateError(null);
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape') {
         onClose();
       }
     };
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
-    }
+    window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
+  }, [onClose]);
 
   const handleSyncClick = async () => {
     if (isSyncing) return;
@@ -118,12 +109,26 @@ export function SettingsModal({
       } else {
         setDeactivateError(res.error || 'Failed to deactivate account.');
       }
-    } catch (err: any) {
-      setDeactivateError(err?.message || 'Error occurred while deactivating account.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setDeactivateError(message || 'Error occurred while deactivating account.');
     } finally {
       setIsDeactivating(false);
     }
   };
+
+  const themes: { id: Theme; label: string; icon: typeof Moon }[] = [
+    { id: 'gruvbox-dark', label: 'Gruvbox Dark', icon: Moon },
+    { id: 'gruvbox-light', label: 'Gruvbox Light', icon: Sun },
+  ];
+
+  const accents: { id: GruvboxAccent; label: string; color: string }[] = [
+    { id: 'orange', label: 'Orange', color: '#FE8019' },
+    { id: 'aqua', label: 'Aqua', color: '#8EC07C' },
+    { id: 'yellow', label: 'Yellow', color: '#FABD2F' },
+    { id: 'green', label: 'Green', color: '#B8BB26' },
+    { id: 'blue', label: 'Blue', color: '#83A598' },
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-4 bg-black/60 backdrop-blur-xs font-mono animate-in fade-in duration-150">
@@ -161,17 +166,14 @@ export function SettingsModal({
             Appearance
           </label>
           <div className="grid grid-cols-2 gap-2.5">
-            {[
-              { id: 'gruvbox-dark', label: 'Gruvbox Dark', icon: Moon },
-              { id: 'gruvbox-light', label: 'Gruvbox Light', icon: Sun },
-            ].map((t) => {
+            {themes.map((t) => {
               const Icon = t.icon;
               const isSelected = theme === t.id;
               return (
                 <button
                   key={t.id}
                   type="button"
-                  onClick={() => setTheme(t.id as any)}
+                  onClick={() => setTheme(t.id)}
                   className={`flex flex-col items-center justify-center gap-1.5 py-3 px-3 border text-xs font-sans font-bold transition-all cursor-pointer ${
                     isSelected
                       ? 'border-[#FF3B30] bg-[#FF3B30]/10 text-main font-black shadow-xs'
@@ -191,19 +193,13 @@ export function SettingsModal({
               Gruvbox Accent Tone
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-              {[
-                { id: 'orange', label: 'Orange', color: '#FE8019' },
-                { id: 'aqua', label: 'Aqua', color: '#8EC07C' },
-                { id: 'yellow', label: 'Yellow', color: '#FABD2F' },
-                { id: 'green', label: 'Green', color: '#B8BB26' },
-                { id: 'blue', label: 'Blue', color: '#83A598' },
-              ].map((acc) => {
+              {accents.map((acc) => {
                 const isSelected = (accent || 'orange') === acc.id;
                 return (
                   <button
                     key={acc.id}
                     type="button"
-                    onClick={() => setAccent(acc.id as any)}
+                    onClick={() => setAccent(acc.id)}
                     className={`flex items-center gap-2 p-2 border text-xs font-mono font-bold transition-all cursor-pointer ${
                       isSelected
                         ? 'border-main bg-card text-main shadow-xs ring-1 ring-main'
@@ -440,7 +436,7 @@ export function SettingsModal({
                   {currentUser?.username ? currentUser.username.toUpperCase() : 'MASTER OWNER'}
                 </div>
                 <div className="text-[10px] font-mono text-sub uppercase">
-                  Role: {currentUser?.role || 'Owner'} // Protected Vault
+                  Role: {currentUser?.role || 'Owner'} &bull; Protected Vault
                 </div>
               </div>
             </div>

@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { OWNER_USER_ID } from './auth-utils';
 import { getServerSupabase } from './supabase';
 
@@ -9,7 +10,10 @@ import { getServerSupabase } from './supabase';
  * - invitations (created_by or used_by)
  * - app_users
  */
-export async function purgeUserData(supabaseClient: any, targetUserId: string): Promise<boolean> {
+export async function purgeUserData(
+  supabaseClient: SupabaseClient | ReturnType<typeof getServerSupabase>,
+  targetUserId: string
+): Promise<boolean> {
   if (!supabaseClient || !targetUserId || targetUserId === OWNER_USER_ID) {
     return false;
   }
@@ -79,7 +83,9 @@ export async function purgeUserData(supabaseClient: any, targetUserId: string): 
 /**
  * Purge all users whose deactivation grace period (>= 7 days) has expired
  */
-export async function purgeExpiredDeactivatedUsers(supabaseClient?: any): Promise<number> {
+export async function purgeExpiredDeactivatedUsers(
+  supabaseClient?: SupabaseClient | ReturnType<typeof getServerSupabase>
+): Promise<number> {
   const supabase = supabaseClient || getServerSupabase();
   if (!supabase) return 0;
 

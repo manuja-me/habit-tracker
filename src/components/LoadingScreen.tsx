@@ -21,30 +21,34 @@ export function LoadingScreen({
   const [isFinishing, setIsFinishing] = useState(false);
 
   const isReadyRef = useRef(isReady);
-  isReadyRef.current = isReady;
-
   const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
-
-  const startTimeRef = useRef(Date.now());
 
   useEffect(() => {
-    // If targetProgress is explicitly controlled from outside, obey it
+    isReadyRef.current = isReady;
+    onCompleteRef.current = onComplete;
+  }, [isReady, onComplete]);
+
+  // When external targetProgress reaches 100, trigger completion
+  useEffect(() => {
+    if (targetProgress !== undefined && targetProgress >= 100) {
+      const timeout = setTimeout(() => {
+        onCompleteRef.current?.();
+      }, 250);
+      return () => clearTimeout(timeout);
+    }
+  }, [targetProgress]);
+
+  useEffect(() => {
     if (targetProgress !== undefined) {
-      setSimulatedProgress(targetProgress);
-      if (targetProgress >= 100 && onCompleteRef.current) {
-        const timeout = setTimeout(() => {
-          onCompleteRef.current?.();
-        }, 250);
-        return () => clearTimeout(timeout);
-      }
       return;
     }
+
+    const startTimestamp = Date.now();
 
     // Dynamic progressive animation curve
     const interval = setInterval(() => {
       setSimulatedProgress((prev) => {
-        const elapsed = Date.now() - startTimeRef.current;
+        const elapsed = Date.now() - startTimestamp;
 
         // If database connection is confirmed, glide rapidly to 100%
         if (isReadyRef.current) {
@@ -87,7 +91,7 @@ export function LoadingScreen({
     }, 40);
 
     return () => clearInterval(interval);
-  }, [targetProgress, isReady]);
+  }, [targetProgress]);
 
   // When 100% is reached, give user 250ms to see the 100% complete state, then trigger onComplete
   useEffect(() => {

@@ -178,10 +178,12 @@ export function DailyPlanner({
 }: DailyPlannerProps) {
   const { dayNotes, saveDayNote } = useHabitStore();
   const todayStr = getTodayDateString();
+  const [prevSelectedDate, setPrevSelectedDate] = useState(selectedDate);
   const [anchorDate, setAnchorDate] = useState<string>(selectedDate || todayStr);
 
   // Keep anchorDate in sync if external selectedDate changes outside the current 7-day window
-  useEffect(() => {
+  if (selectedDate !== prevSelectedDate) {
+    setPrevSelectedDate(selectedDate);
     if (selectedDate) {
       try {
         const currentStart = parseISO(anchorDate);
@@ -192,7 +194,7 @@ export function DailyPlanner({
         }
       } catch {}
     }
-  }, [selectedDate, anchorDate]);
+  }
 
   // Generate 7 consecutive days starting from anchorDate
   const currentRef = parseISO(anchorDate);

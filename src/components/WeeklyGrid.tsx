@@ -4,7 +4,6 @@ import React from 'react';
 import { Habit, HabitLog } from '../lib/types';
 import { getWeekDays, formatDayName, formatShortDate, getTodayDateString, isHabitDueOnDate } from '../lib/utils/date';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
-import { isDaySuccessful } from '../lib/utils/streaks';
 import { Check, ChevronLeft, ChevronRight, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { addDays, subDays } from 'date-fns';
 
@@ -138,7 +137,6 @@ export function WeeklyGrid({
                     {weekDays.map((dStr) => {
                       const isDue = isHabitDueOnDate(habit, dStr);
                       const log = logs[`${habit.id}_${dStr}`];
-                      const isPassed = isDaySuccessful(habit, dStr, logs);
 
                       if (!isDue) {
                         return (

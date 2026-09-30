@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { generateInviteAction } from '../lib/server/auth';
-import { X, UserPlus, Copy, Check, ShieldCheck, ExternalLink, RefreshCw } from 'lucide-react';
+import { X, UserPlus, Copy, Check, ShieldCheck, RefreshCw } from 'lucide-react';
 
 interface InviteFriendModalProps {
   isOpen: boolean;
@@ -30,8 +30,9 @@ export function InviteFriendModal({ isOpen, onClose }: InviteFriendModalProps) {
       } else {
         setErrorMsg(res.error || 'Failed to generate invitation link.');
       }
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'A network error occurred.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setErrorMsg(message || 'A network error occurred.');
     } finally {
       setIsLoading(false);
     }
@@ -87,7 +88,7 @@ export function InviteFriendModal({ isOpen, onClose }: InviteFriendModalProps) {
               <span>END-TO-END PRIVACY</span>
             </div>
             <p className="text-sub leading-tight">
-              His PIN is encrypted on his device. You will never see his PIN, and neither of you can see each other's routines.
+              His PIN is encrypted on his device. You will never see his PIN, and neither of you can see each other&apos;s routines.
             </p>
           </div>
 

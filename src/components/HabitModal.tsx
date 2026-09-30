@@ -5,10 +5,30 @@ import { Habit, HabitCategory, HabitFrequency, HabitType, HabitNature } from '..
 import { AVAILABLE_ICONS, COLOR_PALETTES } from '../lib/utils/icons';
 import { X, Check, ShieldAlert, Sparkles, ShieldOff } from 'lucide-react';
 
+export type WeaningProtocolType = 'exponential' | 'linear' | 'rapid' | 'none';
+
+export interface HabitFormData {
+  nature?: HabitNature;
+  weaning?: {
+    enabled: boolean;
+    protocol: WeaningProtocolType;
+  };
+  title: string;
+  description: string;
+  category: HabitCategory;
+  color: string;
+  icon: string;
+  type: HabitType;
+  target_value: number;
+  target_unit?: string;
+  frequency: HabitFrequency;
+  custom_days?: number[];
+}
+
 interface HabitModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (habitData: any) => void;
+  onSave: (habitData: HabitFormData) => void;
   editingHabit?: Habit | null;
   initialNature?: HabitNature;
 }
@@ -33,69 +53,53 @@ const DAYS_OF_WEEK = [
   { day: 0, label: 'S' },
 ];
 
-export function HabitModal({
-  isOpen,
+export function HabitModal(props: HabitModalProps) {
+  if (!props.isOpen) return null;
+  const mountKey = props.editingHabit?.id || `new-${props.initialNature || 'do'}`;
+  return <HabitModalDialog key={mountKey} {...props} />;
+}
+
+function HabitModalDialog({
   onClose,
   onSave,
   editingHabit,
   initialNature = 'do',
 }: HabitModalProps) {
-  const [nature, setNature] = useState<HabitNature>(initialNature);
-  const [weaningProtocol, setWeaningProtocol] = useState<'exponential' | 'linear' | 'rapid' | 'none'>('exponential');
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<HabitCategory>('productivity');
-  const [color, setColor] = useState(COLOR_PALETTES[0].hex);
-  const [icon, setIcon] = useState('Flame');
-  const [type, setType] = useState<HabitType>('boolean');
-  const [targetValue, setTargetValue] = useState<number>(1);
-  const [targetUnit, setTargetUnit] = useState('');
-  const [frequency, setFrequency] = useState<HabitFrequency>('daily');
-  const [customDays, setCustomDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const defaultNat = editingHabit?.nature || initialNature || 'do';
+  const [nature, setNature] = useState<HabitNature>(defaultNat);
+  const [weaningProtocol, setWeaningProtocol] = useState<WeaningProtocolType>(() => {
+    if (editingHabit?.weaning?.enabled && editingHabit.weaning.protocol !== 'custom') {
+      return editingHabit.weaning.protocol as WeaningProtocolType;
+    }
+    return 'exponential';
+  });
+  const [title, setTitle] = useState(editingHabit?.title || '');
+  const [description, setDescription] = useState(editingHabit?.description || '');
+  const [category, setCategory] = useState<HabitCategory>(
+    editingHabit?.category || (defaultNat === 'dont' ? 'health' : 'productivity')
+  );
+  const [color, setColor] = useState(
+    editingHabit?.color || (defaultNat === 'dont' ? '#FE8019' : COLOR_PALETTES[0].hex)
+  );
+  const [icon, setIcon] = useState(
+    editingHabit?.icon || (defaultNat === 'dont' ? 'ShieldOff' : 'Flame')
+  );
+  const [type, setType] = useState<HabitType>(editingHabit?.type || 'boolean');
+  const [targetValue, setTargetValue] = useState<number>(editingHabit?.target_value ?? 1);
+  const [targetUnit, setTargetUnit] = useState(editingHabit?.target_unit || '');
+  const [frequency, setFrequency] = useState<HabitFrequency>(editingHabit?.frequency || 'daily');
+  const [customDays, setCustomDays] = useState<number[]>(editingHabit?.custom_days || [1, 2, 3, 4, 5]);
 
   // Handle ESC key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape') {
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  useEffect(() => {
-    if (editingHabit) {
-      setNature(editingHabit.nature || 'do');
-      setWeaningProtocol(editingHabit.weaning?.enabled ? (editingHabit.weaning.protocol as any) : 'exponential');
-      setTitle(editingHabit.title);
-      setDescription(editingHabit.description || '');
-      setCategory(editingHabit.category);
-      setColor(editingHabit.color);
-      setIcon(editingHabit.icon);
-      setType(editingHabit.type);
-      setTargetValue(editingHabit.target_value);
-      setTargetUnit(editingHabit.target_unit || '');
-      setFrequency(editingHabit.frequency);
-      setCustomDays(editingHabit.custom_days || [1, 2, 3, 4, 5]);
-    } else {
-      const defaultNat = initialNature || 'do';
-      setNature(defaultNat);
-      setWeaningProtocol('exponential');
-      setTitle('');
-      setDescription('');
-      setCategory(defaultNat === 'dont' ? 'health' : 'productivity');
-      setColor(defaultNat === 'dont' ? '#FE8019' : COLOR_PALETTES[0].hex);
-      setIcon(defaultNat === 'dont' ? 'ShieldOff' : 'Flame');
-      setType('boolean');
-      setTargetValue(1);
-      setTargetUnit('');
-      setFrequency('daily');
-      setCustomDays([1, 2, 3, 4, 5]);
-    }
-  }, [editingHabit, isOpen, initialNature]);
-
-  if (!isOpen) return null;
+  }, [onClose]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,7 +190,7 @@ export function HabitModal({
             >
               <div className="flex items-center gap-1.5 text-xs font-bold font-mono uppercase">
                 <ShieldOff className="w-3.5 h-3.5 text-rose-400" />
-                DON'T (QUIT)
+                DON&apos;T (QUIT)
               </div>
               <p className="text-[10px] text-sub mt-0.5 leading-tight">
                 Addiction to avoid. Auto-clean daily unless you slip up.
@@ -241,15 +245,15 @@ export function HabitModal({
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                 {[
-                  { id: 'exponential', title: 'EXPONENTIAL (RECOMMENDED)', desc: '1d → 2d → 4d → 7d → 14d → 21d → 30d' },
-                  { id: 'linear', title: 'LINEAR STEP (+1 DAY)', desc: '1d → 2d → 3d → 4d → 5d → 6d...' },
-                  { id: 'rapid', title: 'RAPID FADING', desc: '2d → 5d → 10d → 20d → 30d' },
-                  { id: 'none', title: 'STRICT / COLD TURKEY', desc: '100% clean every day, no tapering' },
+                  { id: 'exponential' as const, title: 'EXPONENTIAL (RECOMMENDED)', desc: '1d → 2d → 4d → 7d → 14d → 21d → 30d' },
+                  { id: 'linear' as const, title: 'LINEAR STEP (+1 DAY)', desc: '1d → 2d → 3d → 4d → 5d → 6d...' },
+                  { id: 'rapid' as const, title: 'RAPID FADING', desc: '2d → 5d → 10d → 20d → 30d' },
+                  { id: 'none' as const, title: 'STRICT / COLD TURKEY', desc: '100% clean every day, no tapering' },
                 ].map((p) => (
                   <button
                     type="button"
                     key={p.id}
-                    onClick={() => setWeaningProtocol(p.id as any)}
+                    onClick={() => setWeaningProtocol(p.id)}
                     className={`p-2.5 sm:p-2 text-left border transition-all cursor-pointer touch-manipulation min-h-[48px] sm:min-h-[40px] ${
                       weaningProtocol === p.id
                         ? 'bg-rose-500/15 border-rose-500 text-rose-400'

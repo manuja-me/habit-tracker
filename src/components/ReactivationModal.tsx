@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, Clock, RefreshCw, LogOut, CheckCircle2, ShieldAlert } from 'lucide-react';
 
 interface ReactivationModalProps {
@@ -22,32 +22,29 @@ export function ReactivationModal({
   onKeepDeactivated,
   isProcessing = false,
 }: ReactivationModalProps) {
-  const [remainingMs, setRemainingMs] = useState<number>(initialRemainingMs);
-
-  useEffect(() => {
-    // Recalculate accurately based on deactivatedAt + 7 days
-    const calculateRemaining = () => {
-      try {
-        const start = new Date(deactivatedAt).getTime();
-        if (isNaN(start)) {
-          return Math.max(0, Number(initialRemainingMs) || 0);
-        }
-        const expiration = start + 7 * 24 * 60 * 60 * 1000;
-        const diff = expiration - Date.now();
-        return isNaN(diff) ? Math.max(0, Number(initialRemainingMs) || 0) : Math.max(0, diff);
-      } catch {
+  const calculateRemaining = useCallback(() => {
+    try {
+      const start = new Date(deactivatedAt).getTime();
+      if (isNaN(start)) {
         return Math.max(0, Number(initialRemainingMs) || 0);
       }
-    };
+      const expiration = start + 7 * 24 * 60 * 60 * 1000;
+      const diff = expiration - Date.now();
+      return isNaN(diff) ? Math.max(0, Number(initialRemainingMs) || 0) : Math.max(0, diff);
+    } catch {
+      return Math.max(0, Number(initialRemainingMs) || 0);
+    }
+  }, [deactivatedAt, initialRemainingMs]);
 
-    setRemainingMs(calculateRemaining());
+  const [remainingMs, setRemainingMs] = useState<number>(calculateRemaining);
 
+  useEffect(() => {
     const interval = setInterval(() => {
       setRemainingMs(calculateRemaining());
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [deactivatedAt, initialRemainingMs]);
+  }, [calculateRemaining]);
 
   useEffect(() => {
     if (!isOpen) return;

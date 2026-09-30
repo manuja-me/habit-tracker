@@ -4,9 +4,43 @@ import { requireAuth } from './auth';
 import { OWNER_USER_ID } from './auth-utils';
 import { getCleanSupabaseConfig, getServerSupabase } from './supabase';
 import { purgeUserData, purgeExpiredDeactivatedUsers } from './user-management';
-import { Habit, HabitLog } from '../types';
+import { Habit, HabitCategory, HabitFrequency, HabitLog, HabitType } from '../types';
 
 export { purgeExpiredDeactivatedUsers };
+
+interface DbHabitRecord {
+  id: string;
+  user_id?: string | null;
+  title: string;
+  description?: string | null;
+  category: HabitCategory;
+  color: string;
+  icon: string;
+  type: HabitType;
+  target_value: number;
+  target_unit?: string | null;
+  frequency: HabitFrequency;
+  custom_days?: number[] | null;
+  archived?: boolean | null;
+  sort_order?: number | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+interface DbLogRecord {
+  id: string;
+  habit_id: string;
+  date: string;
+  completed: boolean;
+  value: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface DbDayNoteRecord {
+  date: string;
+  content: string;
+}
 
 /**
  * Server Action: Fetch habits and logs scoped to the authenticated user
@@ -34,7 +68,7 @@ export async function getHabitsAndLogsAction(): Promise<{
     }
 
     // 1. Fetch habits scoped to this user
-    let habitsData: any[] = [];
+    let habitsData: DbHabitRecord[] = [];
     const isOwner = user.role === 'owner' || user.userId === OWNER_USER_ID;
 
     // Try scoped query with user_id
@@ -54,12 +88,12 @@ export async function getHabitsAndLogsAction(): Promise<{
           .eq('archived', false)
           .order('sort_order', { ascending: true });
         if (fallbackRes.error) throw fallbackRes.error;
-        habitsData = fallbackRes.data || [];
+        habitsData = (fallbackRes.data as DbHabitRecord[]) || [];
       } else {
         habitsData = [];
       }
     } else {
-      habitsData = habitsRes.data || [];
+      habitsData = (habitsRes.data as DbHabitRecord[]) || [];
     }
 
     // 2. Compute date cutoff: past 370 days covers 52-week heatmap, year history, and day planner
@@ -67,8 +101,8 @@ export async function getHabitsAndLogsAction(): Promise<{
     cutoffDate.setDate(cutoffDate.getDate() - 370);
     const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
 
-    const userHabitIds = habitsData.map((h: any) => h.id);
-    let logsData: any[] = [];
+    const userHabitIds = habitsData.map((h) => h.id);
+    let logsData: DbLogRecord[] = [];
     const dayNotesMap: Record<string, string> = {};
 
     // Run habit_logs and day_notes queries concurrently to halve serverless latency
@@ -89,18 +123,18 @@ export async function getHabitsAndLogsAction(): Promise<{
     ]);
 
     if (!logsRes.error && logsRes.data) {
-      logsData = logsRes.data;
+      logsData = logsRes.data as DbLogRecord[];
     }
 
     if (!notesRes.error && notesRes.data) {
-      notesRes.data.forEach((dn: any) => {
+      (notesRes.data as DbDayNoteRecord[]).forEach((dn) => {
         if (dn.date && dn.content !== undefined) {
           dayNotesMap[dn.date] = dn.content;
         }
       });
     }
 
-    const formattedHabits: Habit[] = (habitsData || []).map((h: any) => {
+    const formattedHabits: Habit[] = habitsData.map((h) => {
       const rawDesc = h.description || '';
       const isDont = rawDesc.includes('[NATURE:DONT]');
 
@@ -135,12 +169,12 @@ export async function getHabitsAndLogsAction(): Promise<{
         archived: Boolean(h.archived),
         order: h.sort_order || 0,
         created_at: h.created_at,
-        updated_at: h.updated_at,
+        updated_at: h.updated_at || undefined,
       };
     });
 
     const mappedLogs: Record<string, HabitLog> = {};
-    (logsData || []).forEach((l: any) => {
+    logsData.forEach((l) => {
       mappedLogs[`${l.habit_id}_${l.date}`] = {
         id: l.id,
         habit_id: l.habit_id,
@@ -160,11 +194,12 @@ export async function getHabitsAndLogsAction(): Promise<{
       dayNotes: dayNotesMap,
       user: { id: user.userId, username: user.username, role: user.role },
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
     return {
       success: false,
       isConfigured: Boolean(getCleanSupabaseConfig()),
-      error: err?.message || 'Failed to fetch data',
+      error: message || 'Failed to fetch data',
     };
   }
 }
@@ -191,7 +226,7 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
       }
     }
 
-    const habitPayload: any = {
+    const habitPayload = {
       id: habit.id,
       user_id: user.userId,
       title: habit.title,
@@ -213,15 +248,17 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
 
     // Resilient fallback if user_id column doesn't exist yet
     if (error && (error.message?.includes('user_id') || error.code === '42703')) {
-      delete habitPayload.user_id;
-      const retry = await supabase.from('habits').upsert(habitPayload);
+      const fallbackPayload: Record<string, unknown> = { ...habitPayload };
+      delete fallbackPayload.user_id;
+      const retry = await supabase.from('habits').upsert(fallbackPayload);
       error = retry.error;
     }
 
     if (error) throw error;
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: message };
   }
 }
 
@@ -263,9 +300,10 @@ export async function deleteHabitAction(habitId: string): Promise<{ success: boo
     }
 
     return { success: true };
-  } catch (err: any) {
-    console.error('deleteHabitAction error:', err);
-    return { success: false, error: err?.message };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('deleteHabitAction error:', message);
+    return { success: false, error: message };
   }
 }
 
@@ -278,7 +316,7 @@ export async function saveHabitLogAction(log: HabitLog): Promise<{ success: bool
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
-    const logPayload: any = {
+    const logPayload = {
       habit_id: log.habit_id,
       user_id: user.userId,
       date: log.date,
@@ -291,15 +329,17 @@ export async function saveHabitLogAction(log: HabitLog): Promise<{ success: bool
 
     // Fallback if user_id column doesn't exist yet
     if (error && (error.message?.includes('user_id') || error.code === '42703')) {
-      delete logPayload.user_id;
-      const retry = await supabase.from('habit_logs').upsert(logPayload, { onConflict: 'habit_id,date' });
+      const fallbackPayload: Record<string, unknown> = { ...logPayload };
+      delete fallbackPayload.user_id;
+      const retry = await supabase.from('habit_logs').upsert(fallbackPayload, { onConflict: 'habit_id,date' });
       error = retry.error;
     }
 
     if (error) throw error;
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: message };
   }
 }
 
@@ -324,8 +364,9 @@ export async function reorderHabitsAction(orderedHabits: Habit[]): Promise<{ suc
       })
     );
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: message };
   }
 }
 
@@ -339,7 +380,7 @@ export async function saveDayNoteAction(date: string, content: string): Promise<
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
-    const notePayload: any = {
+    const notePayload = {
       user_id: user.userId,
       date,
       content: content ?? '',
@@ -350,8 +391,9 @@ export async function saveDayNoteAction(date: string, content: string): Promise<
 
     // Fallback if day_notes table has constraint only on date
     if (error && (error.message?.includes('user_id') || error.code === '42703' || error.code === '42P10')) {
-      delete notePayload.user_id;
-      const retry = await supabase.from('day_notes').upsert(notePayload, { onConflict: 'date' });
+      const fallbackPayload: Record<string, unknown> = { ...notePayload };
+      delete fallbackPayload.user_id;
+      const retry = await supabase.from('day_notes').upsert(fallbackPayload, { onConflict: 'date' });
       error = retry.error;
     }
 
@@ -361,9 +403,10 @@ export async function saveDayNoteAction(date: string, content: string): Promise<
     }
 
     return { success: true };
-  } catch (err: any) {
-    console.error('saveDayNoteAction catch error:', err);
-    return { success: false, error: err?.message };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('saveDayNoteAction catch error:', message);
+    return { success: false, error: message };
   }
 }
 
@@ -425,9 +468,20 @@ export async function adminDeleteUserAction(targetUserId: string): Promise<{
     }
 
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message || 'Failed to delete user.' };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: message || 'Failed to delete user.' };
   }
+}
+
+interface DbAdminUserRow {
+  id: string;
+  username: string;
+  role: 'owner' | 'member';
+  created_at: string;
+  last_login_at?: string | null;
+  updated_at?: string | null;
+  deactivated_at?: string | null;
 }
 
 /**
@@ -479,7 +533,7 @@ export async function getAdminUsersAction(): Promise<{
         .order('created_at', { ascending: true });
 
       if (!fallbackWithLogin.error && fallbackWithLogin.data) {
-        const users: AdminUserRecord[] = fallbackWithLogin.data.map((u: any) => ({
+        const users: AdminUserRecord[] = (fallbackWithLogin.data as DbAdminUserRow[]).map((u) => ({
           id: u.id,
           username: u.username,
           role: u.role,
@@ -498,7 +552,7 @@ export async function getAdminUsersAction(): Promise<{
 
       if (fallback.error) throw fallback.error;
 
-      const fallbackUsers: AdminUserRecord[] = (fallback.data || []).map((u: any) => ({
+      const fallbackUsers: AdminUserRecord[] = ((fallback.data || []) as DbAdminUserRow[]).map((u) => ({
         id: u.id,
         username: u.username,
         role: u.role,
@@ -510,7 +564,7 @@ export async function getAdminUsersAction(): Promise<{
       return { success: true, users: fallbackUsers };
     }
 
-    const users: AdminUserRecord[] = (data || []).map((u: any) => ({
+    const users: AdminUserRecord[] = ((data || []) as DbAdminUserRow[]).map((u) => ({
       id: u.id,
       username: u.username,
       role: u.role,
@@ -520,7 +574,8 @@ export async function getAdminUsersAction(): Promise<{
     }));
 
     return { success: true, users };
-  } catch (err: any) {
-    return { success: false, error: err?.message || 'Failed to retrieve system users' };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: message || 'Failed to retrieve system users' };
   }
 }

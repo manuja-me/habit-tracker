@@ -34,20 +34,23 @@ export function AdminUsersView({ onOpenInvite }: AdminUsersViewProps) {
   const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
+  const [nowTimestamp, setNowTimestamp] = useState(() => Date.now());
+
   const fetchUsers = useCallback(async (isRefresh = false) => {
     if (isRefresh) setIsRefreshing(true);
-    else setIsLoading(true);
     setErrorMsg(null);
 
     try {
       const res = await getAdminUsersAction();
       if (res.success && res.users) {
         setUsers(res.users);
+        setNowTimestamp(Date.now());
       } else {
         setErrorMsg(res.error || 'Failed to retrieve system users.');
       }
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'A network error occurred while loading directory.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setErrorMsg(message || 'A network error occurred while loading directory.');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -55,8 +58,27 @@ export function AdminUsersView({ onOpenInvite }: AdminUsersViewProps) {
   }, []);
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    let ignore = false;
+    getAdminUsersAction().then((res) => {
+      if (ignore) return;
+      if (res.success && res.users) {
+        setUsers(res.users);
+        setNowTimestamp(Date.now());
+      } else {
+        setErrorMsg(res.error || 'Failed to retrieve system users.');
+      }
+      setIsLoading(false);
+    }).catch((err: unknown) => {
+      if (ignore) return;
+      const message = err instanceof Error ? err.message : String(err);
+      setErrorMsg(message || 'A network error occurred while loading directory.');
+      setIsLoading(false);
+    });
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const isUserInactive30Days = (u: AdminUserRecord) => {
     if (u.role === 'owner') return false;
@@ -65,14 +87,14 @@ export function AdminUsersView({ onOpenInvite }: AdminUsersViewProps) {
     if (!rawDate) return false;
     const timestamp = new Date(rawDate).getTime();
     if (isNaN(timestamp)) return false;
-    return Date.now() - timestamp >= THIRTY_DAYS_MS;
+    return nowTimestamp - timestamp >= THIRTY_DAYS_MS;
   };
 
   const getDeactivationStatus = (deactivatedAt: string | null | undefined) => {
     if (!deactivatedAt) return null;
     const deactTime = new Date(deactivatedAt).getTime();
     if (isNaN(deactTime)) return null;
-    const remainingMs = SEVEN_DAYS_MS - (Date.now() - deactTime);
+    const remainingMs = SEVEN_DAYS_MS - (nowTimestamp - deactTime);
     if (remainingMs <= 0) {
       return { isExpired: true, text: 'AUTO-PURGE EXPIRED' };
     }
@@ -104,8 +126,9 @@ export function AdminUsersView({ onOpenInvite }: AdminUsersViewProps) {
       } else {
         setErrorMsg(res.error || 'Failed to delete user.');
       }
-    } catch (err: any) {
-      setErrorMsg(err?.message || 'Error occurred while deleting user.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setErrorMsg(message || 'Error occurred while deleting user.');
     } finally {
       setIsDeleting(false);
     }
@@ -115,7 +138,7 @@ export function AdminUsersView({ onOpenInvite }: AdminUsersViewProps) {
     if (!dateStr) return { text: 'Never / No login recorded', isRecent: false };
     try {
       const parsed = parseISO(dateStr);
-      const diffMs = Date.now() - parsed.getTime();
+      const diffMs = nowTimestamp - parsed.getTime();
       const isRecent = diffMs < 1000 * 60 * 30; // within 30 minutes
       const relative = formatDistanceToNow(parsed, { addSuffix: true });
       const exact = format(parsed, 'MMM dd, yyyy • h:mm a');

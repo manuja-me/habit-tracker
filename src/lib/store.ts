@@ -60,7 +60,7 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         emitChange();
       }
     };
-  } catch (e) {}
+  } catch {}
 }
 
 function broadcastLocalUpdate() {
@@ -72,7 +72,7 @@ function broadcastLocalUpdate() {
         logs: globalLogs,
         dayNotes: globalDayNotes,
       });
-    } catch (e) {}
+    } catch {}
   }
 }
 
@@ -146,7 +146,7 @@ export function loadLocalDataFromStorage(userId?: string) {
     if (storedDayNotes) {
       try {
         globalDayNotes = JSON.parse(storedDayNotes);
-      } catch (err) {
+      } catch {
         globalDayNotes = {};
       }
     } else {
@@ -300,9 +300,10 @@ async function executeCloudSync(isBackground = false) {
         broadcastLocalUpdate();
       }
     }
-  } catch (err: any) {
-    console.warn('Server sync notice:', err?.message || err);
-    globalSyncError = err?.message || 'Sync failed';
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn('Server sync notice:', message);
+    globalSyncError = message || 'Sync failed';
   } finally {
     isStorageLoaded = true;
     isInitialSyncDone = true;
@@ -371,19 +372,19 @@ function initGlobalSyncCoordinator() {
       try {
         globalHabits = JSON.parse(e.newValue);
         emitChange();
-      } catch (err) {}
+      } catch {}
     }
     if (e.key === LOGS_STORAGE_KEY && e.newValue) {
       try {
         globalLogs = JSON.parse(e.newValue);
         emitChange();
-      } catch (err) {}
+      } catch {}
     }
     if (e.key === DAY_NOTES_STORAGE_KEY && e.newValue) {
       try {
         globalDayNotes = JSON.parse(e.newValue);
         emitChange();
-      } catch (err) {}
+      } catch {}
     }
   });
 }
@@ -567,9 +568,10 @@ export function useHabitStore() {
         console.error('Server habit delete error:', res.error);
         globalSyncError = res.error;
       }
-    } catch (e: any) {
-      console.error('Background server habit delete error:', e);
-      globalSyncError = e?.message || 'Failed to delete on server';
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error('Background server habit delete error:', message);
+      globalSyncError = message || 'Failed to delete on server';
     } finally {
       // Keep in protection set for 5s so any in-flight response arriving shortly can NEVER revive it
       setTimeout(() => {
