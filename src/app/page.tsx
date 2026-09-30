@@ -1,25 +1,18 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useHabitStore, clearLocalUserData, loadLocalDataFromStorage } from '../lib/store';
 import { Habit } from '../lib/types';
 import { calculateHabitStats, isDaySuccessful } from '../lib/utils/streaks';
 import { getTodayDateString, isHabitDueOnDate } from '../lib/utils/date';
-import { triggerDailyCelebration } from '../lib/utils/confetti';
-import { 
-  playCheckSound, 
-  playUncheckSound, 
-  playMilestoneSound, 
-  playLevelUpSound,
-  playAchievementSound,
-  isSoundEnabled, 
-  setSoundEnabled 
-} from '../lib/utils/sound';
 import { calculateGamificationProfile } from '../lib/utils/gamification';
 import { checkSessionAction, lockSessionAction } from '../lib/server/auth';
+import { useAppShortcuts } from '../lib/hooks/useAppShortcuts';
+import { useGamificationFeedback } from '../lib/hooks/useGamificationFeedback';
+
 import { Header } from '../components/Header';
 import { ViewTabs, ActiveTab } from '../components/ViewTabs';
-import { MinimalHabitItem } from '../components/MinimalHabitItem';
+import { DailyHabitsList } from '../components/DailyHabitsList';
 import { WeeklyGrid } from '../components/WeeklyGrid';
 import { MinimalHeatmap } from '../components/MinimalHeatmap';
 import { AnalyticsView } from '../components/AnalyticsView';
@@ -32,6 +25,9 @@ import { ShareStreakModal } from '../components/ShareStreakModal';
 import { NotificationModal } from '../components/NotificationModal';
 import { InviteFriendModal } from '../components/InviteFriendModal';
 import { AbsenceCatchUpModal } from '../components/AbsenceCatchUpModal';
+import { PinLockScreen } from '../components/PinLockScreen';
+import { LoadingScreen } from '../components/LoadingScreen';
+import { AppFooter } from '../components/AppFooter';
 import { 
   checkInactivity, 
   recordCurrentVisit, 
@@ -39,10 +35,6 @@ import {
   LAST_VISIT_STORAGE_KEY,
   LAST_ACKNOWLEDGED_ABSENCE_KEY
 } from '../lib/utils/presence';
-import { PinLockScreen } from '../components/PinLockScreen';
-import { LoadingScreen } from '../components/LoadingScreen';
-import { GithubIcon } from '../components/ui/GithubIcon';
-import { Plus } from 'lucide-react';
 
 export default function HabitTrackerPage() {
   const [isUnlocked, setIsUnlocked] = useState<boolean | null>(() => {
@@ -81,13 +73,9 @@ export default function HabitTrackerPage() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [absenceInfo, setAbsenceInfo] = useState<AbsenceDetectionResult | null>(null);
   const [isAbsenceModalOpen, setIsAbsenceModalOpen] = useState(false);
-  const [levelUpToast, setLevelUpToast] = useState<{ level: number; tierName: string } | null>(null);
 
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
-  const [draggedHabitId, setDraggedHabitId] = useState<string | null>(null);
   const [modalInitialNature, setModalInitialNature] = useState<'do' | 'dont'>('do');
-
-  const prevCompletionRef = useRef<boolean>(false);
 
   // Inactivity / 24-hour absence check upon session unlock
   useEffect(() => {
@@ -243,82 +231,17 @@ export default function HabitTrackerPage() {
     return { completedCount: completed, totalCount: total };
   }, [dueHabits, logs, selectedDate]);
 
-  useEffect(() => {
-    const isAllDone = totalCount > 0 && completedCount === totalCount;
-    if (isAllDone && !prevCompletionRef.current) {
-      triggerDailyCelebration();
-      playMilestoneSound();
-    }
-    prevCompletionRef.current = isAllDone;
-  }, [completedCount, totalCount]);
-
   const gamificationProfile = useMemo(() => {
     return calculateGamificationProfile(habits, logs, selectedDate);
   }, [habits, logs, selectedDate]);
 
-  useEffect(() => {
-    if (!isUnlocked || typeof window === 'undefined') return;
-
-    const storedLevelStr = localStorage.getItem('zenith_player_level');
-    const currentLevel = gamificationProfile.level;
-
-    if (storedLevelStr === null) {
-      localStorage.setItem('zenith_player_level', String(currentLevel));
-      return;
-    }
-
-    const prevLevel = parseInt(storedLevelStr, 10);
-    if (!isNaN(prevLevel) && currentLevel > prevLevel) {
-      localStorage.setItem('zenith_player_level', String(currentLevel));
-      playLevelUpSound();
-      triggerDailyCelebration();
-      const toastTimer = setTimeout(() => {
-        setLevelUpToast({
-          level: currentLevel,
-          tierName: gamificationProfile.tier.name,
-        });
-      }, 50);
-
-      const hideTimer = setTimeout(() => {
-        setLevelUpToast(null);
-      }, 4550);
-      return () => {
-        clearTimeout(toastTimer);
-        clearTimeout(hideTimer);
-      };
-    } else if (!isNaN(prevLevel) && currentLevel !== prevLevel) {
-      localStorage.setItem('zenith_player_level', String(currentLevel));
-    }
-  }, [gamificationProfile.level, gamificationProfile.tier.name, isUnlocked]);
-
-  // Track achievement codex unlocks
-  const prevUnlockedRef = useRef<Set<string> | null>(null);
-
-  useEffect(() => {
-    if (!isUnlocked || typeof window === 'undefined') return;
-
-    const currentUnlocked = new Set(
-      gamificationProfile.achievements.filter((a) => a.unlocked).map((a) => a.id)
-    );
-
-    if (prevUnlockedRef.current === null) {
-      prevUnlockedRef.current = currentUnlocked;
-      return;
-    }
-
-    let hasNewUnlock = false;
-    currentUnlocked.forEach((id) => {
-      if (!prevUnlockedRef.current?.has(id)) {
-        hasNewUnlock = true;
-      }
-    });
-
-    if (hasNewUnlock) {
-      playAchievementSound();
-    }
-
-    prevUnlockedRef.current = currentUnlocked;
-  }, [gamificationProfile.achievements, isUnlocked]);
+  // Handle level-up toast, confetti, and unlock chimes
+  const { levelUpToast } = useGamificationFeedback({
+    isUnlocked,
+    completedCount,
+    totalCount,
+    gamificationProfile,
+  });
 
   const displayedDailyHabits = useMemo(() => {
     return dueHabits.filter((h) => {
@@ -343,30 +266,6 @@ export default function HabitTrackerPage() {
 
   const safeFocusedIndex = Math.min(focusedIndex, Math.max(0, displayedDailyHabits.length - 1));
 
-  // Drag & Drop
-  const handleDragStart = (habitId: string) => {
-    setDraggedHabitId(habitId);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (targetHabitId: string) => {
-    if (!draggedHabitId || draggedHabitId === targetHabitId) return;
-
-    const updated = [...habits];
-    const fromIndex = updated.findIndex((h) => h.id === draggedHabitId);
-    const toIndex = updated.findIndex((h) => h.id === targetHabitId);
-
-    if (fromIndex !== -1 && toIndex !== -1) {
-      const [movedItem] = updated.splice(fromIndex, 1);
-      updated.splice(toIndex, 0, movedItem);
-      reorderHabits(updated);
-    }
-    setDraggedHabitId(null);
-  };
-
   const handleOpenAddModal = (nature: 'do' | 'dont' = 'do') => {
     setEditingHabit(null);
     setModalInitialNature(nature);
@@ -386,138 +285,32 @@ export default function HabitTrackerPage() {
     }
   };
 
-  // Keyboard Shortcuts
-  useEffect(() => {
-    if (!isUnlocked) return;
+  const hasOpenModal = 
+    isSettingsModalOpen ||
+    isHabitModalOpen || 
+    isInviteModalOpen || 
+    isShortcutsModalOpen || 
+    isShareModalOpen || 
+    isNotificationModalOpen ||
+    isAbsenceModalOpen;
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-        return;
-      }
-
-      const hasOpenModal = 
-        isSettingsModalOpen ||
-        isHabitModalOpen || 
-        isInviteModalOpen || 
-        isShortcutsModalOpen || 
-        isShareModalOpen || 
-        isNotificationModalOpen ||
-        isAbsenceModalOpen;
-        
-      if (hasOpenModal) return;
-
-      const key = e.key.toLowerCase();
-
-      // Navigation: j / Down, k / Up
-      if (key === 'j' || e.key === 'ArrowDown') {
-        e.preventDefault();
-        setFocusedIndex((prev) => Math.min(displayedDailyHabits.length - 1, prev + 1));
-      } else if (key === 'k' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        setFocusedIndex((prev) => Math.max(0, prev - 1));
-      } 
-      // Toggle: Space or x
-      else if (e.key === ' ' || key === 'x') {
-        e.preventDefault();
-        const focusedHabit = displayedDailyHabits[safeFocusedIndex];
-        if (focusedHabit) {
-          const isDone = Boolean(logs[`${focusedHabit.id}_${selectedDate}`]?.completed);
-          if (!isDone) playCheckSound();
-          else playUncheckSound();
-          toggleHabit(focusedHabit.id, selectedDate, !isDone, !isDone ? focusedHabit.target_value : 0);
-        }
-      }
-      // Stepper: + / -
-      else if (e.key === '+' || e.key === '=') {
-        e.preventDefault();
-        const focusedHabit = displayedDailyHabits[safeFocusedIndex];
-        if (focusedHabit && focusedHabit.type === 'number') {
-          const curVal = logs[`${focusedHabit.id}_${selectedDate}`]?.value ?? 0;
-          const step = focusedHabit.target_value >= 1000 ? 250 : focusedHabit.target_value >= 50 ? 10 : 5;
-          const nextVal = curVal + step;
-          const nextCompleted = nextVal >= focusedHabit.target_value;
-          if (nextCompleted && curVal < focusedHabit.target_value) playCheckSound();
-          toggleHabit(focusedHabit.id, selectedDate, nextCompleted, nextVal);
-        }
-      } else if (e.key === '-' || e.key === '_') {
-        e.preventDefault();
-        const focusedHabit = displayedDailyHabits[safeFocusedIndex];
-        if (focusedHabit && focusedHabit.type === 'number') {
-          const curVal = logs[`${focusedHabit.id}_${selectedDate}`]?.value ?? 0;
-          const step = focusedHabit.target_value >= 1000 ? 250 : focusedHabit.target_value >= 50 ? 10 : 5;
-          const nextVal = Math.max(0, curVal - step);
-          const nextCompleted = nextVal >= focusedHabit.target_value;
-          if (!nextCompleted && curVal >= focusedHabit.target_value) playUncheckSound();
-          toggleHabit(focusedHabit.id, selectedDate, nextCompleted, nextVal);
-        }
-      }
-      // New Habit: n
-      else if (key === 'n') {
-        e.preventDefault();
-        handleOpenAddModal();
-      }
-      // Settings: s or ,
-      else if (key === 's' || key === ',') {
-        e.preventDefault();
-        setIsSettingsModalOpen(true);
-      }
-      // Jump to Today: t
-      else if (key === 't') {
-        e.preventDefault();
-        setSelectedDate(getTodayDateString());
-      }
-      // Switch tabs: 1, 2, 3, 4, 5
-      else if (e.key === '1') {
-        e.preventDefault();
-        setActiveTab('today');
-      } else if (e.key === '2') {
-        e.preventDefault();
-        setActiveTab('week');
-      } else if (e.key === '3') {
-        e.preventDefault();
-        setActiveTab('planner');
-      } else if (e.key === '4') {
-        e.preventDefault();
-        setActiveTab('heatmap');
-      } else if (e.key === '5') {
-        e.preventDefault();
-        setActiveTab('analytics');
-      } else if (e.key === '6' && currentUser?.role === 'owner') {
-        e.preventDefault();
-        setActiveTab('admin');
-      }
-      // Toggle Shortcuts modal: ?
-      else if (e.key === '?') {
-        e.preventDefault();
-        setIsShortcutsModalOpen(true);
-      }
-      // Toggle sound: m
-      else if (key === 'm') {
-        e.preventDefault();
-        const current = isSoundEnabled();
-        setSoundEnabled(!current);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
+  // Global Keyboard Shortcuts
+  useAppShortcuts({
     isUnlocked,
+    hasOpenModal,
     displayedDailyHabits,
     safeFocusedIndex,
+    setFocusedIndex,
     logs,
     selectedDate,
+    setSelectedDate,
     toggleHabit,
-    isSettingsModalOpen,
-    isHabitModalOpen,
-    isInviteModalOpen,
-    isShortcutsModalOpen,
-    isShareModalOpen,
-    isNotificationModalOpen,
-    isAbsenceModalOpen,
-    currentUser?.role,
-  ]);
+    onOpenAddModal: () => handleOpenAddModal('do'),
+    onOpenSettingsModal: () => setIsSettingsModalOpen(true),
+    onOpenShortcutsModal: () => setIsShortcutsModalOpen(true),
+    setActiveTab,
+    isAdmin: currentUser?.role === 'owner',
+  });
 
   if (isUnlocked === false) {
     return <PinLockScreen onUnlock={handleUnlockSuccess} />;
@@ -558,146 +351,24 @@ export default function HabitTrackerPage() {
         {activeTab === 'today' && (
           <div className="w-full max-w-4xl xl:max-w-7xl mx-auto px-4 sm:px-6">
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 xl:gap-8 items-start">
-              {/* Left Column: Habits Section */}
-              <div className="xl:col-span-7 space-y-4">
-                {/* Filter pills & count */}
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <div className="flex items-center bg-card p-0.5 border border-main">
-                {[
-                  { id: 'all', label: 'All' },
-                  { id: 'pending', label: 'Pending' },
-                  { id: 'completed', label: 'Completed' },
-                ].map((f) => (
-                  <button
-                    key={f.id}
-                    onClick={() => setFilterCategory(f.id)}
-                    className={`h-7 px-3 text-xs font-sans font-bold uppercase tracking-tight transition-colors cursor-pointer select-none ${
-                      filterCategory === f.id
-                        ? 'bg-subtle text-main border-b-2 border-b-[#FF3B30]'
-                        : 'text-sub hover:text-main'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-
-              <span className="text-xs font-mono text-sub">
-                {displayedDailyHabits.length} {displayedDailyHabits.length === 1 ? 'habit' : 'habits'}
-              </span>
-            </div>
-
-            {/* Habit Lists */}
-            {displayedDailyHabits.length === 0 ? (
-              <div className="p-8 sm:p-12 text-center bg-card border border-main">
-                <h3 className="text-sm sm:text-base font-bold font-sans uppercase tracking-tight text-main mb-1">
-                  {filterCategory === 'completed'
-                    ? 'No habits completed yet today'
-                    : filterCategory === 'pending'
-                    ? 'All clear! No pending habits'
-                    : 'No habits scheduled for today'}
-                </h3>
-                <p className="text-xs font-mono text-sub max-w-sm mx-auto mb-5">
-                  {filterCategory === 'all'
-                    ? 'Create daily routines to track your consistency.'
-                    : 'Great job staying on track.'}
-                </p>
-                {filterCategory === 'all' && (
-                  <button
-                    onClick={() => handleOpenAddModal('do')}
-                    className="inline-flex items-center gap-1.5 h-8 px-4 text-xs font-sans font-black uppercase tracking-tight bg-[#FF3B30] hover:bg-[#E02D24] text-white transition-all cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                    <span>Add Habit</span>
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-5">
-                {/* 1. Daily Habits (Do) */}
-                {doHabits.length > 0 && (
-                  <div className="space-y-2.5">
-                    {dontHabits.length > 0 && (
-                      <div className="flex items-center justify-between pb-1 text-xs font-mono text-sub uppercase">
-                        <span>Daily Habits ({doHabits.length})</span>
-                      </div>
-                    )}
-                    <div className="grid grid-cols-1 gap-2.5">
-                      {doHabits.map((habit) => {
-                        const globalIdx = displayedDailyHabits.findIndex((h) => h.id === habit.id);
-                        return (
-                          <MinimalHabitItem
-                            key={habit.id}
-                            habit={habit}
-                            log={logs[`${habit.id}_${selectedDate}`]}
-                            allLogs={logs}
-                            stats={statsMap[habit.id] || {
-                              currentStreak: 0,
-                              longestStreak: 0,
-                              totalCompletions: 0,
-                              completionRate30Days: 0,
-                              isCompletedToday: false,
-                              todayValue: 0,
-                            }}
-                            dateStr={selectedDate}
-                            isFocused={globalIdx === safeFocusedIndex}
-                            isDraggable={true}
-                            onToggle={toggleHabit}
-                            onEdit={handleEditHabit}
-                            onDelete={deleteHabit}
-                            onDragStart={() => handleDragStart(habit.id)}
-                            onDragOver={handleDragOver}
-                            onDrop={() => handleDrop(habit.id)}
-                            onDragEnd={() => setDraggedHabitId(null)}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* 2. Habits to Break (Don't) - Only rendered if user actually has dont-habits */}
-                {dontHabits.length > 0 && (
-                  <div className="space-y-2.5 pt-2">
-                    <div className="flex items-center justify-between pb-1 text-xs font-mono text-[#FF3B30] uppercase">
-                      <span>Habits to Break ({dontHabits.length})</span>
-                    </div>
-                    <div className="grid grid-cols-1 gap-2.5">
-                      {dontHabits.map((habit) => {
-                        const globalIdx = displayedDailyHabits.findIndex((h) => h.id === habit.id);
-                        return (
-                          <MinimalHabitItem
-                            key={habit.id}
-                            habit={habit}
-                            log={logs[`${habit.id}_${selectedDate}`]}
-                            allLogs={logs}
-                            stats={statsMap[habit.id] || {
-                              currentStreak: 0,
-                              longestStreak: 0,
-                              totalCompletions: 0,
-                              completionRate30Days: 0,
-                              isCompletedToday: false,
-                              todayValue: 0,
-                            }}
-                            dateStr={selectedDate}
-                            isFocused={globalIdx === safeFocusedIndex}
-                            isDraggable={true}
-                            onToggle={toggleHabit}
-                            onEdit={handleEditHabit}
-                            onDelete={deleteHabit}
-                            onDragStart={() => handleDragStart(habit.id)}
-                            onDragOver={handleDragOver}
-                            onDrop={() => handleDrop(habit.id)}
-                            onDragEnd={() => setDraggedHabitId(null)}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-              </div>
+              {/* Left Column: Habits Section with Drag & Drop */}
+              <DailyHabitsList
+                habits={habits}
+                displayedDailyHabits={displayedDailyHabits}
+                doHabits={doHabits}
+                dontHabits={dontHabits}
+                filterCategory={filterCategory}
+                onSelectFilterCategory={setFilterCategory}
+                logs={logs}
+                statsMap={statsMap}
+                selectedDate={selectedDate}
+                safeFocusedIndex={safeFocusedIndex}
+                onToggleHabit={toggleHabit}
+                onEditHabit={handleEditHabit}
+                onDeleteHabit={deleteHabit}
+                onReorderHabits={reorderHabits}
+                onOpenAddModal={handleOpenAddModal}
+              />
 
               {/* Right Column: Desktop Full-Screen Daily Planner & Notes Overview Sidebar */}
               <div className="hidden xl:block xl:col-span-5 sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto space-y-4 pr-1">
@@ -747,30 +418,7 @@ export default function HabitTrackerPage() {
       </main>
 
       {/* Minimal Footer */}
-      <footer className="w-full max-w-4xl xl:max-w-7xl mx-auto px-4 sm:px-6 pt-12 pb-4 border-t border-subtle/40 mt-12 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] font-mono text-sub select-none">
-        <div className="flex items-center gap-2">
-          <span>ZENITH // SWISS HABIT SYSTEM</span>
-          <span>•</span>
-          <span>LOCAL-FIRST VAULT</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => setIsShortcutsModalOpen(true)}
-            className="hover:text-main transition-colors uppercase cursor-pointer"
-          >
-            [?] Shortcuts
-          </button>
-          <a
-            href="https://github.com/manuja-me/habit-tracker"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 hover:text-main transition-colors uppercase cursor-pointer"
-          >
-            <GithubIcon className="w-3.5 h-3.5" />
-            <span>GitHub</span>
-          </a>
-        </div>
-      </footer>
+      <AppFooter onOpenShortcutsModal={() => setIsShortcutsModalOpen(true)} />
 
       {/* Main Single Settings Modal (Houses all advanced features) */}
       <SettingsModal
