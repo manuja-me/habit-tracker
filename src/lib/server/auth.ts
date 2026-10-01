@@ -440,12 +440,29 @@ export async function completeInviteSetupAction(
       return { success: false, error: 'This PIN is already taken. Please choose a different 4-digit PIN.' };
     }
 
+    const [rawToken] = fullToken.split('.');
+    const nowIso = new Date().toISOString();
+
+    // Atomic claim of invitation token (Prevents race conditions)
+    const { data: claimedInvite, error: claimErr } = await supabase
+      .from('invitations')
+      .update({ used_at: nowIso })
+      .eq('token', rawToken)
+      .is('used_at', null)
+      .gt('expires_at', nowIso)
+      .select('id')
+      .maybeSingle();
+
+    if (claimErr || !claimedInvite) {
+      return { success: false, error: 'This invitation has already been used or has expired.' };
+    }
+
     // Insert new user
     const newUserPayload = {
       username: cleanUsername,
       pin_hash: hashedPin,
       role: 'member' as const,
-      last_login_at: new Date().toISOString(),
+      last_login_at: nowIso,
     };
 
     let { data: newUser, error: insertErr } = await supabase
@@ -463,18 +480,19 @@ export async function completeInviteSetupAction(
     }
 
     if (insertErr || !newUser) {
+      // Revert the atomic claim if user creation failed
+      await supabase
+        .from('invitations')
+        .update({ used_at: null })
+        .eq('id', claimedInvite.id);
       throw insertErr || new Error('Failed to create user');
     }
 
-    // Mark invitation as used
-    const [rawToken] = fullToken.split('.');
+    // Associate created user with the claimed invitation
     await supabase
       .from('invitations')
-      .update({
-        used_by: newUser.id,
-        used_at: new Date().toISOString(),
-      })
-      .eq('token', rawToken);
+      .update({ used_by: newUser.id })
+      .eq('id', claimedInvite.id);
 
     // Issue session cookie for the new user immediately
     const sessionUser: SessionUser = {

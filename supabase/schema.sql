@@ -167,7 +167,9 @@ ALTER TABLE public.habit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.day_notes ENABLE ROW LEVEL SECURITY;
 
 -- 8. Access Policies
--- CRITICAL SECURITY: app_users and invitations are restricted to backend service_role ONLY (blocked from anon/public)
+-- CRITICAL SECURITY: When SUPABASE_SERVICE_ROLE_KEY is configured in your server environment,
+-- all tables should be restricted exclusively to service_role. This blocks direct anonymous REST
+-- access from browsers while allowing Next.js server actions to execute with full privacy.
 DROP POLICY IF EXISTS "Allow service role only app_users" ON public.app_users;
 DROP POLICY IF EXISTS "Allow access app_users" ON public.app_users;
 CREATE POLICY "Allow service role only app_users" ON public.app_users FOR ALL TO service_role USING (true) WITH CHECK (true);
@@ -176,17 +178,25 @@ DROP POLICY IF EXISTS "Allow service role only invitations" ON public.invitation
 DROP POLICY IF EXISTS "Allow access invitations" ON public.invitations;
 CREATE POLICY "Allow service role only invitations" ON public.invitations FOR ALL TO service_role USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS Allow service role only habits ON public.habits;
-DROP POLICY IF EXISTS Allow access habits ON public.habits;
-CREATE POLICY Allow access habits ON public.habits FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
+-- PRODUCTION HARDENING: If using SUPABASE_SERVICE_ROLE_KEY, run the following to block anon access:
+-- DROP POLICY IF EXISTS "Allow access habits" ON public.habits;
+-- CREATE POLICY "Allow service role only habits" ON public.habits FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- DROP POLICY IF EXISTS "Allow access habit_logs" ON public.habit_logs;
+-- CREATE POLICY "Allow service role only habit_logs" ON public.habit_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- DROP POLICY IF EXISTS "Allow access day_notes" ON public.day_notes;
+-- CREATE POLICY "Allow service role only day_notes" ON public.day_notes FOR ALL TO service_role USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS Allow service role only habit_logs ON public.habit_logs;
-DROP POLICY IF EXISTS Allow access habit_logs ON public.habit_logs;
-CREATE POLICY Allow access habit_logs ON public.habit_logs FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow service role only habits" ON public.habits;
+DROP POLICY IF EXISTS "Allow access habits" ON public.habits;
+CREATE POLICY "Allow access habits" ON public.habits FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS Allow service role only day_notes ON public.day_notes;
-DROP POLICY IF EXISTS Allow access day_notes ON public.day_notes;
-CREATE POLICY Allow access day_notes ON public.day_notes FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow service role only habit_logs" ON public.habit_logs;
+DROP POLICY IF EXISTS "Allow access habit_logs" ON public.habit_logs;
+CREATE POLICY "Allow access habit_logs" ON public.habit_logs FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow service role only day_notes" ON public.day_notes;
+DROP POLICY IF EXISTS "Allow access day_notes" ON public.day_notes;
+CREATE POLICY "Allow access day_notes" ON public.day_notes FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
 
 -- 9. Updated At Trigger
 CREATE OR REPLACE FUNCTION public.handle_updated_at()

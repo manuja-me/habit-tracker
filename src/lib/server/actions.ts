@@ -260,6 +260,22 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
+    const isOwner = user.role === 'owner' || user.userId === OWNER_USER_ID;
+
+    // Verify ownership if habit already exists (Prevents IDOR overwrite)
+    const { data: existingHabit } = await supabase
+      .from('habits')
+      .select('id, user_id')
+      .eq('id', habit.id)
+      .maybeSingle();
+
+    if (existingHabit) {
+      const isOwnerOrSelf = existingHabit.user_id === user.userId || (isOwner && !existingHabit.user_id);
+      if (!isOwnerOrSelf) {
+        return { success: false, error: 'Unauthorized: Cannot modify habit belonging to another user.' };
+      }
+    }
+
     const storedDesc = serializeHabitDescription(habit);
 
     const habitPayload = {
@@ -308,18 +324,20 @@ export async function deleteHabitAction(habitId: string): Promise<{ success: boo
 
     const isOwner = user.role === 'owner' || user.userId === OWNER_USER_ID;
 
-    // Verify habit ownership before deleting
+    // Verify habit exists and check ownership before deleting
     const { data: habitRecord } = await supabase
       .from('habits')
       .select('id, user_id')
       .eq('id', habitId)
       .maybeSingle();
 
-    if (habitRecord) {
-      const isOwnerOrSelf = habitRecord.user_id === user.userId || (isOwner && !habitRecord.user_id);
-      if (!isOwnerOrSelf) {
-        return { success: false, error: 'Unauthorized: Cannot modify other users data.' };
-      }
+    if (!habitRecord) {
+      return { success: false, error: 'Habit not found.' };
+    }
+
+    const isOwnerOrSelf = habitRecord.user_id === user.userId || (isOwner && !habitRecord.user_id);
+    if (!isOwnerOrSelf) {
+      return { success: false, error: 'Unauthorized: Cannot modify other users data.' };
     }
 
     // 1. Delete associated logs first to prevent foreign key errors
@@ -348,6 +366,22 @@ export async function saveHabitLogAction(log: HabitLog): Promise<{ success: bool
     const user = await requireAuth();
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
+
+    const isOwner = user.role === 'owner' || user.userId === OWNER_USER_ID;
+
+    // Verify parent habit exists and belongs to the authenticated user
+    const { data: parentHabit } = await supabase
+      .from('habits')
+      .select('id, user_id')
+      .eq('id', log.habit_id)
+      .maybeSingle();
+
+    if (parentHabit) {
+      const isOwnerOrSelf = parentHabit.user_id === user.userId || (isOwner && !parentHabit.user_id);
+      if (!isOwnerOrSelf) {
+        return { success: false, error: 'Unauthorized: Cannot log progress for another user\'s habit.' };
+      }
+    }
 
     const logPayload = {
       habit_id: log.habit_id,
