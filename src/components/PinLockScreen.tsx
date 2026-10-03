@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { verifyPinAction, reactivateAccountAction, lockSessionAction } from '../lib/server/auth';
 import { Lock, ShieldAlert, Delete, Clock, ShieldCheck } from 'lucide-react';
 import { ReactivationModal } from './ReactivationModal';
+import { ZenithLogo } from './ui/ZenithLogo';
 
 interface PinLockScreenProps {
   onUnlock: () => void;
@@ -214,9 +215,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
         <div className="border-b border-subtle pb-4 space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-none bg-[#FF3B30] text-white flex items-center justify-center font-black text-sm select-none shadow-xs">
-                ✚
-              </div>
+              <ZenithLogo className="w-8 h-8 flex-shrink-0" />
               <div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] font-mono font-bold text-[#FF3B30]">00 //</span>

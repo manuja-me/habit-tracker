@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Zenith Preview](public/apple-icon.png)
+<img src="public/favicon.svg" alt="Zenith Logo" width="128" height="128" />
 
 **A distraction-free, terminal-inspired habit tracking system and behavioral addiction weaning engine.**  
 *Engineered with JetBrains Mono typography, 0ms optimistic state updates, and scientific behavioral fading.*

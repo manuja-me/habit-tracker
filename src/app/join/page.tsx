@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { validateInviteTokenAction, completeInviteSetupAction } from '../../lib/server/auth';
 import { ShieldCheck, ShieldAlert, ArrowRight, User, KeyRound, Check } from 'lucide-react';
+import { ZenithLogo } from '../../components/ui/ZenithLogo';
 
 function JoinForm() {
   const searchParams = useSearchParams();
@@ -133,9 +134,7 @@ function JoinForm() {
       {/* Swiss Masthead */}
       <div className="pb-4 border-b border-subtle">
         <div className="flex items-center gap-2 mb-1">
-          <div className="w-6 h-6 bg-[#FF3B30] text-white flex items-center justify-center font-black text-xs select-none">
-            ✚
-          </div>
+          <ZenithLogo className="w-6 h-6 flex-shrink-0" />
           <span className="text-xs font-mono font-black text-[#FF3B30]">ZENITH // ONBOARDING</span>
         </div>
         <h1 className="text-xl font-black font-sans uppercase tracking-tight text-main">

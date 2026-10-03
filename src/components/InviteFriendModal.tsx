@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { generateInviteAction } from '../lib/server/auth';
 import { X, UserPlus, Copy, Check, ShieldCheck, RefreshCw } from 'lucide-react';
+import { ZenithLogo } from './ui/ZenithLogo';
 
 interface InviteFriendModalProps {
   isOpen: boolean;
@@ -55,9 +56,7 @@ export function InviteFriendModal({ isOpen, onClose }: InviteFriendModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-subtle">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-[#FF3B30] text-white flex items-center justify-center font-bold text-xs select-none">
-              ✚
-            </div>
+            <ZenithLogo className="w-7 h-7 flex-shrink-0" />
             <div>
               <div className="text-[10px] font-mono font-bold text-[#FF3B30] uppercase">
                 02 // ACCESS CONTROL

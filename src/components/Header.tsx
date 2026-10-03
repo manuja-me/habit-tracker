@@ -13,6 +13,7 @@ import { formatDisplayDate, getTodayDateString, formatDate, parseDate } from '..
 import { addDays, subDays } from 'date-fns';
 import { Progress } from './ui/progress';
 import { GithubIcon } from './ui/GithubIcon';
+import { ZenithLogo } from './ui/ZenithLogo';
 import { PrestigeTier } from '../lib/utils/gamification';
 
 interface HeaderProps {
@@ -63,9 +64,7 @@ export function Header({
       <div className="flex items-center justify-between gap-4 mb-4">
         {/* Brand & Gamification Level Chip */}
         <div className="flex items-center gap-2.5 select-none">
-          <div className="w-6 h-6 bg-[#FF3B30] flex items-center justify-center text-white font-black text-xs">
-            ✚
-          </div>
+          <ZenithLogo className="w-6 h-6 flex-shrink-0" />
           <span className="text-base font-black tracking-tight uppercase font-sans text-main">
             Zenith
           </span>
