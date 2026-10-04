@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Habit, HabitLog } from '../lib/types';
 import { getWeekDays, formatDayName, formatShortDate, getTodayDateString, isHabitDueOnDate } from '../lib/utils/date';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
@@ -33,6 +33,101 @@ export function WeeklyGrid({
   const handleNextWeek = () => {
     const next = addDays(new Date(selectedDate), 7);
     onSelectDate(next.toISOString().split('T')[0]);
+  };
+
+  const activeHabits = useMemo(() => {
+    return habits.filter((h) => !h.archived);
+  }, [habits]);
+
+  const doHabits = useMemo(() => {
+    return activeHabits.filter((h) => h.nature !== 'dont');
+  }, [activeHabits]);
+
+  const dontHabits = useMemo(() => {
+    return activeHabits.filter((h) => h.nature === 'dont');
+  }, [activeHabits]);
+
+  const renderHabitRow = (habit: Habit) => {
+    const isDont = habit.nature === 'dont';
+    const IconComponent = getHabitIcon(habit.icon);
+    const colorConfig = COLOR_PALETTES.find(c => c.hex.toLowerCase() === habit.color.toLowerCase()) || COLOR_PALETTES[0];
+
+    return (
+      <tr key={habit.id} className="hover:bg-subtle/40 transition-colors">
+        {/* Habit Info (Sticky on scroll) */}
+        <td className="py-3 sm:py-3 pr-3 sticky left-0 bg-card z-10">
+          <div className="flex items-center gap-2.5 sm:gap-2.5 max-w-[150px] sm:max-w-[200px]">
+            <div 
+              className="w-8 h-8 sm:w-7 sm:h-7 rounded-none flex items-center justify-center flex-shrink-0 border border-subtle"
+              style={{ 
+                backgroundColor: isDont ? 'rgba(255, 59, 48, 0.12)' : colorConfig.bg, 
+                color: isDont ? '#FF3B30' : colorConfig.hex 
+              }}
+            >
+              <IconComponent className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+            </div>
+            <span className="text-xs font-sans font-black uppercase text-main tracking-tight truncate">
+              {habit.title}
+            </span>
+          </div>
+        </td>
+
+        {/* Weekday Checkboxes */}
+        {weekDays.map((dStr) => {
+          const isDue = isHabitDueOnDate(habit, dStr);
+          const log = logs[`${habit.id}_${dStr}`];
+
+          if (!isDue) {
+            return (
+              <td key={dStr} className="py-3 sm:py-3 text-center px-1">
+                <span className="inline-block w-2.5 h-2.5 rounded-none bg-subtle" title="Not scheduled" />
+              </td>
+            );
+          }
+
+          if (isDont) {
+            const isSlippedUp = log !== undefined && log.completed === false;
+            return (
+              <td key={dStr} className="py-3 sm:py-3 text-center px-1">
+                <button
+                  onClick={() => onToggle(habit.id, dStr, isSlippedUp, isSlippedUp ? 0 : 1)}
+                  className={`w-10 h-10 sm:w-8 sm:h-8 rounded-none inline-flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation border ${
+                    isSlippedUp
+                      ? 'bg-[#FF3B30] text-white border-[#FF3B30]'
+                      : 'bg-card text-[#FF3B30] border-[#FF3B30] hover:bg-[#FF3B30]/10'
+                  }`}
+                  title={isSlippedUp ? 'Slipped up (Click to mark clean)' : 'Clean (Click if you indulged)'}
+                  aria-label={`Toggle ${habit.title} for ${dStr}`}
+                >
+                  {isSlippedUp ? (
+                    <ShieldAlert className="w-5 h-5 sm:w-4 sm:h-4 stroke-[2.5]" />
+                  ) : (
+                    <ShieldCheck className="w-5 h-5 sm:w-4 sm:h-4 stroke-[2.5]" />
+                  )}
+                </button>
+              </td>
+            );
+          }
+
+          const isCompleted = Boolean(log?.completed);
+          return (
+            <td key={dStr} className="py-3 sm:py-3 text-center px-1">
+              <button
+                onClick={() => onToggle(habit.id, dStr, !isCompleted, !isCompleted ? habit.target_value : 0)}
+                className={`w-10 h-10 sm:w-8 sm:h-8 rounded-none inline-flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation border ${
+                  isCompleted
+                    ? 'bg-[#FF3B30] text-white border-[#FF3B30]'
+                    : 'border border-main hover:border-neutral-400 bg-input/70'
+                }`}
+                aria-label={`Toggle ${habit.title} for ${dStr}`}
+              >
+                <Check className={`w-5 h-5 sm:w-4 sm:h-4 stroke-[3] ${isCompleted ? 'opacity-100' : 'opacity-0'}`} />
+              </button>
+            </td>
+          );
+        })}
+      </tr>
+    );
   };
 
   return (
@@ -108,88 +203,41 @@ export function WeeklyGrid({
               </tr>
             </thead>
             <tbody className="divide-y divide-subtle">
-              {habits.map((habit) => {
-                const isDont = habit.nature === 'dont';
-                const IconComponent = getHabitIcon(habit.icon);
-                const colorConfig = COLOR_PALETTES.find(c => c.hex.toLowerCase() === habit.color.toLowerCase()) || COLOR_PALETTES[0];
-
-                return (
-                  <tr key={habit.id} className="hover:bg-subtle/40 transition-colors">
-                    {/* Habit Info (Sticky on scroll) */}
-                    <td className="py-3 sm:py-3 pr-3 sticky left-0 bg-card z-10">
-                      <div className="flex items-center gap-2.5 sm:gap-2.5 max-w-[150px] sm:max-w-[200px]">
-                        <div 
-                          className="w-8 h-8 sm:w-7 sm:h-7 rounded-none flex items-center justify-center flex-shrink-0 border border-subtle"
-                          style={{ 
-                            backgroundColor: isDont ? 'rgba(255, 59, 48, 0.12)' : colorConfig.bg, 
-                            color: isDont ? '#FF3B30' : colorConfig.hex 
-                          }}
-                        >
-                          <IconComponent className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-                        </div>
-                        <span className="text-xs font-sans font-black uppercase text-main tracking-tight truncate">
-                          {habit.title}
+              {activeHabits.length === 0 ? (
+                <tr>
+                  <td colSpan={weekDays.length + 1} className="py-8 text-center text-xs font-mono text-sub">
+                    No habits created yet.
+                  </td>
+                </tr>
+              ) : (
+                <>
+                  {/* Daily Habits (Do) */}
+                  {doHabits.length > 0 && dontHabits.length > 0 && (
+                    <tr className="bg-card">
+                      <td className="pt-3 pb-1.5 pr-3 sticky left-0 bg-card z-10">
+                        <span className="text-xs font-mono text-sub uppercase font-bold tracking-wider">
+                          Daily Habits ({doHabits.length})
                         </span>
-                      </div>
-                    </td>
+                      </td>
+                      <td colSpan={weekDays.length} className="pt-3 pb-1.5 bg-card"></td>
+                    </tr>
+                  )}
+                  {doHabits.map(renderHabitRow)}
 
-                    {/* Weekday Checkboxes */}
-                    {weekDays.map((dStr) => {
-                      const isDue = isHabitDueOnDate(habit, dStr);
-                      const log = logs[`${habit.id}_${dStr}`];
-
-                      if (!isDue) {
-                        return (
-                          <td key={dStr} className="py-3 sm:py-3 text-center px-1">
-                            <span className="inline-block w-2.5 h-2.5 rounded-none bg-subtle" title="Not scheduled" />
-                          </td>
-                        );
-                      }
-
-                      if (isDont) {
-                        const isSlippedUp = log !== undefined && log.completed === false;
-                        return (
-                          <td key={dStr} className="py-3 sm:py-3 text-center px-1">
-                            <button
-                              onClick={() => onToggle(habit.id, dStr, isSlippedUp, isSlippedUp ? 0 : 1)}
-                              className={`w-10 h-10 sm:w-8 sm:h-8 rounded-none inline-flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation border ${
-                                isSlippedUp
-                                  ? 'bg-[#FF3B30] text-white border-[#FF3B30]'
-                                  : 'bg-card text-[#FF3B30] border-[#FF3B30] hover:bg-[#FF3B30]/10'
-                              }`}
-                              title={isSlippedUp ? 'Slipped up (Click to mark clean)' : 'Clean (Click if you indulged)'}
-                              aria-label={`Toggle ${habit.title} for ${dStr}`}
-                            >
-                              {isSlippedUp ? (
-                                <ShieldAlert className="w-5 h-5 sm:w-4 sm:h-4 stroke-[2.5]" />
-                              ) : (
-                                <ShieldCheck className="w-5 h-5 sm:w-4 sm:h-4 stroke-[2.5]" />
-                              )}
-                            </button>
-                          </td>
-                        );
-                      }
-
-                      const isCompleted = Boolean(log?.completed);
-                      return (
-                        <td key={dStr} className="py-3 sm:py-3 text-center px-1">
-                          <button
-                            onClick={() => onToggle(habit.id, dStr, !isCompleted, !isCompleted ? habit.target_value : 0)}
-                            className={`w-10 h-10 sm:w-8 sm:h-8 rounded-none inline-flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation border ${
-                              isCompleted
-                                ? 'bg-[#FF3B30] text-white border-[#FF3B30]'
-                                : 'border border-main hover:border-neutral-400 bg-input/70'
-                            }`}
-                            aria-label={`Toggle ${habit.title} for ${dStr}`}
-                          >
-                            <Check className={`w-5 h-5 sm:w-4 sm:h-4 stroke-[3] ${isCompleted ? 'opacity-100' : 'opacity-0'}`} />
-                          </button>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
+                  {/* Habits to Break (Don't) */}
+                  {dontHabits.length > 0 && (
+                    <tr className="bg-card">
+                      <td className="pt-4 pb-1.5 pr-3 sticky left-0 bg-card z-10">
+                        <span className="text-xs font-mono text-[#FF3B30] uppercase font-bold tracking-wider">
+                          Habits to Break ({dontHabits.length})
+                        </span>
+                      </td>
+                      <td colSpan={weekDays.length} className="pt-4 pb-1.5 bg-card"></td>
+                    </tr>
+                  )}
+                  {dontHabits.map(renderHabitRow)}
+                </>
+              )}
             </tbody>
           </table>
         </div>
