@@ -17,6 +17,7 @@ import {
   hashPin,
   createSessionToken,
   getSessionUserFromToken,
+  getClientIp,
 } from './auth-utils';
 
 /**
@@ -33,9 +34,7 @@ export async function verifyPinAction(enteredPin: string): Promise<{
 }> {
   try {
     const headerList = await headers();
-    const forwarded = headerList.get('x-forwarded-for');
-    const realIp = headerList.get('x-real-ip');
-    const clientIp = (forwarded ? forwarded.split(',')[0].trim() : realIp) || '127.0.0.1';
+    const clientIp = getClientIp(headerList);
     const rateLimitKey = `pin_rl_${clientIp}`;
 
     const cookieStore = await cookies();
@@ -61,7 +60,9 @@ export async function verifyPinAction(enteredPin: string): Promise<{
       });
       return {
         success: false,
-        error: 'Invalid PIN length.',
+        error: fail.waitSeconds > 0
+          ? `TOO MANY FAILED ATTEMPTS // Locked out for ${fail.waitSeconds}s.`
+          : 'Invalid PIN length.',
         waitSeconds: fail.waitSeconds > 0 ? fail.waitSeconds : undefined,
       };
     }
@@ -134,6 +135,9 @@ export async function verifyPinAction(enteredPin: string): Promise<{
     }
 
     if (!matchedUser) {
+      // Artificial delay to prevent automated high-speed brute-forcing
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
       const fail = recordFailedAttempt(rateLimitKey, rlCookie);
       cookieStore.set(RL_COOKIE_NAME, fail.token, {
         httpOnly: true,
@@ -407,9 +411,18 @@ export async function completeInviteSetupAction(
 
   const hashedPin = hashPin(pin);
 
-  // Prevent duplicate PIN with Owner
-  if (crypto.timingSafeEqual(Buffer.from(hashedPin), Buffer.from(MASTER_PIN_HASH))) {
-    return { success: false, error: 'This PIN is already reserved. Please choose a different 4-digit PIN.' };
+  // Prevent duplicate PIN with Owner (timing-safe comparison)
+  const hashedBuf = Buffer.from(hashedPin);
+  const masterBuf = Buffer.from(MASTER_PIN_HASH);
+  const isOwnerPin =
+    hashedBuf.length === masterBuf.length &&
+    crypto.timingSafeEqual(hashedBuf, masterBuf);
+
+  if (isOwnerPin) {
+    return {
+      success: false,
+      error: 'Unable to complete registration with the provided details. Please choose a different PIN or display name.',
+    };
   }
 
   const supabase = getServerSupabase();
@@ -426,7 +439,10 @@ export async function completeInviteSetupAction(
       .maybeSingle();
 
     if (existingUser) {
-      return { success: false, error: 'This username is already taken. Please choose another.' };
+      return {
+        success: false,
+        error: 'Unable to complete registration with the provided details. Please choose a different PIN or display name.',
+      };
     }
 
     // Check if PIN already used by another user
@@ -437,7 +453,10 @@ export async function completeInviteSetupAction(
       .maybeSingle();
 
     if (existingPin) {
-      return { success: false, error: 'This PIN is already taken. Please choose a different 4-digit PIN.' };
+      return {
+        success: false,
+        error: 'Unable to complete registration with the provided details. Please choose a different PIN or display name.',
+      };
     }
 
     const [rawToken] = fullToken.split('.');

@@ -178,25 +178,17 @@ DROP POLICY IF EXISTS "Allow service role only invitations" ON public.invitation
 DROP POLICY IF EXISTS "Allow access invitations" ON public.invitations;
 CREATE POLICY "Allow service role only invitations" ON public.invitations FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- PRODUCTION HARDENING: If using SUPABASE_SERVICE_ROLE_KEY, run the following to block anon access:
--- DROP POLICY IF EXISTS "Allow access habits" ON public.habits;
--- CREATE POLICY "Allow service role only habits" ON public.habits FOR ALL TO service_role USING (true) WITH CHECK (true);
--- DROP POLICY IF EXISTS "Allow access habit_logs" ON public.habit_logs;
--- CREATE POLICY "Allow service role only habit_logs" ON public.habit_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
--- DROP POLICY IF EXISTS "Allow access day_notes" ON public.day_notes;
--- CREATE POLICY "Allow service role only day_notes" ON public.day_notes FOR ALL TO service_role USING (true) WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Allow service role only habits" ON public.habits;
 DROP POLICY IF EXISTS "Allow access habits" ON public.habits;
-CREATE POLICY "Allow access habits" ON public.habits FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Allow service role only habits" ON public.habits FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow service role only habit_logs" ON public.habit_logs;
 DROP POLICY IF EXISTS "Allow access habit_logs" ON public.habit_logs;
-CREATE POLICY "Allow access habit_logs" ON public.habit_logs FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Allow service role only habit_logs" ON public.habit_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow service role only day_notes" ON public.day_notes;
 DROP POLICY IF EXISTS "Allow access day_notes" ON public.day_notes;
-CREATE POLICY "Allow access day_notes" ON public.day_notes FOR ALL TO public, anon, service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Allow service role only day_notes" ON public.day_notes FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- 9. Updated At Trigger
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
