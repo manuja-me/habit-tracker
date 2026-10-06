@@ -552,13 +552,11 @@ function GlobalProjectSettingsModal({
 function ProjectCard({
   project,
   groups,
-  groupColor,
   onChange,
   onDelete,
 }: {
   project: Project;
   groups: ProjectGroup[];
-  groupColor?: string;
   onChange: (p: Project) => void;
   onDelete: () => void;
 }) {
@@ -569,10 +567,7 @@ function ProjectCard({
 
   return (
     <>
-      <div
-        className="border border-main bg-card transition-all"
-        style={groupColor ? { borderLeftColor: groupColor, borderLeftWidth: '3px' } : undefined}
-      >
+      <div className="border border-main bg-card transition-all">
         {/* Card Header: Pure focus on Title, Owner badge & Settings Trigger */}
         <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-subtle">
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -583,7 +578,7 @@ function ProjectCard({
               <span
                 className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-subtle text-sub border border-subtle text-[10px] font-mono shrink-0"
               >
-                <GroupIcon kind={owner.kind} className="w-2.5 h-2.5" style={{ color: groupColor }} />
+                <GroupIcon kind={owner.kind} className="w-2.5 h-2.5" style={{ color: owner.color || '#FE8019' }} />
                 <span className="truncate max-w-[120px]">{owner.name}</span>
               </span>
             )}
@@ -861,24 +856,30 @@ export function ProjectsView() {
           return (
             <div
               key={g?.id ?? 'unassigned'}
-              className="space-y-2.5 pt-2 pl-3 border-l-2"
-              style={{ borderLeftColor: groupColor || 'var(--border-subtle)' }}
+              className="p-3.5 sm:p-4 border transition-colors space-y-3 bg-card/40"
+              style={{
+                borderColor: groupColor || 'var(--border-main)',
+              }}
             >
-              <h4
-                className="flex items-center gap-1.5 text-xs font-mono font-bold uppercase tracking-wider"
-                style={{ color: groupColor || 'var(--text-sub)' }}
-              >
-                {g ? <GroupIcon kind={g.kind} style={{ color: groupColor }} /> : null}
-                <span>{g ? g.name : 'Unassigned'}</span>
-                <span className="text-[10px] opacity-75 font-normal">({items.length} {items.length === 1 ? 'project' : 'projects'})</span>
-              </h4>
+              <div className="flex items-center justify-between pb-2 border-b border-subtle">
+                <h4
+                  className="flex items-center gap-2 text-xs font-mono font-bold uppercase tracking-wider"
+                  style={{ color: groupColor || 'var(--text-sub)' }}
+                >
+                  {g ? <GroupIcon kind={g.kind} style={{ color: groupColor }} /> : null}
+                  <span>{g ? g.name : 'Unassigned'}</span>
+                  <span className="text-[10px] opacity-75 font-normal">
+                    ({items.length} {items.length === 1 ? 'project' : 'projects'})
+                  </span>
+                </h4>
+              </div>
+
               <div className="space-y-2.5">
                 {items.map((p) => (
                   <ProjectCard
                     key={p.id}
                     project={p}
                     groups={sortedGroups}
-                    groupColor={groupColor}
                     onChange={saveProject}
                     onDelete={() => removeProject(p.id)}
                   />
