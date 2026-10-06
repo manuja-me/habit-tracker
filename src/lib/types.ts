@@ -81,6 +81,14 @@ export interface DayNote {
 
 export type ProjectStatus = 'active' | 'planned';
 
+export type ProjectGroupKind = 'org' | 'person';
+
+export interface ProjectGroup {
+  id: string;
+  name: string;
+  kind: ProjectGroupKind;
+}
+
 export interface ProjectTask {
   id: string;
   title: string;
@@ -92,6 +100,7 @@ export interface Project {
   title: string;
   notes: string;
   status: ProjectStatus;
+  group_id: string | null; // owning org / person; null = Unassigned
   tasks: ProjectTask[];
   order: number;
   created_at: string;

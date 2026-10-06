@@ -1,15 +1,36 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Play, Pause, X } from 'lucide-react';
-import { Project, ProjectStatus, ProjectTask } from '../lib/types';
-import { getProjectsAction, saveProjectAction, deleteProjectAction } from '../lib/server/actions';
+import { Plus, Trash2, Play, Pause, X, Building2, User } from 'lucide-react';
+import { Project, ProjectGroup, ProjectGroupKind, ProjectStatus, ProjectTask } from '../lib/types';
+import {
+  getProjectsAction,
+  saveProjectAction,
+  deleteProjectAction,
+  saveProjectGroupAction,
+  deleteProjectGroupAction,
+} from '../lib/server/actions';
 
 const LOCAL_KEY = 'zenith_projects_v1';
 
 type Result = { success: boolean; error?: string };
 
-function AddRow({ placeholder, onAdd }: { placeholder: string; onAdd: (title: string) => void }) {
+const selectCls =
+  'h-8 px-1.5 bg-card border border-main text-[11px] font-mono text-main focus:outline-none focus:border-[#FF3B30] cursor-pointer max-w-[45%]';
+
+function GroupIcon({ kind, className = 'w-3.5 h-3.5' }: { kind: ProjectGroupKind; className?: string }) {
+  return kind === 'org' ? <Building2 className={className} /> : <User className={className} />;
+}
+
+function AddRow({
+  placeholder,
+  onAdd,
+  children,
+}: {
+  placeholder: string;
+  onAdd: (title: string) => void;
+  children?: React.ReactNode;
+}) {
   const [value, setValue] = useState('');
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,12 +47,13 @@ function AddRow({ placeholder, onAdd }: { placeholder: string; onAdd: (title: st
         placeholder={placeholder}
         aria-label={placeholder}
         maxLength={200}
-        className="flex-1 h-8 px-2.5 bg-input/40 border border-main text-xs font-mono text-main placeholder-muted-custom focus:outline-none focus:border-[#FF3B30]"
+        className="flex-1 min-w-0 h-8 px-2.5 bg-input/40 border border-main text-xs font-mono text-main placeholder-muted-custom focus:outline-none focus:border-[#FF3B30]"
       />
+      {children}
       <button
         type="submit"
         aria-label={placeholder}
-        className="w-8 h-8 flex items-center justify-center border border-main text-sub hover:text-main hover:bg-subtle cursor-pointer"
+        className="w-8 h-8 shrink-0 flex items-center justify-center border border-main text-sub hover:text-main hover:bg-subtle cursor-pointer"
       >
         <Plus className="w-4 h-4" />
       </button>
@@ -39,12 +61,77 @@ function AddRow({ placeholder, onAdd }: { placeholder: string; onAdd: (title: st
   );
 }
 
+function OwnerSelect({
+  groups,
+  value,
+  onChange,
+  label,
+}: {
+  groups: ProjectGroup[];
+  value: string | null;
+  onChange: (groupId: string | null) => void;
+  label: string;
+}) {
+  const orgs = groups.filter((g) => g.kind === 'org');
+  const people = groups.filter((g) => g.kind === 'person');
+  return (
+    <select aria-label={label} title={label} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} className={selectCls}>
+      <option value="">Unassigned</option>
+      {orgs.length > 0 && (
+        <optgroup label="Organizations">
+          {orgs.map((g) => (
+            <option key={g.id} value={g.id}>{g.name}</option>
+          ))}
+        </optgroup>
+      )}
+      {people.length > 0 && (
+        <optgroup label="People">
+          {people.map((g) => (
+            <option key={g.id} value={g.id}>{g.name}</option>
+          ))}
+        </optgroup>
+      )}
+    </select>
+  );
+}
+
+function NewProjectForm({
+  groups,
+  placeholder,
+  onAdd,
+}: {
+  groups: ProjectGroup[];
+  placeholder: string;
+  onAdd: (title: string, groupId: string | null) => void;
+}) {
+  const [owner, setOwner] = useState<string | null>(null);
+  return (
+    <AddRow placeholder={placeholder} onAdd={(t) => onAdd(t, owner)}>
+      <OwnerSelect groups={groups} value={owner} onChange={setOwner} label="Belongs to" />
+    </AddRow>
+  );
+}
+
+function NewGroupForm({ onAdd }: { onAdd: (name: string, kind: ProjectGroupKind) => void }) {
+  const [kind, setKind] = useState<ProjectGroupKind>('org');
+  return (
+    <AddRow placeholder="Add organization or person" onAdd={(n) => onAdd(n.slice(0, 100), kind)}>
+      <select aria-label="Type" value={kind} onChange={(e) => setKind(e.target.value as ProjectGroupKind)} className={selectCls}>
+        <option value="org">Organization</option>
+        <option value="person">Person</option>
+      </select>
+    </AddRow>
+  );
+}
+
 function ProjectCard({
   project,
+  groups,
   onChange,
   onDelete,
 }: {
   project: Project;
+  groups: ProjectGroup[];
   onChange: (p: Project) => void;
   onDelete: () => void;
 }) {
@@ -71,11 +158,17 @@ function ProjectCard({
             {done}/{project.tasks.length}
           </span>
         )}
+        <OwnerSelect
+          groups={groups}
+          value={project.group_id}
+          onChange={(group_id) => onChange({ ...project, group_id })}
+          label="Transfer to organization / person"
+        />
         <button
           onClick={() => onChange({ ...project, status: isActive ? 'planned' : 'active' })}
           title={isActive ? 'Move to future projects' : 'Start project'}
           aria-label={isActive ? 'Move to future projects' : 'Start project'}
-          className="w-7 h-7 flex items-center justify-center text-sub hover:text-main hover:bg-subtle cursor-pointer"
+          className="w-7 h-7 shrink-0 flex items-center justify-center text-sub hover:text-main hover:bg-subtle cursor-pointer"
         >
           {isActive ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
         </button>
@@ -83,7 +176,7 @@ function ProjectCard({
           onClick={() => confirm(`Delete project "${project.title}"?`) && onDelete()}
           title="Delete project"
           aria-label="Delete project"
-          className="w-7 h-7 flex items-center justify-center text-sub hover:text-[#FF3B30] hover:bg-subtle cursor-pointer"
+          className="w-7 h-7 shrink-0 flex items-center justify-center text-sub hover:text-[#FF3B30] hover:bg-subtle cursor-pointer"
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
@@ -136,6 +229,7 @@ function ProjectCard({
 
 export function ProjectsView() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [groups, setGroups] = useState<ProjectGroup[]>([]);
   const [isCloud, setIsCloud] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -146,46 +240,79 @@ export function ProjectsView() {
       else if (!res.isConfigured) {
         setIsCloud(false);
         try {
-          setProjects(JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]'));
+          const raw = JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}');
+          // Older local format stored a bare project array
+          const local = Array.isArray(raw) ? { projects: raw, groups: [] } : raw;
+          setProjects((local.projects || []).map((p: Project) => ({ ...p, group_id: p.group_id ?? null })));
+          setGroups(local.groups || []);
         } catch {}
-      } else setProjects(res.projects || []);
+      } else {
+        setProjects(res.projects || []);
+        setGroups(res.groups || []);
+      }
       setLoading(false);
     });
   }, []);
 
   // Optimistic update; on failure keep local edits visible and surface the error so nothing is silently lost
-  const apply = async (next: Project[], op: () => Promise<Result>) => {
-    setProjects(next);
+  const apply = async (op: () => Promise<Result>, nextProjects = projects, nextGroups = groups) => {
+    setProjects(nextProjects);
+    setGroups(nextGroups);
     setError('');
     if (!isCloud) {
-      localStorage.setItem(LOCAL_KEY, JSON.stringify(next));
+      localStorage.setItem(LOCAL_KEY, JSON.stringify({ projects: nextProjects, groups: nextGroups }));
       return;
     }
     const res = await op();
     if (!res.success) setError(res.error || 'Save failed');
   };
 
-  const save = (p: Project) =>
+  const saveProject = (p: Project) =>
     apply(
-      projects.some((x) => x.id === p.id) ? projects.map((x) => (x.id === p.id ? p : x)) : [...projects, p],
-      () => saveProjectAction(p)
+      () => saveProjectAction(p),
+      projects.some((x) => x.id === p.id) ? projects.map((x) => (x.id === p.id ? p : x)) : [...projects, p]
     );
 
-  const remove = (id: string) => apply(projects.filter((x) => x.id !== id), () => deleteProjectAction(id));
+  const removeProject = (id: string) => apply(() => deleteProjectAction(id), projects.filter((x) => x.id !== id));
 
-  const create = (title: string, status: ProjectStatus) =>
-    save({
+  const createProject = (title: string, status: ProjectStatus, group_id: string | null) =>
+    saveProject({
       id: crypto.randomUUID(),
       title,
       notes: '',
       status,
+      group_id,
       tasks: [],
       order: projects.reduce((m, p) => Math.max(m, p.order), 0) + 1,
       created_at: new Date().toISOString(),
     });
 
+  const saveGroup = (g: ProjectGroup) =>
+    apply(
+      () => saveProjectGroupAction(g),
+      projects,
+      groups.some((x) => x.id === g.id) ? groups.map((x) => (x.id === g.id ? g : x)) : [...groups, g]
+    );
+
+  const removeGroup = (g: ProjectGroup) => {
+    const count = projects.filter((p) => p.group_id === g.id).length;
+    if (!confirm(`Delete "${g.name}"?${count ? ` Its ${count} project(s) will become Unassigned.` : ''}`)) return;
+    apply(
+      () => deleteProjectGroupAction(g.id),
+      projects.map((p) => (p.group_id === g.id ? { ...p, group_id: null } : p)),
+      groups.filter((x) => x.id !== g.id)
+    );
+  };
+
+  const sortedGroups = [...groups].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
+  const ownerOf = (p: Project) => (groups.some((g) => g.id === p.group_id) ? p.group_id : null);
+
   const section = (status: ProjectStatus, heading: string, sub: string, addLabel: string) => {
     const list = projects.filter((p) => p.status === status).sort((a, b) => a.order - b.order);
+    const buckets = [...sortedGroups, null]
+      .map((g) => ({ g, items: list.filter((p) => ownerOf(p) === (g?.id ?? null)) }))
+      .filter((b) => b.items.length > 0);
+
     return (
       <section className="space-y-2.5" aria-label={heading}>
         <div className="pb-2.5 border-b border-subtle">
@@ -194,9 +321,18 @@ export function ProjectsView() {
           </h3>
           <p className="text-[11px] font-mono text-sub uppercase tracking-wider">{sub}</p>
         </div>
-        <AddRow placeholder={addLabel} onAdd={(title) => create(title, status)} />
-        {list.map((p) => (
-          <ProjectCard key={p.id} project={p} onChange={save} onDelete={() => remove(p.id)} />
+        <NewProjectForm groups={sortedGroups} placeholder={addLabel} onAdd={(t, gid) => createProject(t, status, gid)} />
+        {buckets.map(({ g, items }) => (
+          <div key={g?.id ?? 'unassigned'} className="space-y-2">
+            <h4 className="flex items-center gap-1.5 pt-2 text-[11px] font-mono font-bold uppercase tracking-wider text-sub">
+              {g ? <GroupIcon kind={g.kind} /> : null}
+              {g ? g.name : 'Unassigned'}
+              <span className="opacity-60">· {items.length}</span>
+            </h4>
+            {items.map((p) => (
+              <ProjectCard key={p.id} project={p} groups={sortedGroups} onChange={saveProject} onDelete={() => removeProject(p.id)} />
+            ))}
+          </div>
         ))}
       </section>
     );
@@ -214,6 +350,41 @@ export function ProjectsView() {
           <p className="text-xs font-mono text-sub uppercase tracking-wider">Loading projects...</p>
         ) : (
           <>
+            <section className="space-y-2.5" aria-label="Organizations and people">
+              <div className="pb-2.5 border-b border-subtle">
+                <h3 className="text-sm font-black font-sans uppercase tracking-tight text-main">Organizations & People</h3>
+                <p className="text-[11px] font-mono text-sub uppercase tracking-wider">Who each project belongs to</p>
+              </div>
+              <NewGroupForm onAdd={(name, kind) => saveGroup({ id: crypto.randomUUID(), name, kind })} />
+              {sortedGroups.length > 0 && (
+                <ul className="flex flex-wrap gap-1.5">
+                  {sortedGroups.map((g) => (
+                    <li key={g.id} className="flex items-center gap-1.5 h-7 pl-2 pr-1 border border-main bg-subtle text-sub">
+                      <GroupIcon kind={g.kind} className="w-3 h-3 shrink-0" />
+                      <input
+                        defaultValue={g.name}
+                        aria-label={`Rename ${g.name}`}
+                        maxLength={100}
+                        size={Math.max(4, g.name.length)}
+                        onBlur={(e) => {
+                          const name = e.target.value.trim();
+                          if (!name) e.target.value = g.name;
+                          else if (name !== g.name) saveGroup({ ...g, name });
+                        }}
+                        className="bg-transparent text-[11px] font-mono font-bold text-main focus:outline-none"
+                      />
+                      <button
+                        onClick={() => removeGroup(g)}
+                        aria-label={`Delete ${g.name}`}
+                        className="w-5 h-5 flex items-center justify-center hover:text-[#FF3B30] cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
             {section('active', 'Ongoing Projects', 'In progress right now', 'Add ongoing project')}
             {section('planned', 'Future Projects', 'Plan before you start', 'Add future project')}
           </>

@@ -245,3 +245,32 @@ CREATE TRIGGER set_projects_updated_at
     BEFORE UPDATE ON public.projects
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_updated_at();
+
+-- ================================================================
+-- 11. PROJECT_GROUPS table (organizations / people that own projects)
+-- Additive: new table + nullable projects.group_id column. Deleting a
+-- group sets its projects' group_id to NULL (Unassigned), never deletes them.
+-- ================================================================
+CREATE TABLE IF NOT EXISTS public.project_groups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES public.app_users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL CHECK (char_length(name) BETWEEN 1 AND 100),
+    kind TEXT NOT NULL DEFAULT 'org' CHECK (kind IN ('org', 'person')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS group_id UUID REFERENCES public.project_groups(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_project_groups_user_id ON public.project_groups(user_id);
+CREATE INDEX IF NOT EXISTS idx_projects_group_id ON public.projects(group_id);
+
+ALTER TABLE public.project_groups ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow service role only project_groups" ON public.project_groups;
+CREATE POLICY "Allow service role only project_groups" ON public.project_groups FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP TRIGGER IF EXISTS set_project_groups_updated_at ON public.project_groups;
+CREATE TRIGGER set_project_groups_updated_at
+    BEFORE UPDATE ON public.project_groups
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_updated_at();

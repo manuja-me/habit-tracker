@@ -4,7 +4,7 @@ import { requireAuth } from './auth';
 import { OWNER_USER_ID } from './auth-utils';
 import { getCleanSupabaseConfig, getServerSupabase } from './supabase';
 import { purgeUserData, purgeExpiredDeactivatedUsers } from './user-management';
-import { Habit, HabitCategory, HabitFrequency, HabitLog, HabitType, Project, ProjectStatus, ProjectTask } from '../types';
+import { Habit, HabitCategory, HabitFrequency, HabitLog, HabitType, Project, ProjectGroup, ProjectStatus, ProjectTask } from '../types';
 
 export { purgeExpiredDeactivatedUsers };
 
@@ -479,42 +479,53 @@ interface DbProjectRecord {
   title: string;
   notes: string;
   status: ProjectStatus;
+  group_id: string | null;
   tasks: ProjectTask[];
   sort_order: number;
   created_at: string;
 }
 
 /**
- * Server Action: Fetch projects scoped to the authenticated user
+ * Server Action: Fetch projects + their owning orgs/people, scoped to the authenticated user
  */
 export async function getProjectsAction(): Promise<{
   success: boolean;
   isConfigured: boolean;
   projects?: Project[];
+  groups?: ProjectGroup[];
   error?: string;
 }> {
   try {
     const user = await requireAuth();
     const supabase = getServerSupabase();
-    if (!supabase) return { success: true, isConfigured: false, projects: [] };
+    if (!supabase) return { success: true, isConfigured: false, projects: [], groups: [] };
 
-    const { data, error } = await supabase
-      .from('projects')
-      .select('id, title, notes, status, tasks, sort_order, created_at')
-      .eq('user_id', user.userId)
-      .order('sort_order', { ascending: true });
-    if (error) throw error;
+    const [projectsRes, groupsRes] = await Promise.all([
+      supabase
+        .from('projects')
+        .select('id, title, notes, status, group_id, tasks, sort_order, created_at')
+        .eq('user_id', user.userId)
+        .order('sort_order', { ascending: true }),
+      supabase
+        .from('project_groups')
+        .select('id, name, kind')
+        .eq('user_id', user.userId)
+        .order('name', { ascending: true }),
+    ]);
+    if (projectsRes.error) throw projectsRes.error;
+    if (groupsRes.error) throw groupsRes.error;
 
-    const projects = ((data || []) as DbProjectRecord[]).map((p) => ({
+    const projects = ((projectsRes.data || []) as DbProjectRecord[]).map((p) => ({
       id: p.id,
       title: p.title,
       notes: p.notes || '',
       status: p.status,
+      group_id: p.group_id ?? null,
       tasks: Array.isArray(p.tasks) ? p.tasks : [],
       order: p.sort_order,
       created_at: p.created_at,
     }));
-    return { success: true, isConfigured: true, projects };
+    return { success: true, isConfigured: true, projects, groups: (groupsRes.data || []) as ProjectGroup[] };
   } catch (err: unknown) {
     return { success: false, isConfigured: true, error: getErrorMessage(err, 'Failed to load projects') };
   }
@@ -530,10 +541,23 @@ export async function saveProjectAction(project: Project): Promise<{ success: bo
     if (!supabase) return { success: true };
 
     const title = String(project?.title ?? '').trim().slice(0, 200);
+    const groupId = project?.group_id ?? null;
     if (!UUID_RE.test(String(project?.id))) return { success: false, error: 'Invalid project id.' };
     if (!title) return { success: false, error: 'Project title is required.' };
     if (project.status !== 'active' && project.status !== 'planned') return { success: false, error: 'Invalid status.' };
     if (!Array.isArray(project.tasks) || project.tasks.length > 500) return { success: false, error: 'Invalid subtasks.' };
+
+    // Only allow assigning to an org/person owned by this user
+    if (groupId !== null) {
+      if (!UUID_RE.test(String(groupId))) return { success: false, error: 'Invalid organization.' };
+      const { data: group } = await supabase
+        .from('project_groups')
+        .select('id')
+        .eq('id', groupId)
+        .eq('user_id', user.userId)
+        .maybeSingle();
+      if (!group) return { success: false, error: 'Organization / person not found.' };
+    }
 
     const tasks: ProjectTask[] = project.tasks.map((t) => ({
       id: String(t.id).slice(0, 64),
@@ -553,6 +577,7 @@ export async function saveProjectAction(project: Project): Promise<{ success: bo
       title,
       notes: String(project.notes ?? '').slice(0, 20000),
       status: project.status,
+      group_id: groupId,
       tasks,
       sort_order: Number.isFinite(project.order) ? Math.trunc(project.order) : 0,
     });
@@ -560,6 +585,53 @@ export async function saveProjectAction(project: Project): Promise<{ success: bo
     return { success: true };
   } catch (err: unknown) {
     return { success: false, error: getErrorMessage(err, 'Failed to save project') };
+  }
+}
+
+/**
+ * Server Action: Create / rename an Organization or Person (Protected & Scoped to user)
+ */
+export async function saveProjectGroupAction(group: ProjectGroup): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await requireAuth();
+    const supabase = getServerSupabase();
+    if (!supabase) return { success: true };
+
+    const name = String(group?.name ?? '').trim().slice(0, 100);
+    if (!UUID_RE.test(String(group?.id))) return { success: false, error: 'Invalid id.' };
+    if (!name) return { success: false, error: 'Name is required.' };
+    if (group.kind !== 'org' && group.kind !== 'person') return { success: false, error: 'Invalid type.' };
+
+    const { data: existing } = await supabase.from('project_groups').select('user_id').eq('id', group.id).maybeSingle();
+    if (existing && existing.user_id !== user.userId) {
+      return { success: false, error: 'Unauthorized: Cannot modify other users data.' };
+    }
+
+    const { error } = await supabase
+      .from('project_groups')
+      .upsert({ id: group.id, user_id: user.userId, name, kind: group.kind });
+    if (error) throw error;
+    return { success: true };
+  } catch (err: unknown) {
+    return { success: false, error: getErrorMessage(err, 'Failed to save organization') };
+  }
+}
+
+/**
+ * Server Action: Delete an Organization or Person. Its projects become Unassigned (FK ON DELETE SET NULL).
+ */
+export async function deleteProjectGroupAction(groupId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await requireAuth();
+    const supabase = getServerSupabase();
+    if (!supabase) return { success: true };
+    if (!UUID_RE.test(String(groupId))) return { success: false, error: 'Invalid id.' };
+
+    const { error } = await supabase.from('project_groups').delete().eq('id', groupId).eq('user_id', user.userId);
+    if (error) throw error;
+    return { success: true };
+  } catch (err: unknown) {
+    return { success: false, error: getErrorMessage(err, 'Failed to delete organization') };
   }
 }
 
