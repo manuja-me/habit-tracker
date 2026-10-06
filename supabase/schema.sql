@@ -216,3 +216,32 @@ CREATE TRIGGER set_day_notes_updated_at
     BEFORE UPDATE ON public.day_notes
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_updated_at();
+
+-- ================================================================
+-- 10. PROJECTS table (additive migration -- touches no existing data)
+-- status: 'active' = ongoing, 'planned' = future project
+-- tasks: JSONB array of { id, title, done } subtasks
+-- ================================================================
+CREATE TABLE IF NOT EXISTS public.projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES public.app_users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 200),
+    notes TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'planned')),
+    tasks JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(tasks) = 'array'),
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_projects_user_id ON public.projects(user_id);
+
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow service role only projects" ON public.projects;
+CREATE POLICY "Allow service role only projects" ON public.projects FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP TRIGGER IF EXISTS set_projects_updated_at ON public.projects;
+CREATE TRIGGER set_projects_updated_at
+    BEFORE UPDATE ON public.projects
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_updated_at();

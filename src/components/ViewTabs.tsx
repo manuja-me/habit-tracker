@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
-import { CheckSquare, Calendar, PenLine, Activity, BarChart2, Users } from 'lucide-react';
+import { CheckSquare, Calendar, PenLine, Activity, BarChart2, Users, FolderKanban } from 'lucide-react';
 
-export type ActiveTab = 'today' | 'week' | 'planner' | 'heatmap' | 'analytics' | 'admin';
+export type ActiveTab = 'today' | 'week' | 'planner' | 'projects' | 'heatmap' | 'analytics' | 'admin';
 
 interface ViewTabsProps {
   activeTab: ActiveTab;
@@ -16,6 +16,7 @@ export function ViewTabs({ activeTab, onTabChange, isAdmin = false }: ViewTabsPr
     { id: 'today', label: 'Today', icon: CheckSquare },
     { id: 'week', label: 'Week', icon: Calendar },
     { id: 'planner', label: 'Planner', icon: PenLine },
+    { id: 'projects', label: 'Projects', icon: FolderKanban },
     { id: 'heatmap', label: 'Heatmap', icon: Activity },
     { id: 'analytics', label: 'Stats', icon: BarChart2 },
   ];

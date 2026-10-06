@@ -17,6 +17,7 @@ import { WeeklyGrid } from '../components/WeeklyGrid';
 import { MinimalHeatmap } from '../components/MinimalHeatmap';
 import { AnalyticsView } from '../components/AnalyticsView';
 import { DailyPlanner } from '../components/DailyPlanner';
+import { ProjectsView } from '../components/ProjectsView';
 import { AdminUsersView } from '../components/AdminUsersView';
 import { HabitModal, HabitFormData } from '../components/HabitModal';
 import { SettingsModal } from '../components/SettingsModal';
@@ -393,6 +394,8 @@ export default function HabitTrackerPage() {
             </div>
           </div>
         )}
+
+        {activeTab === 'projects' && <ProjectsView />}
 
         {activeTab === 'week' && (
           <WeeklyGrid

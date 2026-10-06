@@ -4,7 +4,7 @@ import { requireAuth } from './auth';
 import { OWNER_USER_ID } from './auth-utils';
 import { getCleanSupabaseConfig, getServerSupabase } from './supabase';
 import { purgeUserData, purgeExpiredDeactivatedUsers } from './user-management';
-import { Habit, HabitCategory, HabitFrequency, HabitLog, HabitType } from '../types';
+import { Habit, HabitCategory, HabitFrequency, HabitLog, HabitType, Project, ProjectStatus, ProjectTask } from '../types';
 
 export { purgeExpiredDeactivatedUsers };
 
@@ -469,6 +469,115 @@ export async function saveDayNoteAction(date: string, content: string): Promise<
     return { success: true };
   } catch (err: unknown) {
     return { success: false, error: getErrorMessage(err, 'Failed to save note') };
+  }
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+interface DbProjectRecord {
+  id: string;
+  title: string;
+  notes: string;
+  status: ProjectStatus;
+  tasks: ProjectTask[];
+  sort_order: number;
+  created_at: string;
+}
+
+/**
+ * Server Action: Fetch projects scoped to the authenticated user
+ */
+export async function getProjectsAction(): Promise<{
+  success: boolean;
+  isConfigured: boolean;
+  projects?: Project[];
+  error?: string;
+}> {
+  try {
+    const user = await requireAuth();
+    const supabase = getServerSupabase();
+    if (!supabase) return { success: true, isConfigured: false, projects: [] };
+
+    const { data, error } = await supabase
+      .from('projects')
+      .select('id, title, notes, status, tasks, sort_order, created_at')
+      .eq('user_id', user.userId)
+      .order('sort_order', { ascending: true });
+    if (error) throw error;
+
+    const projects = ((data || []) as DbProjectRecord[]).map((p) => ({
+      id: p.id,
+      title: p.title,
+      notes: p.notes || '',
+      status: p.status,
+      tasks: Array.isArray(p.tasks) ? p.tasks : [],
+      order: p.sort_order,
+      created_at: p.created_at,
+    }));
+    return { success: true, isConfigured: true, projects };
+  } catch (err: unknown) {
+    return { success: false, isConfigured: true, error: getErrorMessage(err, 'Failed to load projects') };
+  }
+}
+
+/**
+ * Server Action: Create / update a Project (Protected & Scoped to user)
+ */
+export async function saveProjectAction(project: Project): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await requireAuth();
+    const supabase = getServerSupabase();
+    if (!supabase) return { success: true };
+
+    const title = String(project?.title ?? '').trim().slice(0, 200);
+    if (!UUID_RE.test(String(project?.id))) return { success: false, error: 'Invalid project id.' };
+    if (!title) return { success: false, error: 'Project title is required.' };
+    if (project.status !== 'active' && project.status !== 'planned') return { success: false, error: 'Invalid status.' };
+    if (!Array.isArray(project.tasks) || project.tasks.length > 500) return { success: false, error: 'Invalid subtasks.' };
+
+    const tasks: ProjectTask[] = project.tasks.map((t) => ({
+      id: String(t.id).slice(0, 64),
+      title: String(t.title ?? '').slice(0, 500),
+      done: Boolean(t.done),
+    }));
+
+    // Block overwriting another user's project via a known id
+    const { data: existing } = await supabase.from('projects').select('user_id').eq('id', project.id).maybeSingle();
+    if (existing && existing.user_id !== user.userId) {
+      return { success: false, error: 'Unauthorized: Cannot modify other users data.' };
+    }
+
+    const { error } = await supabase.from('projects').upsert({
+      id: project.id,
+      user_id: user.userId,
+      title,
+      notes: String(project.notes ?? '').slice(0, 20000),
+      status: project.status,
+      tasks,
+      sort_order: Number.isFinite(project.order) ? Math.trunc(project.order) : 0,
+    });
+    if (error) throw error;
+    return { success: true };
+  } catch (err: unknown) {
+    return { success: false, error: getErrorMessage(err, 'Failed to save project') };
+  }
+}
+
+/**
+ * Server Action: Delete a Project (Protected & Scoped to user)
+ */
+export async function deleteProjectAction(projectId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await requireAuth();
+    const supabase = getServerSupabase();
+    if (!supabase) return { success: true };
+    if (!UUID_RE.test(String(projectId))) return { success: false, error: 'Invalid project id.' };
+
+    const { error } = await supabase.from('projects').delete().eq('id', projectId).eq('user_id', user.userId);
+    if (error) throw error;
+    return { success: true };
+  } catch (err: unknown) {
+    return { success: false, error: getErrorMessage(err, 'Failed to delete project') };
   }
 }
 

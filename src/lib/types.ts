@@ -78,3 +78,21 @@ export interface DayNote {
   content: string;
   updated_at: string;
 }
+
+export type ProjectStatus = 'active' | 'planned';
+
+export interface ProjectTask {
+  id: string;
+  title: string;
+  done: boolean;
+}
+
+export interface Project {
+  id: string;
+  title: string;
+  notes: string;
+  status: ProjectStatus;
+  tasks: ProjectTask[];
+  order: number;
+  created_at: string;
+}
