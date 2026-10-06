@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { Habit, HabitLog, HabitStats } from '../lib/types';
 import { AVAILABLE_ICONS, COLOR_PALETTES } from '../lib/utils/icons';
-import { playCheckSound, playUncheckSound } from '../lib/utils/sound';
 import { calculateWeaningStatus } from '../lib/utils/tapering';
 import { Progress } from './ui/progress';
 
@@ -68,19 +67,9 @@ export function MinimalHabitItem({
     e.stopPropagation();
     if (isDont) {
       const nextCompleted = isSlippedUp;
-      if (nextCompleted) {
-        playCheckSound();
-      } else {
-        playUncheckSound();
-      }
       onToggle(habit.id, dateStr, nextCompleted, nextCompleted ? 0 : 1);
     } else {
       const nextCompleted = !isCompleted;
-      if (nextCompleted) {
-        playCheckSound();
-      } else {
-        playUncheckSound();
-      }
       onToggle(habit.id, dateStr, nextCompleted, nextCompleted ? habit.target_value : 0);
     }
   };
@@ -89,11 +78,6 @@ export function MinimalHabitItem({
     e.stopPropagation();
     const nextVal = Math.max(0, currentValue + amount);
     const nextCompleted = nextVal >= habit.target_value;
-    if (nextCompleted && !isCompleted) {
-      playCheckSound();
-    } else if (!nextCompleted && isCompleted) {
-      playUncheckSound();
-    }
     onToggle(habit.id, dateStr, nextCompleted, nextVal);
   };
 

@@ -5,8 +5,6 @@ import {
   X, 
   Sun, 
   Moon, 
-  Volume2, 
-  VolumeX, 
   Cloud, 
   CloudOff, 
   RefreshCw, 
@@ -26,7 +24,6 @@ import {
 import { GithubIcon } from './ui/GithubIcon';
 import { useHabitStore } from '../lib/store';
 import { useTheme, Theme, GruvboxAccent } from '../lib/theme';
-import { isSoundEnabled, setSoundEnabled } from '../lib/utils/sound';
 import { LAST_VISIT_STORAGE_KEY, formatLastVisitReadable } from '../lib/utils/presence';
 import { deactivateAccountAction } from '../lib/server/auth';
 
@@ -57,7 +54,6 @@ function SettingsModalDialog({
 }: SettingsModalProps) {
   const { isSyncing, isCloudReady, currentUser, syncWithCloud, syncError } = useHabitStore();
   const { theme, setTheme, accent, setAccent } = useTheme();
-  const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
   const [justSynced, setJustSynced] = useState(false);
   const [lastVisitDisplay] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -86,12 +82,6 @@ function SettingsModalDialog({
     await syncWithCloud();
     setJustSynced(true);
     setTimeout(() => setJustSynced(false), 2000);
-  };
-
-  const handleToggleSound = () => {
-    const next = !soundOn;
-    setSoundOn(next);
-    setSoundEnabled(next);
   };
 
   const handleDeactivateConfirm = async () => {
@@ -218,41 +208,7 @@ function SettingsModalDialog({
           </div>
         </div>
 
-        {/* Section 2: Sound Feedback */}
-        <div className="space-y-3 pt-3 border-t border-subtle">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-xs font-sans font-bold text-main uppercase tracking-tight">
-                Audio Feedback
-              </div>
-              <div className="text-[11px] font-mono text-sub">
-                Tactile click sounds when checking off habits
-              </div>
-            </div>
-            <button
-              onClick={handleToggleSound}
-              className={`flex items-center gap-1.5 h-8 px-3 border text-xs font-mono font-bold transition-all cursor-pointer ${
-                soundOn
-                  ? 'border-[#FF3B30]/50 bg-[#FF3B30]/10 text-[#FF3B30]'
-                  : 'border-subtle bg-input text-sub'
-              }`}
-            >
-              {soundOn ? (
-                <>
-                  <Volume2 className="w-3.5 h-3.5 text-[#FF3B30]" />
-                  <span>ON</span>
-                </>
-              ) : (
-                <>
-                  <VolumeX className="w-3.5 h-3.5 text-sub" />
-                  <span>MUTED</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Section 3: Cloud & Storage */}
+        {/* Section 2: Cloud & Storage */}
         <div className="space-y-3 pt-3 border-t border-subtle">
           <label className="text-xs font-mono font-bold uppercase tracking-wider text-sub block">
             Cloud & Sync

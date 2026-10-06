@@ -31,7 +31,6 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
     { key: 'n', desc: 'Create new habit' },
     { key: 't', desc: 'Jump selected date to Today' },
     { key: '1 – 6', desc: 'Switch tabs (Today, Week, Planner, Heatmap, Stats, Users)' },
-    { key: 'm', desc: 'Toggle tactile sound effects' },
     { key: '?', desc: 'Toggle this shortcuts modal' },
     { key: 'Esc', desc: 'Close any active modal' },
   ];

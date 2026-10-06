@@ -4,7 +4,6 @@ import { useEffect } from 'react';
 import { Habit, HabitLog } from '../types';
 import { ActiveTab } from '../../components/ViewTabs';
 import { getTodayDateString } from '../utils/date';
-import { playCheckSound, playUncheckSound, isSoundEnabled, setSoundEnabled } from '../utils/sound';
 
 interface UseAppShortcutsOptions {
   isUnlocked: boolean | null;
@@ -66,8 +65,6 @@ export function useAppShortcuts({
         const focusedHabit = displayedDailyHabits[safeFocusedIndex];
         if (focusedHabit) {
           const isDone = Boolean(logs[`${focusedHabit.id}_${selectedDate}`]?.completed);
-          if (!isDone) playCheckSound();
-          else playUncheckSound();
           toggleHabit(focusedHabit.id, selectedDate, !isDone, !isDone ? focusedHabit.target_value : 0);
         }
       }
@@ -80,7 +77,6 @@ export function useAppShortcuts({
           const step = focusedHabit.target_value >= 1000 ? 250 : focusedHabit.target_value >= 50 ? 10 : 5;
           const nextVal = curVal + step;
           const nextCompleted = nextVal >= focusedHabit.target_value;
-          if (nextCompleted && curVal < focusedHabit.target_value) playCheckSound();
           toggleHabit(focusedHabit.id, selectedDate, nextCompleted, nextVal);
         }
       } else if (e.key === '-' || e.key === '_') {
@@ -91,7 +87,6 @@ export function useAppShortcuts({
           const step = focusedHabit.target_value >= 1000 ? 250 : focusedHabit.target_value >= 50 ? 10 : 5;
           const nextVal = Math.max(0, curVal - step);
           const nextCompleted = nextVal >= focusedHabit.target_value;
-          if (!nextCompleted && curVal >= focusedHabit.target_value) playUncheckSound();
           toggleHabit(focusedHabit.id, selectedDate, nextCompleted, nextVal);
         }
       }
@@ -134,12 +129,6 @@ export function useAppShortcuts({
       else if (e.key === '?') {
         e.preventDefault();
         onOpenShortcutsModal();
-      }
-      // Toggle sound: m
-      else if (key === 'm') {
-        e.preventDefault();
-        const current = isSoundEnabled();
-        setSoundEnabled(!current);
       }
     };
 

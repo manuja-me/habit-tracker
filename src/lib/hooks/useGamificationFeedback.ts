@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { triggerDailyCelebration } from '../utils/confetti';
-import { playMilestoneSound, playLevelUpSound, playAchievementSound } from '../utils/sound';
 import { GamificationProfile } from '../utils/gamification';
 
 interface UseGamificationFeedbackOptions {
@@ -21,14 +20,12 @@ export function useGamificationFeedback({
   const [levelUpToast, setLevelUpToast] = useState<{ level: number; tierName: string } | null>(null);
 
   const prevCompletionRef = useRef<boolean>(false);
-  const prevUnlockedRef = useRef<Set<string> | null>(null);
 
   // Daily 100% completion celebration
   useEffect(() => {
     const isAllDone = totalCount > 0 && completedCount === totalCount;
     if (isAllDone && !prevCompletionRef.current) {
       triggerDailyCelebration();
-      playMilestoneSound();
     }
     prevCompletionRef.current = isAllDone;
   }, [completedCount, totalCount]);
@@ -48,7 +45,6 @@ export function useGamificationFeedback({
     const prevLevel = parseInt(storedLevelStr, 10);
     if (!isNaN(prevLevel) && currentLevel > prevLevel) {
       localStorage.setItem('zenith_player_level', String(currentLevel));
-      playLevelUpSound();
       triggerDailyCelebration();
       const toastTimer = setTimeout(() => {
         setLevelUpToast({
@@ -68,33 +64,6 @@ export function useGamificationFeedback({
       localStorage.setItem('zenith_player_level', String(currentLevel));
     }
   }, [gamificationProfile.level, gamificationProfile.tier.name, isUnlocked]);
-
-  // Achievement unlock chime
-  useEffect(() => {
-    if (!isUnlocked || typeof window === 'undefined') return;
-
-    const currentUnlocked = new Set(
-      gamificationProfile.achievements.filter((a) => a.unlocked).map((a) => a.id)
-    );
-
-    if (prevUnlockedRef.current === null) {
-      prevUnlockedRef.current = currentUnlocked;
-      return;
-    }
-
-    let hasNewUnlock = false;
-    currentUnlocked.forEach((id) => {
-      if (!prevUnlockedRef.current?.has(id)) {
-        hasNewUnlock = true;
-      }
-    });
-
-    if (hasNewUnlock) {
-      playAchievementSound();
-    }
-
-    prevUnlockedRef.current = currentUnlocked;
-  }, [gamificationProfile.achievements, isUnlocked]);
 
   return { levelUpToast };
 }
