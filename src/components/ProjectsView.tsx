@@ -27,8 +27,16 @@ const LOCAL_KEY = 'zenith_projects_v1';
 
 type Result = { success: boolean; error?: string };
 
-function GroupIcon({ kind, className = 'w-3.5 h-3.5' }: { kind: ProjectGroupKind; className?: string }) {
-  return kind === 'org' ? <Building2 className={className} /> : <User className={className} />;
+function GroupIcon({
+  kind,
+  className = 'w-3.5 h-3.5',
+  style,
+}: {
+  kind: ProjectGroupKind;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  return kind === 'org' ? <Building2 className={className} style={style} /> : <User className={className} style={style} />;
 }
 
 function CustomSelect({
