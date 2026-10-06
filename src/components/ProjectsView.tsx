@@ -574,14 +574,6 @@ function ProjectCard({
             <h4 className="text-sm font-black font-sans uppercase tracking-tight text-main truncate">
               {project.title}
             </h4>
-            {owner && (
-              <span
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-subtle text-sub border border-subtle text-[10px] font-mono shrink-0"
-              >
-                <GroupIcon kind={owner.kind} className="w-2.5 h-2.5" style={{ color: owner.color || '#FE8019' }} />
-                <span className="truncate max-w-[120px]">{owner.name}</span>
-              </span>
-            )}
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
