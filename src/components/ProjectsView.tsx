@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Play, Pause, X, Building2, User } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Plus, Trash2, Play, Pause, X, Building2, User, ChevronDown, Check } from 'lucide-react';
 import { Project, ProjectGroup, ProjectGroupKind, ProjectStatus, ProjectTask } from '../lib/types';
 import {
   getProjectsAction,
@@ -15,11 +15,100 @@ const LOCAL_KEY = 'zenith_projects_v1';
 
 type Result = { success: boolean; error?: string };
 
-const selectCls =
-  'h-8 px-1.5 bg-card border border-main text-[11px] font-mono text-main focus:outline-none focus:border-[#FF3B30] cursor-pointer max-w-[45%]';
-
 function GroupIcon({ kind, className = 'w-3.5 h-3.5' }: { kind: ProjectGroupKind; className?: string }) {
   return kind === 'org' ? <Building2 className={className} /> : <User className={className} />;
+}
+
+function CustomSelect({
+  value,
+  onChange,
+  options,
+  placeholder = 'Select...',
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  options: { value: string; label: string; group?: string; icon?: React.ReactNode }[];
+  placeholder?: string;
+  ariaLabel?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [isOpen]);
+
+  const selectedOpt = options.find((o) => o.value === value);
+
+  // Group options if groups exist
+  const groups = Array.from(new Set(options.map((o) => o.group || '')));
+
+  return (
+    <div ref={containerRef} className="relative inline-block text-left">
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        onClick={() => setIsOpen((prev) => !prev)}
+        className="h-8 px-2.5 bg-input border border-main hover:border-neutral-400 text-xs font-mono text-main flex items-center justify-between gap-2 transition-colors cursor-pointer select-none"
+      >
+        <span className="truncate flex items-center gap-1.5 max-w-[130px] sm:max-w-[180px]">
+          {selectedOpt?.icon}
+          {selectedOpt ? selectedOpt.label : placeholder}
+        </span>
+        <ChevronDown className={`w-3.5 h-3.5 text-sub transition-transform duration-150 ${isOpen ? 'rotate-180 text-[#FF3B30]' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 sm:left-0 z-50 mt-1 min-w-[160px] max-w-[240px] bg-card border border-main shadow-2xl max-h-56 overflow-y-auto">
+          {groups.map((group) => {
+            const groupOpts = options.filter((o) => (o.group || '') === group);
+            return (
+              <div key={group || 'default'}>
+                {group && (
+                  <div className="px-2.5 py-1 text-[10px] font-mono font-bold uppercase tracking-wider text-muted-custom bg-subtle/60 border-b border-subtle">
+                    {group}
+                  </div>
+                )}
+                {groupOpts.map((opt) => {
+                  const isSelected = opt.value === value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        onChange(opt.value);
+                        setIsOpen(false);
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 text-xs font-mono flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'bg-[#FF3B30]/15 text-[#FF3B30] font-bold'
+                          : 'text-main hover:bg-subtle hover:text-main'
+                      }`}
+                    >
+                      <span className="truncate flex items-center gap-1.5">
+                        {opt.icon}
+                        {opt.label}
+                      </span>
+                      {isSelected && <Check className="w-3.5 h-3.5 text-[#FF3B30] shrink-0 stroke-[2.5]" />}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function AddRow({
@@ -47,7 +136,7 @@ function AddRow({
         placeholder={placeholder}
         aria-label={placeholder}
         maxLength={200}
-        className="flex-1 min-w-0 h-8 px-2.5 bg-input/40 border border-main text-xs font-mono text-main placeholder-muted-custom focus:outline-none focus:border-[#FF3B30]"
+        className="flex-1 min-w-0 h-8 px-2.5 bg-input border border-main text-xs font-mono text-main placeholder-muted-custom focus:outline-none focus:border-[#FF3B30]"
       />
       {children}
       <button
@@ -72,26 +161,24 @@ function OwnerSelect({
   onChange: (groupId: string | null) => void;
   label: string;
 }) {
-  const orgs = groups.filter((g) => g.kind === 'org');
-  const people = groups.filter((g) => g.kind === 'person');
+  const options = [
+    { value: '', label: 'Unassigned' },
+    ...groups.map((g) => ({
+      value: g.id,
+      label: g.name,
+      group: g.kind === 'org' ? 'Organizations' : 'People',
+      icon: <GroupIcon kind={g.kind} className="w-3 h-3 text-sub" />,
+    })),
+  ];
+
   return (
-    <select aria-label={label} title={label} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} className={selectCls}>
-      <option value="">Unassigned</option>
-      {orgs.length > 0 && (
-        <optgroup label="Organizations">
-          {orgs.map((g) => (
-            <option key={g.id} value={g.id}>{g.name}</option>
-          ))}
-        </optgroup>
-      )}
-      {people.length > 0 && (
-        <optgroup label="People">
-          {people.map((g) => (
-            <option key={g.id} value={g.id}>{g.name}</option>
-          ))}
-        </optgroup>
-      )}
-    </select>
+    <CustomSelect
+      value={value ?? ''}
+      onChange={(val) => onChange(val || null)}
+      options={options}
+      placeholder="Unassigned"
+      ariaLabel={label}
+    />
   );
 }
 
@@ -116,10 +203,15 @@ function NewGroupForm({ onAdd }: { onAdd: (name: string, kind: ProjectGroupKind)
   const [kind, setKind] = useState<ProjectGroupKind>('org');
   return (
     <AddRow placeholder="Add organization or person" onAdd={(n) => onAdd(n.slice(0, 100), kind)}>
-      <select aria-label="Type" value={kind} onChange={(e) => setKind(e.target.value as ProjectGroupKind)} className={selectCls}>
-        <option value="org">Organization</option>
-        <option value="person">Person</option>
-      </select>
+      <CustomSelect
+        value={kind}
+        onChange={(val) => setKind(val as ProjectGroupKind)}
+        options={[
+          { value: 'org', label: 'Organization', icon: <Building2 className="w-3 h-3 text-sub" /> },
+          { value: 'person', label: 'Person', icon: <User className="w-3 h-3 text-sub" /> },
+        ]}
+        ariaLabel="Type"
+      />
     </AddRow>
   );
 }
@@ -189,20 +281,25 @@ function ProjectCard({
           placeholder={isActive ? 'Notes, context, next steps...' : 'Plan: goals, scope, resources...'}
           onBlur={(e) => e.target.value !== project.notes && onChange({ ...project, notes: e.target.value })}
           style={{ fieldSizing: 'content' } as React.CSSProperties}
-          className="w-full min-h-[38px] bg-input/40 p-2 text-xs font-mono text-main placeholder-muted-custom focus:outline-none resize-none leading-relaxed border-0"
+          className="w-full min-h-[38px] bg-input p-2 text-xs font-mono text-main placeholder-muted-custom focus:outline-none resize-none leading-relaxed border-0"
         />
 
         {project.tasks.length > 0 && (
-          <ul className="space-y-1">
+          <ul className="space-y-1.5">
             {project.tasks.map((t) => (
-              <li key={t.id} className="group flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={t.done}
-                  aria-label={`Mark "${t.title}" done`}
-                  onChange={() => setTasks(project.tasks.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)))}
-                  className="accent-[#FF3B30] cursor-pointer"
-                />
+              <li key={t.id} className="group flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setTasks(project.tasks.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)))}
+                  aria-label={`Toggle "${t.title}"`}
+                  className={`w-4 h-4 shrink-0 flex items-center justify-center transition-all cursor-pointer border ${
+                    t.done
+                      ? 'bg-[#FF3B30] text-white border-[#FF3B30]'
+                      : 'border-main bg-input hover:border-neutral-400'
+                  }`}
+                >
+                  <Check className={`w-3 h-3 stroke-[3] ${t.done ? 'opacity-100' : 'opacity-0'}`} />
+                </button>
                 <span className={`flex-1 text-xs font-mono ${t.done ? 'line-through text-sub' : 'text-main'}`}>
                   {t.title}
                 </span>
