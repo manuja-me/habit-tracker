@@ -385,7 +385,7 @@ export default function HabitTrackerPage() {
         )}
 
         {activeTab === 'planner' && (
-          <div className="w-full max-w-4xl xl:max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="w-full max-w-4xl xl:max-w-7xl mx-auto px-4 sm:px-6">
             <div className="bg-card p-4 sm:p-6 border border-main shadow-xs">
               <DailyPlanner
                 selectedDate={selectedDate}

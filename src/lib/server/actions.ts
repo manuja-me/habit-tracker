@@ -508,7 +508,7 @@ export async function getProjectsAction(): Promise<{
         .order('sort_order', { ascending: true }),
       supabase
         .from('project_groups')
-        .select('id, name, kind')
+        .select('id, name, kind, color')
         .eq('user_id', user.userId)
         .order('name', { ascending: true }),
     ]);
@@ -607,9 +607,21 @@ export async function saveProjectGroupAction(group: ProjectGroup): Promise<{ suc
       return { success: false, error: 'Unauthorized: Cannot modify other users data.' };
     }
 
-    const { error } = await supabase
-      .from('project_groups')
-      .upsert({ id: group.id, user_id: user.userId, name, kind: group.kind });
+    const groupPayload: Record<string, unknown> = {
+      id: group.id,
+      user_id: user.userId,
+      name,
+      kind: group.kind,
+      color: group.color || '#FE8019',
+    };
+
+    let { error } = await supabase.from('project_groups').upsert(groupPayload);
+    // Graceful fallback if color column isn't migrated in DB yet
+    if (error && (error.message?.includes('color') || error.code === '42703')) {
+      delete groupPayload.color;
+      const retry = await supabase.from('project_groups').upsert(groupPayload);
+      error = retry.error;
+    }
     if (error) throw error;
     return { success: true };
   } catch (err: unknown) {

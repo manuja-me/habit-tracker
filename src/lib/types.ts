@@ -87,6 +87,7 @@ export interface ProjectGroup {
   id: string;
   name: string;
   kind: ProjectGroupKind;
+  color?: string; // Optional hex color code for the organization or person
 }
 
 export interface ProjectTask {

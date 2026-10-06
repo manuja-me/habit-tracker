@@ -256,10 +256,12 @@ CREATE TABLE IF NOT EXISTS public.project_groups (
     user_id UUID NOT NULL REFERENCES public.app_users(id) ON DELETE CASCADE,
     name TEXT NOT NULL CHECK (char_length(name) BETWEEN 1 AND 100),
     kind TEXT NOT NULL DEFAULT 'org' CHECK (kind IN ('org', 'person')),
+    color TEXT DEFAULT '#FE8019',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.project_groups ADD COLUMN IF NOT EXISTS color TEXT DEFAULT '#FE8019';
 ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS group_id UUID REFERENCES public.project_groups(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS idx_project_groups_user_id ON public.project_groups(user_id);

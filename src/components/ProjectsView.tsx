@@ -14,6 +14,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { Project, ProjectGroup, ProjectGroupKind, ProjectStatus, ProjectTask } from '../lib/types';
+import { COLOR_PALETTES } from '../lib/utils/icons';
 import {
   getProjectsAction,
   saveProjectAction,
@@ -360,13 +361,14 @@ function GlobalProjectSettingsModal({
 }) {
   const [name, setName] = useState('');
   const [kind, setKind] = useState<ProjectGroupKind>('org');
+  const [color, setColor] = useState('#FE8019');
   if (!isOpen) return null;
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    onSaveGroup({ id: crypto.randomUUID(), name: trimmed, kind });
+    onSaveGroup({ id: crypto.randomUUID(), name: trimmed, kind, color });
     setName('');
   };
 
@@ -405,7 +407,7 @@ function GlobalProjectSettingsModal({
         </div>
 
         {/* Add Org / Person */}
-        <form onSubmit={handleAdd} className="space-y-2">
+        <form onSubmit={handleAdd} className="space-y-3">
           <label className="text-xs font-bold uppercase tracking-wider text-sub block">
             Add Organization / Person
           </label>
@@ -435,10 +437,37 @@ function GlobalProjectSettingsModal({
               <Plus className="w-4 h-4" />
             </button>
           </div>
+
+          {/* Color palette selector for the group */}
+          <div className="space-y-1">
+            <span className="text-[10px] font-mono font-bold uppercase text-sub block">
+              Color Theme
+            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {COLOR_PALETTES.map((c) => (
+                <button
+                  type="button"
+                  key={c.hex}
+                  onClick={() => setColor(c.hex)}
+                  title={c.name}
+                  className={`w-6 h-6 flex items-center justify-center border transition-all cursor-pointer ${
+                    color.toLowerCase() === c.hex.toLowerCase()
+                      ? 'border-white scale-110 shadow-xs'
+                      : 'border-subtle opacity-80 hover:opacity-100'
+                  }`}
+                  style={{ backgroundColor: c.hex }}
+                >
+                  {color.toLowerCase() === c.hex.toLowerCase() && (
+                    <Check className="w-3.5 h-3.5 text-black stroke-[3]" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
         </form>
 
         {/* Current list */}
-        <div className="space-y-2 pt-2">
+        <div className="space-y-2 pt-2 border-t border-subtle">
           <label className="text-xs font-bold uppercase tracking-wider text-sub block">
             Defined Organizations & People ({groups.length})
           </label>
@@ -449,38 +478,61 @@ function GlobalProjectSettingsModal({
             </p>
           ) : (
             <ul className="space-y-1.5 max-h-60 overflow-y-auto">
-              {sortedGroups.map((g) => (
-                <li
-                  key={g.id}
-                  className="flex items-center gap-2 p-2 border border-main bg-input text-sub"
-                >
-                  <GroupIcon kind={g.kind} className="w-3.5 h-3.5 text-sub shrink-0" />
-                  <input
-                    defaultValue={g.name}
-                    aria-label={`Rename ${g.name}`}
-                    maxLength={100}
-                    onBlur={(e) => {
-                      const trimmed = e.target.value.trim();
-                      if (trimmed && trimmed !== g.name) {
-                        onSaveGroup({ ...g, name: trimmed });
-                      } else {
-                        e.target.value = g.name;
-                      }
-                    }}
-                    className="flex-1 bg-transparent text-xs font-mono text-main focus:outline-none"
-                  />
-                  <span className="text-[10px] font-mono text-muted-custom uppercase px-1.5 py-0.5 bg-subtle border border-subtle">
-                    {g.kind}
-                  </span>
-                  <button
-                    onClick={() => onDeleteGroup(g)}
-                    aria-label={`Delete ${g.name}`}
-                    className="w-6 h-6 flex items-center justify-center hover:text-[#FF3B30] cursor-pointer"
+              {sortedGroups.map((g) => {
+                const groupColor = g.color || '#FE8019';
+                return (
+                  <li
+                    key={g.id}
+                    className="flex items-center gap-2 p-2 border border-main bg-input text-sub"
+                    style={{ borderLeftColor: groupColor, borderLeftWidth: '3px' }}
                   >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </li>
-              ))}
+                    <GroupIcon kind={g.kind} className="w-3.5 h-3.5 shrink-0" style={{ color: groupColor }} />
+                    <input
+                      defaultValue={g.name}
+                      aria-label={`Rename ${g.name}`}
+                      maxLength={100}
+                      onBlur={(e) => {
+                        const trimmed = e.target.value.trim();
+                        if (trimmed && trimmed !== g.name) {
+                          onSaveGroup({ ...g, name: trimmed });
+                        } else {
+                          e.target.value = g.name;
+                        }
+                      }}
+                      className="flex-1 bg-transparent text-xs font-mono text-main focus:outline-none"
+                    />
+                    
+                    {/* Color switcher per group */}
+                    <div className="flex items-center gap-1">
+                      {COLOR_PALETTES.map((c) => (
+                        <button
+                          key={c.hex}
+                          type="button"
+                          onClick={() => onSaveGroup({ ...g, color: c.hex })}
+                          title={`Set ${c.name}`}
+                          className={`w-3.5 h-3.5 border transition-all cursor-pointer ${
+                            (g.color || '#FE8019').toLowerCase() === c.hex.toLowerCase()
+                              ? 'border-white scale-125'
+                              : 'border-transparent opacity-60 hover:opacity-100'
+                          }`}
+                          style={{ backgroundColor: c.hex }}
+                        />
+                      ))}
+                    </div>
+
+                    <span className="text-[10px] font-mono text-muted-custom uppercase px-1.5 py-0.5 bg-subtle border border-subtle">
+                      {g.kind}
+                    </span>
+                    <button
+                      onClick={() => onDeleteGroup(g)}
+                      aria-label={`Delete ${g.name}`}
+                      className="w-6 h-6 flex items-center justify-center hover:text-[#FF3B30] cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -492,26 +544,26 @@ function GlobalProjectSettingsModal({
 function ProjectCard({
   project,
   groups,
+  groupColor,
   onChange,
   onDelete,
 }: {
   project: Project;
   groups: ProjectGroup[];
+  groupColor?: string;
   onChange: (p: Project) => void;
   onDelete: () => void;
 }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const done = project.tasks.filter((t) => t.done).length;
   const setTasks = (tasks: ProjectTask[]) => onChange({ ...project, tasks });
-  const isActive = project.status === 'active';
   const owner = groups.find((g) => g.id === project.group_id);
 
   return (
     <>
       <div
-        className={`border bg-card transition-all ${
-          isActive ? 'border-main border-l-4 border-l-[#FF3B30]' : 'border-main'
-        }`}
+        className="border border-main bg-card transition-all"
+        style={groupColor ? { borderLeftColor: groupColor, borderLeftWidth: '3px' } : undefined}
       >
         {/* Card Header: Pure focus on Title, Owner badge & Settings Trigger */}
         <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-subtle">
@@ -520,8 +572,10 @@ function ProjectCard({
               {project.title}
             </h4>
             {owner && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-subtle text-sub border border-subtle text-[10px] font-mono shrink-0">
-                <GroupIcon kind={owner.kind} className="w-2.5 h-2.5" />
+              <span
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-subtle text-sub border border-subtle text-[10px] font-mono shrink-0"
+              >
+                <GroupIcon kind={owner.kind} className="w-2.5 h-2.5" style={{ color: groupColor }} />
                 <span className="truncate max-w-[120px]">{owner.name}</span>
               </span>
             )}
@@ -794,32 +848,43 @@ export function ProjectsView() {
           onAdd={(t, gid) => createProject(t, status, gid)}
         />
 
-        {buckets.map(({ g, items }) => (
-          <div key={g?.id ?? 'unassigned'} className="space-y-2.5 pt-1">
-            <h4 className="flex items-center gap-1.5 text-[11px] font-mono font-bold uppercase tracking-wider text-sub">
-              {g ? <GroupIcon kind={g.kind} /> : null}
-              {g ? g.name : 'Unassigned'}
-              <span className="opacity-60">· {items.length}</span>
-            </h4>
-            <div className="space-y-2.5">
-              {items.map((p) => (
-                <ProjectCard
-                  key={p.id}
-                  project={p}
-                  groups={sortedGroups}
-                  onChange={saveProject}
-                  onDelete={() => removeProject(p.id)}
-                />
-              ))}
+        {buckets.map(({ g, items }) => {
+          const groupColor = g?.color || (g ? '#FE8019' : undefined);
+          return (
+            <div
+              key={g?.id ?? 'unassigned'}
+              className="space-y-2.5 pt-2 pl-3 border-l-2"
+              style={{ borderLeftColor: groupColor || 'var(--border-subtle)' }}
+            >
+              <h4
+                className="flex items-center gap-1.5 text-xs font-mono font-bold uppercase tracking-wider"
+                style={{ color: groupColor || 'var(--text-sub)' }}
+              >
+                {g ? <GroupIcon kind={g.kind} style={{ color: groupColor }} /> : null}
+                <span>{g ? g.name : 'Unassigned'}</span>
+                <span className="text-[10px] opacity-75 font-normal">({items.length} {items.length === 1 ? 'project' : 'projects'})</span>
+              </h4>
+              <div className="space-y-2.5">
+                {items.map((p) => (
+                  <ProjectCard
+                    key={p.id}
+                    project={p}
+                    groups={sortedGroups}
+                    groupColor={groupColor}
+                    onChange={saveProject}
+                    onDelete={() => removeProject(p.id)}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </section>
     );
   };
 
   return (
-    <div className="w-full max-w-4xl xl:max-w-5xl mx-auto px-4 sm:px-6">
+    <div className="w-full max-w-4xl xl:max-w-7xl mx-auto px-4 sm:px-6">
       <div className="bg-card p-4 sm:p-6 border border-main shadow-xs space-y-8">
         {error && (
           <p role="alert" className="text-xs font-mono text-[#FF3B30] border border-[#FF3B30] px-3 py-2">
