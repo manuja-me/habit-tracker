@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Check,
   Settings,
+  Pencil,
 } from 'lucide-react';
 import { Project, ProjectGroup, ProjectGroupKind, ProjectStatus, ProjectTask } from '../lib/types';
 import { COLOR_PALETTES } from '../lib/utils/icons';
@@ -155,6 +156,9 @@ function ProjectSettingsModal({
   onDelete: () => void;
 }) {
   const [subtaskInput, setSubtaskInput] = useState('');
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskTitle, setEditingTaskTitle] = useState('');
+
   if (!isOpen) return null;
 
   const isActive = project.status === 'active';
@@ -180,10 +184,35 @@ function ProjectSettingsModal({
   };
 
   const handleRemoveSubtask = (taskId: string) => {
+    if (editingTaskId === taskId) {
+      setEditingTaskId(null);
+      setEditingTaskTitle('');
+    }
     onChange({
       ...project,
       tasks: project.tasks.filter((t) => t.id !== taskId),
     });
+  };
+
+  const handleStartEditSubtask = (task: ProjectTask) => {
+    setEditingTaskId(task.id);
+    setEditingTaskTitle(task.title);
+  };
+
+  const handleSaveEditSubtask = (taskId: string) => {
+    const trimmed = editingTaskTitle.trim();
+    if (!trimmed) return;
+    onChange({
+      ...project,
+      tasks: project.tasks.map((t) => (t.id === taskId ? { ...t, title: trimmed } : t)),
+    });
+    setEditingTaskId(null);
+    setEditingTaskTitle('');
+  };
+
+  const handleCancelEditSubtask = () => {
+    setEditingTaskId(null);
+    setEditingTaskTitle('');
   };
 
   return (
@@ -297,21 +326,87 @@ function ProjectSettingsModal({
 
           {project.tasks.length > 0 && (
             <ul className="space-y-1.5 max-h-44 overflow-y-auto p-1 bg-input/40 border border-subtle">
-              {project.tasks.map((t) => (
-                <li key={t.id} className="group flex items-center gap-2 px-2 py-1 bg-card border border-subtle">
-                  <span className={`flex-1 text-xs font-mono truncate ${t.done ? 'line-through text-sub' : 'text-main'}`}>
-                    {t.title}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveSubtask(t.id)}
-                    aria-label={`Remove subtask "${t.title}"`}
-                    className="text-sub hover:text-[#FF3B30] cursor-pointer p-0.5"
+              {project.tasks.map((t) => {
+                const isEditing = editingTaskId === t.id;
+                return (
+                  <li
+                    key={t.id}
+                    className={`group flex items-center gap-2 px-2 py-1 bg-card border ${
+                      isEditing ? 'border-[#FF3B30]' : 'border-subtle hover:border-neutral-500'
+                    } transition-colors`}
                   >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </li>
-              ))}
+                    {isEditing ? (
+                      <div className="flex-1 flex items-center gap-1.5">
+                        <input
+                          autoFocus
+                          value={editingTaskTitle}
+                          maxLength={200}
+                          onChange={(e) => setEditingTaskTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleSaveEditSubtask(t.id);
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault();
+                              handleCancelEditSubtask();
+                            }
+                          }}
+                          className="flex-1 h-6 px-1.5 bg-input border border-subtle text-xs font-mono text-main focus:outline-none focus:border-[#FF3B30]"
+                          placeholder="Subtask title..."
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEditSubtask(t.id)}
+                          aria-label={`Save subtask "${t.title}"`}
+                          title="Save (Enter)"
+                          className="text-[#FF3B30] hover:text-main cursor-pointer p-0.5"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelEditSubtask}
+                          aria-label="Cancel editing"
+                          title="Cancel (Esc)"
+                          className="text-sub hover:text-main cursor-pointer p-0.5"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span
+                          onClick={() => handleStartEditSubtask(t)}
+                          title="Click to edit subtask"
+                          className={`flex-1 text-xs font-mono truncate cursor-pointer hover:text-[#FF3B30] transition-colors ${
+                            t.done ? 'line-through text-sub' : 'text-main'
+                          }`}
+                        >
+                          {t.title}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditSubtask(t)}
+                          aria-label={`Edit subtask "${t.title}"`}
+                          title="Edit subtask"
+                          className="text-sub hover:text-main cursor-pointer p-0.5"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSubtask(t.id)}
+                          aria-label={`Remove subtask "${t.title}"`}
+                          title="Remove subtask"
+                          className="text-sub hover:text-[#FF3B30] cursor-pointer p-0.5"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
 
@@ -561,9 +656,10 @@ function ProjectCard({
   onDelete: () => void;
 }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [editingCardTaskId, setEditingCardTaskId] = useState<string | null>(null);
+  const [editingCardTaskTitle, setEditingCardTaskTitle] = useState('');
   const done = project.tasks.filter((t) => t.done).length;
   const setTasks = (tasks: ProjectTask[]) => onChange({ ...project, tasks });
-  const owner = groups.find((g) => g.id === project.group_id);
 
   return (
     <>
@@ -605,35 +701,115 @@ function ProjectCard({
           {/* Subtasks checklist */}
           {project.tasks.length > 0 ? (
             <ul className="space-y-1.5 pt-0.5">
-              {project.tasks.map((t) => (
-                <li key={t.id} className="flex items-center gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setTasks(
-                        project.tasks.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x))
-                      )
-                    }
-                    aria-label={`Toggle "${t.title}"`}
-                    className={`w-4 h-4 shrink-0 flex items-center justify-center transition-all cursor-pointer border ${
-                      t.done
-                        ? 'bg-[#FF3B30] text-white border-[#FF3B30]'
-                        : 'border-main bg-input hover:border-neutral-400'
-                    }`}
-                  >
-                    <Check
-                      className={`w-3 h-3 stroke-[3] ${t.done ? 'opacity-100' : 'opacity-0'}`}
-                    />
-                  </button>
-                  <span
-                    className={`flex-1 text-xs font-mono leading-tight ${
-                      t.done ? 'line-through text-sub' : 'text-main'
-                    }`}
-                  >
-                    {t.title}
-                  </span>
-                </li>
-              ))}
+              {project.tasks.map((t) => {
+                const isEditing = editingCardTaskId === t.id;
+                return (
+                  <li key={t.id} className="group/task flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTasks(
+                          project.tasks.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x))
+                        )
+                      }
+                      aria-label={`Toggle "${t.title}"`}
+                      className={`w-4 h-4 shrink-0 flex items-center justify-center transition-all cursor-pointer border ${
+                        t.done
+                          ? 'bg-[#FF3B30] text-white border-[#FF3B30]'
+                          : 'border-main bg-input hover:border-neutral-400'
+                      }`}
+                    >
+                      <Check
+                        className={`w-3 h-3 stroke-[3] ${t.done ? 'opacity-100' : 'opacity-0'}`}
+                      />
+                    </button>
+                    {isEditing ? (
+                      <div className="flex-1 flex items-center gap-1.5">
+                        <input
+                          autoFocus
+                          value={editingCardTaskTitle}
+                          maxLength={200}
+                          onChange={(e) => setEditingCardTaskTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const trimmed = editingCardTaskTitle.trim();
+                              if (trimmed) {
+                                setTasks(
+                                  project.tasks.map((x) =>
+                                    x.id === t.id ? { ...x, title: trimmed } : x
+                                  )
+                                );
+                              }
+                              setEditingCardTaskId(null);
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault();
+                              setEditingCardTaskId(null);
+                            }
+                          }}
+                          onBlur={() => {
+                            const trimmed = editingCardTaskTitle.trim();
+                            if (trimmed) {
+                              setTasks(
+                                project.tasks.map((x) =>
+                                  x.id === t.id ? { ...x, title: trimmed } : x
+                                )
+                              );
+                            }
+                            setEditingCardTaskId(null);
+                          }}
+                          className="flex-1 h-6 px-1.5 bg-input border border-[#FF3B30] text-xs font-mono text-main focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const trimmed = editingCardTaskTitle.trim();
+                            if (trimmed) {
+                              setTasks(
+                                project.tasks.map((x) =>
+                                  x.id === t.id ? { ...x, title: trimmed } : x
+                                )
+                              );
+                            }
+                            setEditingCardTaskId(null);
+                          }}
+                          aria-label={`Save "${t.title}"`}
+                          className="text-[#FF3B30] hover:text-main cursor-pointer p-0.5"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span
+                          onDoubleClick={() => {
+                            setEditingCardTaskId(t.id);
+                            setEditingCardTaskTitle(t.title);
+                          }}
+                          title="Double-click or click pencil to edit"
+                          className={`flex-1 text-xs font-mono leading-tight ${
+                            t.done ? 'line-through text-sub' : 'text-main'
+                          }`}
+                        >
+                          {t.title}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCardTaskId(t.id);
+                            setEditingCardTaskTitle(t.title);
+                          }}
+                          aria-label={`Edit subtask "${t.title}"`}
+                          title="Edit subtask"
+                          className="opacity-0 group-hover/task:opacity-100 text-sub hover:text-main cursor-pointer p-0.5 transition-opacity"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      </>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           ) : !project.notes ? (
             <div className="text-[11px] font-mono text-muted-custom py-1">
