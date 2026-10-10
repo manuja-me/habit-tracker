@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { Habit, HabitLog } from '../lib/types';
-import { getWeekDays, formatDayName, formatShortDate, getTodayDateString, isHabitDueOnDate } from '../lib/utils/date';
+import { getWeekDays, formatDayName, formatShortDate, getTodayDateString, isHabitDueOnDate, parseDate, formatDate } from '../lib/utils/date';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
 import { Check, ChevronLeft, ChevronRight, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { addDays, subDays } from 'date-fns';
@@ -26,13 +26,11 @@ export function WeeklyGrid({
   const todayStr = getTodayDateString();
 
   const handlePrevWeek = () => {
-    const prev = subDays(new Date(selectedDate), 7);
-    onSelectDate(prev.toISOString().split('T')[0]);
+    onSelectDate(formatDate(subDays(parseDate(selectedDate), 7)));
   };
 
   const handleNextWeek = () => {
-    const next = addDays(new Date(selectedDate), 7);
-    onSelectDate(next.toISOString().split('T')[0]);
+    onSelectDate(formatDate(addDays(parseDate(selectedDate), 7)));
   };
 
   const activeHabits = useMemo(() => {

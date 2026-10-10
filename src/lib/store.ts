@@ -13,6 +13,7 @@ import {
 import {
   generateId,
   INITIALIZED_KEY,
+  LAST_USER_KEY,
   persistLocalData,
   persistDayNotes,
   loadLocalData,
@@ -128,6 +129,11 @@ export function clearLocalUserData() {
   pendingAddedHabits.clear();
   isStorageLoaded = false;
   isInitialSyncDone = false;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(LAST_USER_KEY);
+    } catch {}
+  }
   updateStoreSnapshot();
 }
 
@@ -172,12 +178,20 @@ async function executeCloudSync(isBackground = false) {
     globalSyncError = null;
 
     if (res.user) {
-      if (globalCurrentUser && globalCurrentUser.id !== res.user.id) {
-        globalHabits = [];
-        globalLogs = {};
-        globalDayNotes = {};
-        pendingDeletedHabitIds.clear();
-        pendingAddedHabits.clear();
+      if (globalCurrentUser?.id !== res.user.id) {
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(LAST_USER_KEY, res.user.id);
+          } catch {}
+        }
+        const scoped = loadLocalData(res.user.id);
+        globalHabits = scoped.habits;
+        globalLogs = scoped.logs;
+        globalDayNotes = scoped.dayNotes;
+        if (globalCurrentUser) {
+          pendingDeletedHabitIds.clear();
+          pendingAddedHabits.clear();
+        }
       }
       globalCurrentUser = res.user;
     }
@@ -227,9 +241,10 @@ async function executeCloudSync(isBackground = false) {
         }
       });
 
+      const isOwnerAccount = !res.user || res.user.id === 'owner';
       const hasBeenInitialized = typeof window !== 'undefined' && localStorage.getItem(INITIALIZED_KEY) === 'true';
 
-      if (!hasBeenInitialized && mergedHabits.length === 0 && globalHabits.length > 0) {
+      if (isOwnerAccount && !hasBeenInitialized && mergedHabits.length === 0 && globalHabits.length > 0) {
         for (const h of globalHabits) {
           await saveHabitAction(h);
         }
@@ -260,16 +275,17 @@ async function executeCloudSync(isBackground = false) {
         }
       });
 
+      const userId = res.user?.id || globalCurrentUser?.id;
       const dayNotesChanged = JSON.stringify(mergedDayNotes) !== JSON.stringify(globalDayNotes);
       if (dayNotesChanged) {
         globalDayNotes = mergedDayNotes;
-        persistDayNotes(globalDayNotes, res.user?.id || globalCurrentUser?.id);
+        persistDayNotes(globalDayNotes, userId);
       }
 
       if (habitsChanged || logsChanged || dayNotesChanged) {
         globalHabits = mergedHabits;
         globalLogs = cleanLogs;
-        persistLocalData(globalHabits, globalLogs);
+        persistLocalData(globalHabits, globalLogs, userId);
         updateStoreSnapshot();
         broadcastLocalUpdate();
       }
@@ -398,7 +414,7 @@ export function useHabitStore() {
       ...globalLogs,
       [key]: updatedLog,
     };
-    persistLocalData(globalHabits, globalLogs);
+    persistLocalData(globalHabits, globalLogs, globalCurrentUser?.id);
     updateStoreSnapshot();
     broadcastLocalUpdate();
 
@@ -422,7 +438,7 @@ export function useHabitStore() {
     pendingAddedHabits.set(newHabit.id, newHabit);
 
     globalHabits = [...globalHabits, newHabit];
-    persistLocalData(globalHabits, globalLogs);
+    persistLocalData(globalHabits, globalLogs, globalCurrentUser?.id);
     updateStoreSnapshot();
     broadcastLocalUpdate();
 
@@ -458,7 +474,7 @@ export function useHabitStore() {
       return h;
     });
 
-    persistLocalData(globalHabits, globalLogs);
+    persistLocalData(globalHabits, globalLogs, globalCurrentUser?.id);
     updateStoreSnapshot();
     broadcastLocalUpdate();
 
@@ -488,7 +504,7 @@ export function useHabitStore() {
     globalLogs = newLogs;
 
     // 3. Persist and notify other open tabs
-    persistLocalData(globalHabits, globalLogs);
+    persistLocalData(globalHabits, globalLogs, globalCurrentUser?.id);
     updateStoreSnapshot();
     broadcastLocalUpdate();
 
@@ -516,7 +532,7 @@ export function useHabitStore() {
     lastLocalMutationTime = Date.now();
     const updated = orderedHabits.map((h, index) => ({ ...h, order: index }));
     globalHabits = updated;
-    persistLocalData(globalHabits, globalLogs);
+    persistLocalData(globalHabits, globalLogs, globalCurrentUser?.id);
     updateStoreSnapshot();
     broadcastLocalUpdate();
 

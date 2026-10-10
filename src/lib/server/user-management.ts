@@ -54,7 +54,15 @@ export async function purgeUserData(
       console.warn('purgeUserData: error deleting habits/logs', e);
     }
 
-    // 3. Delete invitations
+    // 3. Delete projects and project_groups
+    try {
+      await supabaseClient.from('projects').delete().eq('user_id', targetUserId);
+      await supabaseClient.from('project_groups').delete().eq('user_id', targetUserId);
+    } catch (e) {
+      console.warn('purgeUserData: error deleting projects/project_groups', e);
+    }
+
+    // 4. Delete invitations
     try {
       await supabaseClient.from('invitations').delete().eq('created_by', targetUserId);
       await supabaseClient.from('invitations').delete().eq('used_by', targetUserId);
@@ -62,7 +70,7 @@ export async function purgeUserData(
       console.warn('purgeUserData: error deleting invitations', e);
     }
 
-    // 4. Delete app_users row
+    // 5. Delete app_users row
     const { error: userDelErr } = await supabaseClient
       .from('app_users')
       .delete()

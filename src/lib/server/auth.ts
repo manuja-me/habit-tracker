@@ -18,7 +18,38 @@ import {
   createSessionToken,
   getSessionUserFromToken,
   getClientIp,
+  isOwnerUser,
 } from './auth-utils';
+
+const COOKIE_OPTS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
+};
+
+async function getRateLimitContext() {
+  const headerList = await headers();
+  const clientIp = getClientIp(headerList);
+  const rateLimitKey = `pin_rl_${clientIp}`;
+  const cookieStore = await cookies();
+  const rlCookie = cookieStore.get(RL_COOKIE_NAME)?.value;
+  const rateCheck = checkRateLimit(rateLimitKey, rlCookie);
+  return { rateLimitKey, cookieStore, rlCookie, rateCheck };
+}
+
+function recordAndPersistFailure(
+  rateLimitKey: string,
+  rlCookie: string | undefined,
+  cookieStore: Awaited<ReturnType<typeof cookies>>
+) {
+  const fail = recordFailedAttempt(rateLimitKey, rlCookie);
+  cookieStore.set(RL_COOKIE_NAME, fail.token, {
+    ...COOKIE_OPTS,
+    maxAge: Math.max(86400, fail.waitSeconds || 3600),
+  });
+  return fail;
+}
 
 /**
  * Server Action: Verify 4-digit PIN against Master Owner or Multi-User Database
@@ -33,13 +64,7 @@ export async function verifyPinAction(enteredPin: string): Promise<{
   remainingMs?: number;
 }> {
   try {
-    const headerList = await headers();
-    const clientIp = getClientIp(headerList);
-    const rateLimitKey = `pin_rl_${clientIp}`;
-
-    const cookieStore = await cookies();
-    const rlCookie = cookieStore.get(RL_COOKIE_NAME)?.value;
-    const rateCheck = checkRateLimit(rateLimitKey, rlCookie);
+    const { rateLimitKey, cookieStore, rlCookie, rateCheck } = await getRateLimitContext();
 
     if (!rateCheck.allowed) {
       return {
@@ -50,14 +75,7 @@ export async function verifyPinAction(enteredPin: string): Promise<{
     }
 
     if (!enteredPin || enteredPin.length !== 4) {
-      const fail = recordFailedAttempt(rateLimitKey, rlCookie);
-      cookieStore.set(RL_COOKIE_NAME, fail.token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: Math.max(86400, fail.waitSeconds || 3600),
-      });
+      const fail = recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
       return {
         success: false,
         error: fail.waitSeconds > 0
@@ -138,14 +156,7 @@ export async function verifyPinAction(enteredPin: string): Promise<{
       // Artificial delay to prevent automated high-speed brute-forcing
       await new Promise((resolve) => setTimeout(resolve, 200));
 
-      const fail = recordFailedAttempt(rateLimitKey, rlCookie);
-      cookieStore.set(RL_COOKIE_NAME, fail.token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: Math.max(86400, fail.waitSeconds || 3600),
-      });
+      const fail = recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
 
       if (fail.waitSeconds > 0) {
         return {
@@ -177,14 +188,7 @@ export async function verifyPinAction(enteredPin: string): Promise<{
         if (supabaseClient) {
           await purgeUserData(supabaseClient, matchedUser.userId);
         }
-        const fail = recordFailedAttempt(rateLimitKey, rlCookie);
-        cookieStore.set(RL_COOKIE_NAME, fail.token, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
-          path: '/',
-          maxAge: Math.max(86400, fail.waitSeconds || 3600),
-        });
+        const fail = recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
         return {
           success: false,
           error: 'ACCOUNT EXPIRED // This account was permanently deleted after 7 days of inactivity.',
@@ -195,14 +199,7 @@ export async function verifyPinAction(enteredPin: string): Promise<{
       // Within 7 days: User can reactivate
       resetFailedAttempts(rateLimitKey);
       cookieStore.delete(RL_COOKIE_NAME);
-      const token = createSessionToken({ ...matchedUser, isDeactivated: true });
-
-      cookieStore.set(COOKIE_NAME, token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-      });
+      cookieStore.set(COOKIE_NAME, createSessionToken({ ...matchedUser, isDeactivated: true }), COOKIE_OPTS);
 
       return {
         success: true,
@@ -234,12 +231,7 @@ export async function verifyPinAction(enteredPin: string): Promise<{
       }
     }
 
-    cookieStore.set(COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-    });
+    cookieStore.set(COOKIE_NAME, token, COOKIE_OPTS);
 
     return { success: true, user: matchedUser };
   } catch (err: unknown) {
@@ -256,12 +248,8 @@ export async function verifyPinAction(enteredPin: string): Promise<{
  * Server Action: Check if client has a valid session cookie
  */
 export async function checkSessionAction(): Promise<boolean> {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get(COOKIE_NAME);
-  if (!sessionCookie?.value) return false;
-  const user = getSessionUserFromToken(sessionCookie.value);
-  if (!user || user.isDeactivated) return false;
-  return true;
+  const user = await getCurrentUserAction();
+  return Boolean(user && !user.isDeactivated);
 }
 
 /**
@@ -306,24 +294,25 @@ export async function generateInviteAction(): Promise<{
 }> {
   try {
     const user = await requireAuth();
-    if (user.role !== 'owner') {
+    if (!isOwnerUser(user)) {
       return { success: false, error: 'Only the owner can generate friend invites.' };
+    }
+
+    const supabase = getServerSupabase();
+    if (!supabase) {
+      return { success: false, error: 'Database is not configured to generate invitations.' };
     }
 
     const rawToken = crypto.randomBytes(16).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
 
-    const supabase = getServerSupabase();
-    if (supabase) {
-      try {
-        await supabase.from('invitations').insert({
-          token: rawToken,
-          created_by: user.userId,
-          expires_at: expiresAt,
-        });
-      } catch (e) {
-        console.warn('invitations table insert notice:', e);
-      }
+    const { error: insertErr } = await supabase.from('invitations').insert({
+      token: rawToken,
+      created_by: user.userId,
+      expires_at: expiresAt,
+    });
+    if (insertErr) {
+      return { success: false, error: insertErr.message || 'Failed to save invitation.' };
     }
 
     // Sign the token cryptographically
@@ -357,27 +346,29 @@ export async function validateInviteTokenAction(fullToken: string): Promise<{
     return { valid: false, error: 'Corrupted or tampered invitation link.' };
   }
 
-  // Check database if table exists
   const supabase = getServerSupabase();
-  if (supabase) {
-    try {
-      const { data } = await supabase
-        .from('invitations')
-        .select('*')
-        .eq('token', rawToken)
-        .maybeSingle();
+  if (!supabase) {
+    return { valid: false, error: 'Database is not configured.' };
+  }
 
-      if (data) {
-        if (data.used_at) {
-          return { valid: false, error: 'This invitation has already been used.' };
-        }
-        if (new Date(data.expires_at).getTime() < Date.now()) {
-          return { valid: false, error: 'This invitation has expired.' };
-        }
-      }
-    } catch {
-      // Allow fallback if table not yet migrated
+  try {
+    const { data, error } = await supabase
+      .from('invitations')
+      .select('used_at, expires_at')
+      .eq('token', rawToken)
+      .maybeSingle();
+
+    if (error || !data) {
+      return { valid: false, error: 'Invalid or unknown invitation link.' };
     }
+    if (data.used_at) {
+      return { valid: false, error: 'This invitation has already been used.' };
+    }
+    if (new Date(data.expires_at).getTime() < Date.now()) {
+      return { valid: false, error: 'This invitation has expired.' };
+    }
+  } catch {
+    return { valid: false, error: 'Failed to verify invitation link.' };
   }
 
   return { valid: true };
@@ -395,6 +386,14 @@ export async function completeInviteSetupAction(
   error?: string;
   user?: SessionUser;
 }> {
+  const { rateLimitKey, cookieStore, rlCookie, rateCheck } = await getRateLimitContext();
+  if (!rateCheck.allowed) {
+    return {
+      success: false,
+      error: `SECURITY LOCKOUT ACTIVE // ${rateCheck.waitSeconds}s remaining.`,
+    };
+  }
+
   const tokenValidation = await validateInviteTokenAction(fullToken);
   if (!tokenValidation.valid) {
     return { success: false, error: tokenValidation.error };
@@ -419,6 +418,7 @@ export async function completeInviteSetupAction(
     crypto.timingSafeEqual(hashedBuf, masterBuf);
 
   if (isOwnerPin) {
+    recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
     return {
       success: false,
       error: 'Unable to complete registration with the provided details. Please choose a different PIN or display name.',
@@ -439,6 +439,7 @@ export async function completeInviteSetupAction(
       .maybeSingle();
 
     if (existingUser) {
+      recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
       return {
         success: false,
         error: 'Unable to complete registration with the provided details. Please choose a different PIN or display name.',
@@ -453,6 +454,7 @@ export async function completeInviteSetupAction(
       .maybeSingle();
 
     if (existingPin) {
+      recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
       return {
         success: false,
         error: 'Unable to complete registration with the provided details. Please choose a different PIN or display name.',
@@ -520,14 +522,9 @@ export async function completeInviteSetupAction(
       role: 'member',
     };
 
-    const token = createSessionToken(sessionUser);
-    const cookieStore = await cookies();
-    cookieStore.set(COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-    });
+    resetFailedAttempts(rateLimitKey);
+    cookieStore.delete(RL_COOKIE_NAME);
+    cookieStore.set(COOKIE_NAME, createSessionToken(sessionUser), COOKIE_OPTS);
 
     return { success: true, user: sessionUser };
   } catch (err: unknown) {
@@ -588,14 +585,8 @@ export async function reactivateAccountAction(): Promise<{
       isDeactivated: false,
     };
 
-    const token = createSessionToken(sessionUser);
     const cookieStore = await cookies();
-    cookieStore.set(COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-    });
+    cookieStore.set(COOKIE_NAME, createSessionToken(sessionUser), COOKIE_OPTS);
 
     return { success: true, user: sessionUser };
   } catch (err: unknown) {
@@ -615,11 +606,20 @@ export async function deactivateAccountAction(enteredPin: string): Promise<{
   try {
     const user = await requireAuth();
 
-    if (user.role === 'owner' || user.userId === OWNER_USER_ID) {
+    if (isOwnerUser(user)) {
       return { success: false, error: 'The Master Owner account cannot be deactivated.' };
     }
 
+    const { rateLimitKey, cookieStore, rlCookie, rateCheck } = await getRateLimitContext();
+    if (!rateCheck.allowed) {
+      return {
+        success: false,
+        error: `SECURITY LOCKOUT ACTIVE // ${rateCheck.waitSeconds}s remaining.`,
+      };
+    }
+
     if (!enteredPin || enteredPin.length !== 4) {
+      recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
       return { success: false, error: 'PIN must be exactly 4 digits.' };
     }
 
@@ -649,8 +649,17 @@ export async function deactivateAccountAction(enteredPin: string): Promise<{
       crypto.timingSafeEqual(hashBuf, recordBuf);
 
     if (!isPinValid) {
-      return { success: false, error: 'Incorrect PIN. Deactivation cancelled.' };
+      const fail = recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
+      return {
+        success: false,
+        error: fail.waitSeconds > 0
+          ? `TOO MANY FAILED ATTEMPTS // Locked out for ${fail.waitSeconds}s.`
+          : 'Incorrect PIN. Deactivation cancelled.',
+      };
     }
+
+    resetFailedAttempts(rateLimitKey);
+    cookieStore.delete(RL_COOKIE_NAME);
 
     const nowIso = new Date().toISOString();
     const { error: updateErr } = await supabase
@@ -671,8 +680,6 @@ export async function deactivateAccountAction(enteredPin: string): Promise<{
       return { success: false, error: updateErr.message };
     }
 
-    // Clear session cookie
-    const cookieStore = await cookies();
     cookieStore.delete(COOKIE_NAME);
 
     return { success: true };

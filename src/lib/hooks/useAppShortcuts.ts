@@ -105,7 +105,7 @@ export function useAppShortcuts({
         e.preventDefault();
         setSelectedDate(getTodayDateString());
       }
-      // Switch tabs: 1, 2, 3, 4, 5, 6
+      // Switch tabs: 1..7
       else if (e.key === '1') {
         e.preventDefault();
         setActiveTab('today');
@@ -117,11 +117,14 @@ export function useAppShortcuts({
         setActiveTab('planner');
       } else if (e.key === '4') {
         e.preventDefault();
-        setActiveTab('heatmap');
+        setActiveTab('projects');
       } else if (e.key === '5') {
         e.preventDefault();
+        setActiveTab('heatmap');
+      } else if (e.key === '6') {
+        e.preventDefault();
         setActiveTab('analytics');
-      } else if (e.key === '6' && isAdmin) {
+      } else if (e.key === '7' && isAdmin) {
         e.preventDefault();
         setActiveTab('admin');
       }

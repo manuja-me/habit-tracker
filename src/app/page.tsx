@@ -233,8 +233,38 @@ export default function HabitTrackerPage() {
   }, [dueHabits, logs, selectedDate]);
 
   const gamificationProfile = useMemo(() => {
-    return calculateGamificationProfile(habits, logs, selectedDate);
-  }, [habits, logs, selectedDate]);
+    return calculateGamificationProfile(habits, logs, selectedDate, statsMap);
+  }, [habits, logs, selectedDate, statsMap]);
+
+  // Daily browser reminder notification check (once per day after configured HH:MM when habits remain incomplete)
+  useEffect(() => {
+    if (!isUnlocked || typeof window === 'undefined' || !('Notification' in window)) return;
+    const checkReminder = () => {
+      try {
+        if (Notification.permission !== 'granted') return;
+        if (localStorage.getItem('zenith_reminder_enabled') !== 'true') return;
+        const reminderTime = localStorage.getItem('zenith_reminder_time') || '20:30';
+        const todayStr = getTodayDateString();
+        if (localStorage.getItem('zenith_reminder_last_date') === todayStr) return;
+        const now = new Date();
+        const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        if (hhmm < reminderTime) return;
+        const pendingToday = habits.filter(
+          (h) => isHabitDueOnDate(h, todayStr) && !isDaySuccessful(h, todayStr, logs, todayStr)
+        );
+        if (pendingToday.length > 0) {
+          localStorage.setItem('zenith_reminder_last_date', todayStr);
+          new Notification('Zenith Daily Check-In', {
+            body: `${pendingToday.length} habit${pendingToday.length === 1 ? '' : 's'} still pending today.`,
+            icon: '/icon.png',
+          });
+        }
+      } catch {}
+    };
+    checkReminder();
+    const id = setInterval(checkReminder, 60000);
+    return () => clearInterval(id);
+  }, [isUnlocked, habits, logs]);
 
   // Handle level-up toast, confetti, and unlock chimes
   const { levelUpToast } = useGamificationFeedback({

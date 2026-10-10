@@ -1,11 +1,7 @@
 import { subDays, format, parseISO, differenceInCalendarDays } from 'date-fns';
-import { Habit, HabitLog } from '../types';
-import { getTodayDateString, isHabitDueOnDate } from './date';
-import { isDaySuccessful, calculateHabitStats, calculateMilestones, MILESTONE_DEFINITIONS, MilestoneBadge } from './streaks';
-
-// Re-export streak milestone bridge for backward compatibility
-export { calculateMilestones, MILESTONE_DEFINITIONS };
-export type { MilestoneBadge };
+import type { Habit, HabitLog, HabitStats } from '../types';
+import { getTodayDateString, getHabitCreatedDateString, isHabitDueOnDate } from './date';
+import { isDaySuccessful, calculateHabitStats } from './streaks';
 
 /* ==========================================================================
    1. PRESTIGE TIERS & LEVEL FORMULA
@@ -726,14 +722,15 @@ export interface GamificationProfile {
 export function calculateGamificationProfile(
   habits: Habit[],
   logs: Record<string, HabitLog>,
-  referenceDateStr: string = getTodayDateString()
+  referenceDateStr: string = getTodayDateString(),
+  precomputedStats?: Record<string, HabitStats>
 ): GamificationProfile {
   const activeHabits = habits.filter((h) => !h.archived);
 
   // 1. Calculate habit stats & baseline metrics
   const statsList = habits.map((h) => ({
     habit: h,
-    stats: calculateHabitStats(h, logs),
+    stats: precomputedStats?.[h.id] || calculateHabitStats(h, logs),
   }));
 
   const activeStatsList = statsList.filter((s) => !s.habit.archived);
@@ -762,13 +759,13 @@ export function calculateGamificationProfile(
   // Sweep through today so user account level, XP, and lifetime stats remain stable and monotonic
   const todayStr = getTodayDateString();
   const sweepEndStr = referenceDateStr > todayStr ? referenceDateStr : todayStr;
+  const createdMap = new Map<string, string>();
 
   let earliestDateStr = todayStr;
   habits.forEach((h) => {
-    if (h.created_at) {
-      const d = h.created_at.split('T')[0];
-      if (d < earliestDateStr) earliestDateStr = d;
-    }
+    const d = getHabitCreatedDateString(h, todayStr);
+    createdMap.set(h.id, d);
+    if (d < earliestDateStr) earliestDateStr = d;
   });
   Object.values(logs).forEach((l) => {
     if (l.date && l.date < earliestDateStr) earliestDateStr = l.date;
@@ -796,9 +793,12 @@ export function calculateGamificationProfile(
   for (let i = daysToSweep; i >= 0; i--) {
     const currentDay = subDays(sweepEndDate, i);
     const dStr = format(currentDay, 'yyyy-MM-dd');
+    const dayOfWeek = currentDay.getDay();
     const isToday = dStr === todayStr;
 
-    const dueToday = habits.filter((h) => isHabitDueOnDate(h, dStr));
+    const dueToday = habits.filter((h) =>
+      isHabitDueOnDate(h, dStr, createdMap.get(h.id), dayOfWeek)
+    );
     if (dueToday.length === 0) continue;
 
     let dayCompletedCount = 0;
@@ -808,7 +808,7 @@ export function calculateGamificationProfile(
     const dayMultiplier = Math.min(2.0, 1.0 + Math.floor(runningDailyStreak / 7) * 0.1);
 
     dueToday.forEach((h) => {
-      const isSuccess = isDaySuccessful(h, dStr, logs);
+      const isSuccess = isDaySuccessful(h, dStr, logs, todayStr, createdMap.get(h.id));
       if (isSuccess) {
         dayCompletedCount++;
         if (h.nature === 'dont') {

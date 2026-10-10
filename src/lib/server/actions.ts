@@ -1,7 +1,7 @@
 'use server';
 
 import { requireAuth } from './auth';
-import { OWNER_USER_ID } from './auth-utils';
+import { OWNER_USER_ID, isOwnerUser, canAccessUserRecord } from './auth-utils';
 import { getCleanSupabaseConfig, getServerSupabase } from './supabase';
 import { purgeUserData, purgeExpiredDeactivatedUsers } from './user-management';
 import { Habit, HabitCategory, HabitFrequency, HabitLog, HabitType, Project, ProjectGroup, ProjectStatus, ProjectTask } from '../types';
@@ -132,7 +132,7 @@ export async function getHabitsAndLogsAction(): Promise<{
 
     // 1. Fetch habits scoped to this user
     let habitsData: DbHabitRecord[] = [];
-    const isOwner = user.role === 'owner' || user.userId === OWNER_USER_ID;
+    const isOwner = isOwnerUser(user);
 
     // Try scoped query with user_id
     const habitsRes = await supabase
@@ -260,8 +260,6 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
-    const isOwner = user.role === 'owner' || user.userId === OWNER_USER_ID;
-
     // Verify ownership if habit already exists (Prevents IDOR overwrite)
     const { data: existingHabit } = await supabase
       .from('habits')
@@ -269,11 +267,8 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
       .eq('id', habit.id)
       .maybeSingle();
 
-    if (existingHabit) {
-      const isOwnerOrSelf = existingHabit.user_id === user.userId || (isOwner && !existingHabit.user_id);
-      if (!isOwnerOrSelf) {
-        return { success: false, error: 'Unauthorized: Cannot modify habit belonging to another user.' };
-      }
+    if (existingHabit && !canAccessUserRecord(user, existingHabit.user_id)) {
+      return { success: false, error: 'Unauthorized: Cannot modify habit belonging to another user.' };
     }
 
     const storedDesc = serializeHabitDescription(habit);
@@ -322,8 +317,6 @@ export async function deleteHabitAction(habitId: string): Promise<{ success: boo
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
-    const isOwner = user.role === 'owner' || user.userId === OWNER_USER_ID;
-
     // Verify habit exists and check ownership before deleting
     const { data: habitRecord } = await supabase
       .from('habits')
@@ -335,8 +328,7 @@ export async function deleteHabitAction(habitId: string): Promise<{ success: boo
       return { success: false, error: 'Habit not found.' };
     }
 
-    const isOwnerOrSelf = habitRecord.user_id === user.userId || (isOwner && !habitRecord.user_id);
-    if (!isOwnerOrSelf) {
+    if (!canAccessUserRecord(user, habitRecord.user_id)) {
       return { success: false, error: 'Unauthorized: Cannot modify other users data.' };
     }
 
@@ -367,8 +359,6 @@ export async function saveHabitLogAction(log: HabitLog): Promise<{ success: bool
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
-    const isOwner = user.role === 'owner' || user.userId === OWNER_USER_ID;
-
     // Verify parent habit exists and belongs to the authenticated user
     const { data: parentHabit } = await supabase
       .from('habits')
@@ -376,11 +366,8 @@ export async function saveHabitLogAction(log: HabitLog): Promise<{ success: bool
       .eq('id', log.habit_id)
       .maybeSingle();
 
-    if (parentHabit) {
-      const isOwnerOrSelf = parentHabit.user_id === user.userId || (isOwner && !parentHabit.user_id);
-      if (!isOwnerOrSelf) {
-        return { success: false, error: 'Unauthorized: Cannot log progress for another user\'s habit.' };
-      }
+    if (parentHabit && !canAccessUserRecord(user, parentHabit.user_id)) {
+      return { success: false, error: 'Unauthorized: Cannot log progress for another user\'s habit.' };
     }
 
     const logPayload = {
@@ -418,15 +405,14 @@ export async function reorderHabitsAction(orderedHabits: Habit[]): Promise<{ suc
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
-    const isOwner = user.role === 'owner' || user.userId === OWNER_USER_ID;
+    const isOwner = isOwnerUser(user);
 
     await Promise.all(
       orderedHabits.map((h) => {
         const query = supabase.from('habits').update({ sort_order: h.order }).eq('id', h.id);
-        if (!isOwner) {
-          query.eq('user_id', user.userId);
-        }
-        return query;
+        return isOwner
+          ? query.or(`user_id.eq.${user.userId},user_id.is.null`)
+          : query.eq('user_id', user.userId);
       })
     );
     return { success: true };

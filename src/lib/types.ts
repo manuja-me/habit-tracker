@@ -58,13 +58,6 @@ export interface HabitStats {
   todayValue: number;
 }
 
-export interface DailySummary {
-  date: string;
-  totalHabits: number;
-  completedHabits: number;
-  completionPercentage: number;
-}
-
 export interface HeatmapDay {
   date: string;
   count: number;

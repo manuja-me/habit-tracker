@@ -257,3 +257,15 @@ export function getSessionUserFromToken(token: string): SessionUser | null {
 
   return null;
 }
+
+export function isOwnerUser(user: Pick<SessionUser, 'userId' | 'role'>): boolean {
+  return user.role === 'owner' || user.userId === OWNER_USER_ID;
+}
+
+export function canAccessUserRecord(
+  user: Pick<SessionUser, 'userId' | 'role'>,
+  recordUserId?: string | null
+): boolean {
+  return recordUserId === user.userId || (isOwnerUser(user) && !recordUserId);
+}
+

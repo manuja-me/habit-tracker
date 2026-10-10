@@ -157,7 +157,6 @@ function ProjectSettingsModal({
 }) {
   const [subtaskInput, setSubtaskInput] = useState('');
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [editingTaskTitle, setEditingTaskTitle] = useState('');
 
   if (!isOpen) return null;
 
@@ -184,35 +183,22 @@ function ProjectSettingsModal({
   };
 
   const handleRemoveSubtask = (taskId: string) => {
-    if (editingTaskId === taskId) {
-      setEditingTaskId(null);
-      setEditingTaskTitle('');
-    }
+    if (editingTaskId === taskId) setEditingTaskId(null);
     onChange({
       ...project,
       tasks: project.tasks.filter((t) => t.id !== taskId),
     });
   };
 
-  const handleStartEditSubtask = (task: ProjectTask) => {
-    setEditingTaskId(task.id);
-    setEditingTaskTitle(task.title);
-  };
-
-  const handleSaveEditSubtask = (taskId: string) => {
-    const trimmed = editingTaskTitle.trim();
-    if (!trimmed) return;
-    onChange({
-      ...project,
-      tasks: project.tasks.map((t) => (t.id === taskId ? { ...t, title: trimmed } : t)),
-    });
+  const saveSubtask = (task: ProjectTask, raw: string) => {
+    const title = raw.trim();
+    if (title && title !== task.title) {
+      onChange({
+        ...project,
+        tasks: project.tasks.map((t) => (t.id === task.id ? { ...t, title } : t)),
+      });
+    }
     setEditingTaskId(null);
-    setEditingTaskTitle('');
-  };
-
-  const handleCancelEditSubtask = () => {
-    setEditingTaskId(null);
-    setEditingTaskTitle('');
   };
 
   return (
@@ -339,24 +325,24 @@ function ProjectSettingsModal({
                       <div className="flex-1 flex items-center gap-1.5">
                         <input
                           autoFocus
-                          value={editingTaskTitle}
+                          defaultValue={t.title}
                           maxLength={200}
-                          onChange={(e) => setEditingTaskTitle(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
-                              handleSaveEditSubtask(t.id);
+                              e.currentTarget.blur();
                             } else if (e.key === 'Escape') {
                               e.preventDefault();
-                              handleCancelEditSubtask();
+                              e.currentTarget.value = t.title;
+                              setEditingTaskId(null);
                             }
                           }}
+                          onBlur={(e) => saveSubtask(t, e.currentTarget.value)}
                           className="flex-1 h-6 px-1.5 bg-input border border-subtle text-xs font-mono text-main focus:outline-none focus:border-[#FF3B30]"
                           placeholder="Subtask title..."
                         />
                         <button
                           type="button"
-                          onClick={() => handleSaveEditSubtask(t.id)}
                           aria-label={`Save subtask "${t.title}"`}
                           title="Save (Enter)"
                           className="text-[#FF3B30] hover:text-main cursor-pointer p-0.5"
@@ -365,7 +351,10 @@ function ProjectSettingsModal({
                         </button>
                         <button
                           type="button"
-                          onClick={handleCancelEditSubtask}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setEditingTaskId(null);
+                          }}
                           aria-label="Cancel editing"
                           title="Cancel (Esc)"
                           className="text-sub hover:text-main cursor-pointer p-0.5"
@@ -376,7 +365,7 @@ function ProjectSettingsModal({
                     ) : (
                       <>
                         <span
-                          onClick={() => handleStartEditSubtask(t)}
+                          onClick={() => setEditingTaskId(t.id)}
                           title="Click to edit subtask"
                           className={`flex-1 text-xs font-mono truncate cursor-pointer hover:text-[#FF3B30] transition-colors ${
                             t.done ? 'line-through text-sub' : 'text-main'
@@ -386,7 +375,7 @@ function ProjectSettingsModal({
                         </span>
                         <button
                           type="button"
-                          onClick={() => handleStartEditSubtask(t)}
+                          onClick={() => setEditingTaskId(t.id)}
                           aria-label={`Edit subtask "${t.title}"`}
                           title="Edit subtask"
                           className="text-sub hover:text-main cursor-pointer p-0.5"
@@ -657,15 +646,21 @@ function ProjectCard({
 }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [editingCardTaskId, setEditingCardTaskId] = useState<string | null>(null);
-  const [editingCardTaskTitle, setEditingCardTaskTitle] = useState('');
   const done = project.tasks.filter((t) => t.done).length;
   const setTasks = (tasks: ProjectTask[]) => onChange({ ...project, tasks });
+  const saveCardTask = (task: ProjectTask, raw: string) => {
+    const title = raw.trim();
+    if (title && title !== task.title) {
+      setTasks(project.tasks.map((x) => (x.id === task.id ? { ...x, title } : x)));
+    }
+    setEditingCardTaskId(null);
+  };
 
   return (
     <>
       <div className="border border-main bg-card transition-all">
         {/* Card Header: Pure focus on Title, Owner badge & Settings Trigger */}
-        <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-subtle">
+        <div className="flex items-center justify-between gap-2 px-3 pt-2.5 pb-1">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <h4 className="text-sm font-black font-sans uppercase tracking-tight text-main truncate">
               {project.title}
@@ -690,7 +685,7 @@ function ProjectCard({
         </div>
 
         {/* Card Body: Clean Tasks & Notes view */}
-        <div className="p-3 space-y-2.5">
+        <div className="pl-6 pr-3 pb-3 pt-1 space-y-2">
           {/* Notes display */}
           {project.notes ? (
             <p className="text-xs font-mono text-sub leading-relaxed whitespace-pre-wrap bg-input/40 p-2 border border-subtle/50">
@@ -727,52 +722,23 @@ function ProjectCard({
                       <div className="flex-1 flex items-center gap-1.5">
                         <input
                           autoFocus
-                          value={editingCardTaskTitle}
+                          defaultValue={t.title}
                           maxLength={200}
-                          onChange={(e) => setEditingCardTaskTitle(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
-                              const trimmed = editingCardTaskTitle.trim();
-                              if (trimmed) {
-                                setTasks(
-                                  project.tasks.map((x) =>
-                                    x.id === t.id ? { ...x, title: trimmed } : x
-                                  )
-                                );
-                              }
-                              setEditingCardTaskId(null);
+                              e.currentTarget.blur();
                             } else if (e.key === 'Escape') {
                               e.preventDefault();
+                              e.currentTarget.value = t.title;
                               setEditingCardTaskId(null);
                             }
                           }}
-                          onBlur={() => {
-                            const trimmed = editingCardTaskTitle.trim();
-                            if (trimmed) {
-                              setTasks(
-                                project.tasks.map((x) =>
-                                  x.id === t.id ? { ...x, title: trimmed } : x
-                                )
-                              );
-                            }
-                            setEditingCardTaskId(null);
-                          }}
+                          onBlur={(e) => saveCardTask(t, e.currentTarget.value)}
                           className="flex-1 h-6 px-1.5 bg-input border border-[#FF3B30] text-xs font-mono text-main focus:outline-none"
                         />
                         <button
                           type="button"
-                          onClick={() => {
-                            const trimmed = editingCardTaskTitle.trim();
-                            if (trimmed) {
-                              setTasks(
-                                project.tasks.map((x) =>
-                                  x.id === t.id ? { ...x, title: trimmed } : x
-                                )
-                              );
-                            }
-                            setEditingCardTaskId(null);
-                          }}
                           aria-label={`Save "${t.title}"`}
                           className="text-[#FF3B30] hover:text-main cursor-pointer p-0.5"
                         >
@@ -782,10 +748,7 @@ function ProjectCard({
                     ) : (
                       <>
                         <span
-                          onDoubleClick={() => {
-                            setEditingCardTaskId(t.id);
-                            setEditingCardTaskTitle(t.title);
-                          }}
+                          onDoubleClick={() => setEditingCardTaskId(t.id)}
                           title="Double-click or click pencil to edit"
                           className={`flex-1 text-xs font-mono leading-tight ${
                             t.done ? 'line-through text-sub' : 'text-main'
@@ -795,13 +758,10 @@ function ProjectCard({
                         </span>
                         <button
                           type="button"
-                          onClick={() => {
-                            setEditingCardTaskId(t.id);
-                            setEditingCardTaskTitle(t.title);
-                          }}
+                          onClick={() => setEditingCardTaskId(t.id)}
                           aria-label={`Edit subtask "${t.title}"`}
                           title="Edit subtask"
-                          className="opacity-0 group-hover/task:opacity-100 text-sub hover:text-main cursor-pointer p-0.5 transition-opacity"
+                          className="sm:opacity-0 sm:group-hover/task:opacity-100 focus:opacity-100 text-sub hover:text-main cursor-pointer p-0.5 transition-opacity"
                         >
                           <Pencil className="w-3 h-3" />
                         </button>
@@ -819,14 +779,16 @@ function ProjectCard({
         </div>
       </div>
 
-      <ProjectSettingsModal
-        project={project}
-        groups={groups}
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        onChange={onChange}
-        onDelete={onDelete}
-      />
+      {isSettingsOpen && (
+        <ProjectSettingsModal
+          project={project}
+          groups={groups}
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          onChange={onChange}
+          onDelete={onDelete}
+        />
+      )}
     </>
   );
 }

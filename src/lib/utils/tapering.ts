@@ -1,5 +1,5 @@
-import { Habit, HabitLog } from '../types';
-import { getTodayDateString } from './date';
+import type { Habit, HabitLog } from '../types';
+import { getTodayDateString, getHabitCreatedDateString } from './date';
 import { differenceInCalendarDays, parseISO, format, addDays } from 'date-fns';
 
 export type WeaningProtocol = 'exponential' | 'linear' | 'rapid' | 'custom' | 'none';
@@ -73,7 +73,7 @@ export function calculateWeaningStatus(
   let daysClean = 0;
   if (!lastSlipUpDateStr) {
     // No slip-ups logged yet: count days since habit creation
-    const createdStr = habit.created_at ? habit.created_at.split('T')[0] : todayStr;
+    const createdStr = getHabitCreatedDateString(habit, todayStr);
     try {
       daysClean = Math.max(0, differenceInCalendarDays(parseISO(todayStr), parseISO(createdStr)));
     } catch {

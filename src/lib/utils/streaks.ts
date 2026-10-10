@@ -1,6 +1,6 @@
 import { subDays, format, parseISO, differenceInCalendarDays } from 'date-fns';
-import { Habit, HabitLog, HabitStats, HeatmapDay } from '../types';
-import { getTodayDateString, isHabitDueOnDate } from './date';
+import type { Habit, HabitLog, HabitStats, HeatmapDay } from '../types';
+import { getTodayDateString, getHabitCreatedDateString, isHabitDueOnDate } from './date';
 
 /**
  * Checks if a habit was successful (clean/completed) on a specific date.
@@ -8,12 +8,17 @@ import { getTodayDateString, isHabitDueOnDate } from './date';
  * For 'do' habits: requires log?.completed === true.
  * For 'dont' (addiction/quit) habits: clean by default on/after creation date unless explicitly logged as a slip-up.
  */
-export function isDaySuccessful(habit: Habit, dateStr: string, logs: Record<string, HabitLog>): boolean {
-  const todayStr = getTodayDateString();
-  const createdDateStr = habit.created_at ? habit.created_at.split('T')[0] : todayStr;
-  
+export function isDaySuccessful(
+  habit: Habit,
+  dateStr: string,
+  logs: Record<string, HabitLog>,
+  todayStr: string = getTodayDateString(),
+  createdDateStr?: string
+): boolean {
+  const createdStr = createdDateStr || getHabitCreatedDateString(habit, todayStr);
+
   // A habit cannot be successful on dates before its creation date
-  if (dateStr < createdDateStr) {
+  if (dateStr < createdStr) {
     return false;
   }
 
@@ -34,102 +39,68 @@ export function isDaySuccessful(habit: Habit, dateStr: string, logs: Record<stri
  * Calculates current streak, longest streak, and completion rate for a given habit.
  */
 export function calculateHabitStats(habit: Habit, logs: Record<string, HabitLog>): HabitStats {
-  const todayStr = getTodayDateString();
-  const createdDateStr = habit.created_at ? habit.created_at.split('T')[0] : todayStr;
+  const now = new Date();
+  const todayStr = format(now, 'yyyy-MM-dd');
+  const createdDateStr = getHabitCreatedDateString(habit, todayStr);
   const todayLog = logs[`${habit.id}_${todayStr}`];
-  const isCompletedToday = isDaySuccessful(habit, todayStr, logs);
+  const isCompletedToday = isDaySuccessful(habit, todayStr, logs, todayStr, createdDateStr);
   const todayValue = todayLog?.value ?? 0;
 
   let daysSinceCreation = 0;
   try {
-    daysSinceCreation = Math.min(365, Math.max(0, differenceInCalendarDays(new Date(), parseISO(createdDateStr))));
+    daysSinceCreation = Math.min(365, Math.max(0, differenceInCalendarDays(now, parseISO(createdDateStr))));
   } catch {
     daysSinceCreation = 0;
   }
 
-  // Calculate total completions since creation
+  const maxDays = Math.max(daysSinceCreation, 29);
   let totalCompletions = 0;
-  for (let i = 0; i <= daysSinceCreation; i++) {
-    const dStr = format(subDays(new Date(), i), 'yyyy-MM-dd');
-    if (dStr >= createdDateStr && isHabitDueOnDate(habit, dStr)) {
-      if (isDaySuccessful(habit, dStr, logs)) {
-        totalCompletions++;
-      }
-    }
-  }
-
-  // Calculate current streak
   let currentStreak = 0;
-  let checkDate = new Date();
-  
-  // If not completed today, we check starting from yesterday to see if streak is active
-  if (!isCompletedToday) {
-    checkDate = subDays(checkDate, 1);
-  }
-
-  // Iterate backwards day by day to count consecutive completed/clean scheduled days
-  let daysChecked = 0;
-  while (daysChecked <= daysSinceCreation) {
-    const dateStr = format(checkDate, 'yyyy-MM-dd');
-
-    // Stop counting before habit was created
-    if (dateStr < createdDateStr) {
-      break;
-    }
-
-    const isDue = isHabitDueOnDate(habit, dateStr);
-
-    if (isDue) {
-      const isPassed = isDaySuccessful(habit, dateStr, logs);
-      if (isPassed) {
-        currentStreak++;
-      } else {
-        // Streak broken (missed habit or slipped up on quit habit)
-        break;
-      }
-    }
-    checkDate = subDays(checkDate, 1);
-    daysChecked++;
-  }
-
-  // Calculate longest streak since creation
-  let longestStreak = currentStreak;
+  let longestStreak = 0;
   let tempStreak = 0;
-  let historyDate = subDays(new Date(), daysSinceCreation);
-  
-  for (let i = 0; i <= daysSinceCreation; i++) {
-    const dateStr = format(historyDate, 'yyyy-MM-dd');
-    const isDue = isHabitDueOnDate(habit, dateStr);
+  let streakBroken = false;
+  let dueDaysCount30 = 0;
+  let completedDaysCount30 = 0;
 
-    if (isDue) {
-      const isPassed = isDaySuccessful(habit, dateStr, logs);
+  for (let i = 0; i <= maxDays; i++) {
+    const date = subDays(now, i);
+    const dStr = format(date, 'yyyy-MM-dd');
+    if (dStr < createdDateStr) break;
+
+    if (!isHabitDueOnDate(habit, dStr, createdDateStr, date.getDay())) {
+      continue;
+    }
+
+    const isPassed = isDaySuccessful(habit, dStr, logs, todayStr, createdDateStr);
+
+    if (i <= daysSinceCreation) {
       if (isPassed) {
+        totalCompletions++;
         tempStreak++;
-        if (tempStreak > longestStreak) {
-          longestStreak = tempStreak;
+        if (tempStreak > longestStreak) longestStreak = tempStreak;
+        if (!streakBroken && (i > 0 || isCompletedToday)) {
+          currentStreak++;
         }
       } else {
         tempStreak = 0;
+        if (i > 0 || isCompletedToday) {
+          streakBroken = true;
+        }
       }
     }
-    historyDate = subDays(historyDate, -1); // move forward 1 day
-  }
 
-  // Calculate 30-day completion rate
-  let dueDaysCount30 = 0;
-  let completedDaysCount30 = 0;
-  for (let i = 0; i < 30; i++) {
-    const dStr = format(subDays(new Date(), i), 'yyyy-MM-dd');
-    if (dStr >= createdDateStr && isHabitDueOnDate(habit, dStr)) {
+    if (i < 30) {
       dueDaysCount30++;
-      if (isDaySuccessful(habit, dStr, logs)) {
-        completedDaysCount30++;
-      }
+      if (isPassed) completedDaysCount30++;
     }
   }
 
-  const completionRate30Days = dueDaysCount30 > 0 
-    ? Math.round((completedDaysCount30 / dueDaysCount30) * 100) 
+  if (currentStreak > longestStreak) {
+    longestStreak = currentStreak;
+  }
+
+  const completionRate30Days = dueDaysCount30 > 0
+    ? Math.round((completedDaysCount30 / dueDaysCount30) * 100)
     : (isCompletedToday ? 100 : 0);
 
   return {
@@ -151,24 +122,29 @@ export function generateHeatmapData(
   daysCount: number = 365,
   filterHabitId?: string
 ): HeatmapDay[] {
-  const activeHabits = filterHabitId 
-    ? habits.filter(h => h.id === filterHabitId) 
-    : habits.filter(h => !h.archived);
+  const activeHabits = filterHabitId
+    ? habits.filter((h) => h.id === filterHabitId)
+    : habits.filter((h) => !h.archived);
 
   const heatmap: HeatmapDay[] = [];
   const today = new Date();
+  const todayStr = format(today, 'yyyy-MM-dd');
+  const createdMap = new Map(activeHabits.map((h) => [h.id, getHabitCreatedDateString(h, todayStr)]));
 
   for (let i = daysCount - 1; i >= 0; i--) {
     const date = subDays(today, i);
     const dateStr = format(date, 'yyyy-MM-dd');
+    const dayOfWeek = date.getDay();
 
-    const dueHabits = activeHabits.filter(h => isHabitDueOnDate(h, dateStr));
+    const dueHabits = activeHabits.filter((h) =>
+      isHabitDueOnDate(h, dateStr, createdMap.get(h.id), dayOfWeek)
+    );
     const totalDue = dueHabits.length;
 
     const completedHabits: string[] = [];
     if (totalDue > 0) {
-      dueHabits.forEach(h => {
-        if (isDaySuccessful(h, dateStr, logs)) {
+      dueHabits.forEach((h) => {
+        if (isDaySuccessful(h, dateStr, logs, todayStr, createdMap.get(h.id))) {
           completedHabits.push(h.title);
         }
       });
@@ -197,39 +173,3 @@ export function generateHeatmapData(
   return heatmap;
 }
 
-export interface MilestoneBadge {
-  id: string;
-  days: number;
-  title: string;
-  subtitle: string;
-  iconName: string;
-  color: string;
-  unlocked: boolean;
-  progressPercent: number;
-}
-
-export const MILESTONE_DEFINITIONS = [
-  { id: 'm-3', days: 3, title: 'SPARK', subtitle: '3 Days Consecutive', iconName: 'Zap', color: '#38BDF8' },
-  { id: 'm-7', days: 7, title: 'IGNITION', subtitle: '1 Week Unbroken', iconName: 'Flame', color: '#F59E0B' },
-  { id: 'm-14', days: 14, title: 'MOMENTUM', subtitle: '2 Weeks Strong', iconName: 'TrendingUp', color: '#FF3B30' },
-  { id: 'm-21', days: 21, title: 'HABIT LOOP', subtitle: '21 Days Formed', iconName: 'Activity', color: '#06B6D4' },
-  { id: 'm-30', days: 30, title: 'IRON WILL', subtitle: '1 Month Discipline', iconName: 'ShieldCheck', color: '#6366F1' },
-  { id: 'm-60', days: 60, title: 'DIAMOND', subtitle: '60 Days Automatic', iconName: 'Sparkles', color: '#8B5CF6' },
-  { id: 'm-100', days: 100, title: 'CENTURY', subtitle: '100 Days Triple Digits', iconName: 'Trophy', color: '#EC4899' },
-  { id: 'm-180', days: 180, title: 'HALF YEAR', subtitle: '6 Months Mastery', iconName: 'Star', color: '#F43F5E' },
-  { id: 'm-365', days: 365, title: 'LEGEND', subtitle: '1 Full Year Elite', iconName: 'Crown', color: '#EAB308' },
-  { id: 'm-500', days: 500, title: 'TITAN', subtitle: '500 Days Unstoppable', iconName: 'Medal', color: '#F97316' },
-  { id: 'm-1000', days: 1000, title: 'IMMORTAL', subtitle: '1,000 Days Pantheon', iconName: 'Flame', color: '#FF3B30' },
-];
-
-export function calculateMilestones(bestStreak: number): MilestoneBadge[] {
-  return MILESTONE_DEFINITIONS.map((m) => {
-    const unlocked = bestStreak >= m.days;
-    const progressPercent = Math.min(100, Math.round((bestStreak / m.days) * 100));
-    return {
-      ...m,
-      unlocked,
-      progressPercent,
-    };
-  });
-}

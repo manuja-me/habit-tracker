@@ -1,5 +1,5 @@
 import { format, parseISO, subDays, addDays, startOfWeek, getDay } from 'date-fns';
-import { Habit } from '../types';
+import type { Habit } from '../types';
 
 export function getTodayDateString(): string {
   return format(new Date(), 'yyyy-MM-dd');
@@ -59,19 +59,30 @@ export function getLastNDays(n: number): string[] {
   return days;
 }
 
-export function isHabitDueOnDate(habit: Habit, dateStr: string): boolean {
+export function getHabitCreatedDateString(habit: Habit, fallbackStr?: string): string {
+  if (!habit.created_at) return fallbackStr || getTodayDateString();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(habit.created_at)) return habit.created_at;
+  const parsed = new Date(habit.created_at);
+  if (isNaN(parsed.getTime())) return habit.created_at.split('T')[0];
+  return format(parsed, 'yyyy-MM-dd');
+}
+
+export function isHabitDueOnDate(
+  habit: Habit,
+  dateStr: string,
+  createdDateStr?: string,
+  dayOfWeekOverride?: number
+): boolean {
   if (habit.archived) return false;
 
-  const todayStr = getTodayDateString();
-  const createdDateStr = habit.created_at ? habit.created_at.split('T')[0] : todayStr;
+  const createdStr = createdDateStr || getHabitCreatedDateString(habit);
 
   // A habit is not due on dates before it was created
-  if (dateStr < createdDateStr) {
+  if (dateStr < createdStr) {
     return false;
   }
 
-  const date = parseISO(dateStr);
-  const dayOfWeek = getDay(date); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+  const dayOfWeek = dayOfWeekOverride !== undefined ? dayOfWeekOverride : getDay(parseISO(dateStr)); // 0 = Sun, 1 = Mon, ..., 6 = Sat
 
   switch (habit.frequency) {
     case 'daily':
@@ -87,3 +98,4 @@ export function isHabitDueOnDate(habit: Habit, dateStr: string): boolean {
       return true;
   }
 }
+
