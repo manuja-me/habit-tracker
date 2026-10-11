@@ -21,6 +21,8 @@ const {
   getTodayDateString,
   getHabitCreatedDateString,
   isHabitDueOnDate,
+  getPlannerCutoffDateString,
+  isPlannerNoteExpired,
 } = await import('../src/lib/utils/date.ts');
 const {
   isDaySuccessful,
@@ -33,6 +35,7 @@ const {
   getHabitsStorageKey,
   getLogsStorageKey,
   getDayNotesStorageKey,
+  pruneExpiredDayNotes,
 } = await import('../src/lib/utils/storage.ts');
 
 function makeHabit(overrides = {}) {
@@ -157,4 +160,44 @@ test('Storage keys: user-scoped keys isolate different users', () => {
   assert.notEqual(getHabitsStorageKey('user-a'), getHabitsStorageKey('user-b'));
   assert.notEqual(getLogsStorageKey('user-a'), getLogsStorageKey('user-b'));
   assert.notEqual(getDayNotesStorageKey('user-a'), getDayNotesStorageKey('user-b'));
+});
+
+test('Planner retention: deletes planner content 3 months after creation date', () => {
+  const refNow = new Date('2026-10-11T12:00:00.000Z');
+  assert.equal(getPlannerCutoffDateString(refNow), '2026-07-11');
+
+  // 1. Note created >= 3 months ago is expired
+  assert.equal(isPlannerNoteExpired('2026-07-11', '2026-07-11T10:00:00.000Z', refNow), true);
+  assert.equal(isPlannerNoteExpired('2026-06-15', undefined, refNow), true);
+
+  // 2. Future-dated note whose created_at was > 3 months ago is expired
+  assert.equal(isPlannerNoteExpired('2026-07-20', '2026-07-10T09:00:00.000Z', refNow), true);
+
+  // 3. Note created < 3 months ago is retained
+  assert.equal(isPlannerNoteExpired('2026-07-12', '2026-07-12T10:00:00.000Z', refNow), false);
+  assert.equal(isPlannerNoteExpired('2026-10-11', '2026-10-11T10:00:00.000Z', refNow), false);
+
+  // 4. pruneExpiredDayNotes removes expired & empty entries while preserving active notes
+  const { dayNotes, meta, pruned } = pruneExpiredDayNotes(
+    {
+      '2026-06-01': 'Old summer note',
+      '2026-07-11': 'Exactly 3 months old',
+      '2026-07-18': 'Created >3 months ago for future day',
+      '2026-08-01': 'Recent August note',
+      '2026-10-11': 'Today note',
+      '2026-10-12': '   ',
+    },
+    {
+      '2026-07-18': '2026-07-05T08:00:00.000Z',
+      '2026-08-01': '2026-08-01T08:00:00.000Z',
+    },
+    refNow
+  );
+
+  assert.equal(pruned, true);
+  assert.deepEqual(Object.keys(dayNotes), ['2026-08-01', '2026-10-11']);
+  assert.equal(dayNotes['2026-08-01'], 'Recent August note');
+  assert.equal(dayNotes['2026-10-11'], 'Today note');
+  assert.equal(meta['2026-08-01'], '2026-08-01T08:00:00.000Z');
+  assert.ok(meta['2026-10-11']);
 });

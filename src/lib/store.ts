@@ -16,8 +16,10 @@ import {
   LAST_USER_KEY,
   persistLocalData,
   persistDayNotes,
+  pruneExpiredDayNotes,
   loadLocalData,
 } from './utils/storage';
+import { isPlannerNoteExpired } from './utils/date';
 
 export { generateId };
 
@@ -268,17 +270,20 @@ async function executeCloudSync(isBackground = false) {
       const habitsChanged = JSON.stringify(mergedHabits) !== JSON.stringify(globalHabits);
       const logsChanged = JSON.stringify(cleanLogs) !== JSON.stringify(globalLogs);
 
-      // Reconcile server Day Notes (ALWAYS runs for Mobile and Desktop sync)
-      const serverDayNotes = res.dayNotes || {};
-      const mergedDayNotes = { ...globalDayNotes, ...serverDayNotes };
+      // Reconcile server Day Notes (3-month retention enforced on both server and client)
+      const serverDayNotes = pruneExpiredDayNotes(res.dayNotes || {}).dayNotes;
+      const localPruned = pruneExpiredDayNotes(globalDayNotes).dayNotes;
+      const mergedDayNotes: Record<string, string> = { ...serverDayNotes };
 
-      // Backfill any local notes that do not exist on the server yet (scoped to 370 days)
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - 370);
-      const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
-
-      Object.entries(globalDayNotes).forEach(([dateStr, content]) => {
-        if (content && !serverDayNotes[dateStr] && dateStr >= cutoffDateStr) {
+      // Backfill any local notes that do not exist on the server yet (scoped to 3 months)
+      Object.entries(localPruned).forEach(([dateStr, content]) => {
+        if (
+          content &&
+          !serverDayNotes[dateStr] &&
+          !isPlannerNoteExpired(dateStr) &&
+          (!hasBeenInitialized || Date.now() - lastLocalMutationTime < 10000)
+        ) {
+          mergedDayNotes[dateStr] = content;
           saveDayNoteAction(dateStr, content).catch(() => {});
         }
       });
@@ -286,8 +291,7 @@ async function executeCloudSync(isBackground = false) {
       const userId = res.user?.id || globalCurrentUser?.id;
       const dayNotesChanged = JSON.stringify(mergedDayNotes) !== JSON.stringify(globalDayNotes);
       if (dayNotesChanged) {
-        globalDayNotes = mergedDayNotes;
-        persistDayNotes(globalDayNotes, userId);
+        globalDayNotes = persistDayNotes(mergedDayNotes, userId);
       }
 
       if (habitsChanged || logsChanged || dayNotesChanged) {
@@ -549,14 +553,16 @@ export function useHabitStore() {
     });
   };
 
-  // 6. Save Day Note / Tasks (Instant autosave + Broadcast sync + Cloud sync)
+  // 6. Save Day Note / Tasks (Instant autosave + Broadcast sync + Cloud sync + 3-month retention)
   const saveDayNote = (dateStr: string, content: string) => {
     lastLocalMutationTime = Date.now();
-    globalDayNotes = {
-      ...globalDayNotes,
-      [dateStr]: content,
-    };
-    persistDayNotes(globalDayNotes, globalCurrentUser?.id);
+    const nextNotes = { ...globalDayNotes };
+    if (!content || !content.trim() || isPlannerNoteExpired(dateStr)) {
+      delete nextNotes[dateStr];
+    } else {
+      nextNotes[dateStr] = content;
+    }
+    globalDayNotes = persistDayNotes(nextNotes, globalCurrentUser?.id);
     updateStoreSnapshot();
     broadcastLocalUpdate();
 

@@ -148,6 +148,11 @@ UPDATE public.habits SET user_id = '00000000-0000-0000-0000-000000000001' WHERE 
 UPDATE public.habit_logs SET user_id = '00000000-0000-0000-0000-000000000001' WHERE user_id IS NULL;
 UPDATE public.day_notes SET user_id = '00000000-0000-0000-0000-000000000001' WHERE user_id IS NULL;
 
+-- Purge planner notes older than 3 months after creation date
+DELETE FROM public.day_notes
+WHERE created_at <= NOW() - INTERVAL '3 months'
+   OR date <= (CURRENT_DATE - INTERVAL '3 months');
+
 -- 6. Indexes
 CREATE INDEX IF NOT EXISTS idx_habits_user_id ON public.habits(user_id);
 CREATE INDEX IF NOT EXISTS idx_habits_archived ON public.habits(archived);
@@ -156,6 +161,7 @@ CREATE INDEX IF NOT EXISTS idx_habit_logs_user_id ON public.habit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_habit_logs_habit_date ON public.habit_logs(habit_id, date);
 CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON public.habit_logs(date);
 CREATE INDEX IF NOT EXISTS idx_day_notes_user_date ON public.day_notes(user_id, date);
+CREATE INDEX IF NOT EXISTS idx_day_notes_created_at ON public.day_notes(created_at);
 CREATE INDEX IF NOT EXISTS idx_app_users_deactivated_at ON public.app_users(deactivated_at);
 CREATE INDEX IF NOT EXISTS idx_invitations_token ON public.invitations(token);
 

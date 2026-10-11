@@ -5,8 +5,32 @@ import { OWNER_USER_ID, isOwnerUser, canAccessUserRecord } from './auth-utils';
 import { getCleanSupabaseConfig, getServerSupabase } from './supabase';
 import { purgeUserData, purgeExpiredDeactivatedUsers } from './user-management';
 import { Habit, HabitCategory, HabitFrequency, HabitLog, HabitType, Project, ProjectGroup, ProjectStatus, ProjectTask } from '../types';
+import { getPlannerCutoffDate, getPlannerCutoffDateString, isPlannerNoteExpired } from '../utils/date';
 
 export { purgeExpiredDeactivatedUsers };
+
+/**
+ * Permanently delete planner day_notes older than 3 months after creation date
+ */
+export async function purgeExpiredDayNotes(
+  supabaseClient?: ReturnType<typeof getServerSupabase>,
+  now: Date = new Date()
+): Promise<void> {
+  const supabase = supabaseClient || getServerSupabase();
+  if (!supabase) return;
+
+  const cutoffIso = getPlannerCutoffDate(now).toISOString();
+  const cutoffDateStr = getPlannerCutoffDateString(now);
+
+  try {
+    await Promise.allSettled([
+      supabase.from('day_notes').delete().lte('created_at', cutoffIso),
+      supabase.from('day_notes').delete().lte('date', cutoffDateStr),
+    ]);
+  } catch {
+    // Ignore cleanup errors on unmigrated tables
+  }
+}
 
 interface DbHabitRecord {
   id: string;
@@ -40,6 +64,7 @@ interface DbLogRecord {
 interface DbDayNoteRecord {
   date: string;
   content: string;
+  created_at?: string | null;
   updated_at?: string | null;
 }
 
@@ -161,10 +186,14 @@ export async function getHabitsAndLogsAction(): Promise<{
       habitsData = (habitsRes.data as DbHabitRecord[]) || [];
     }
 
-    // 2. Compute date cutoff: past 370 days covers 52-week heatmap, year history, and day planner
-    const cutoffDate = new Date();
+    // 2. Compute date cutoffs: 370 days for habit_logs (52-week heatmap), 3 months for planner day_notes
+    const now = new Date();
+    const cutoffDate = new Date(now);
     cutoffDate.setDate(cutoffDate.getDate() - 370);
     const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
+
+    const plannerCutoffDateStr = getPlannerCutoffDateString(now);
+    await purgeExpiredDayNotes(supabase, now);
 
     const userHabitIds = habitsData.map((h) => h.id);
     let logsData: DbLogRecord[] = [];
@@ -182,8 +211,8 @@ export async function getHabitsAndLogsAction(): Promise<{
         : Promise.resolve({ data: [], error: null }),
       supabase
         .from('day_notes')
-        .select('date, content, updated_at')
-        .gte('date', cutoffDateStr)
+        .select('date, content, created_at, updated_at')
+        .gt('date', plannerCutoffDateStr)
         .or(isOwner ? `user_id.eq.${user.userId},user_id.is.null` : `user_id.eq.${user.userId}`),
       supabase
         .from('app_users')
@@ -216,7 +245,12 @@ export async function getHabitsAndLogsAction(): Promise<{
     if (!notesRes.error && notesRes.data) {
       (notesRes.data as DbDayNoteRecord[]).forEach((dn) => {
         trackTime(dn.updated_at);
-        if (dn.date && dn.content !== undefined) {
+        if (
+          dn.date &&
+          dn.content !== undefined &&
+          dn.content.trim() !== '' &&
+          !isPlannerNoteExpired(dn.date, dn.created_at, now)
+        ) {
           dayNotesMap[dn.date] = dn.content;
         }
       });
@@ -476,10 +510,25 @@ export async function saveDayNoteAction(date: string, content: string): Promise<
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
+    await purgeExpiredDayNotes(supabase);
+
+    const cleanContent = content ?? '';
+    if (!cleanContent.trim() || isPlannerNoteExpired(date)) {
+      const delRes = await supabase
+        .from('day_notes')
+        .delete()
+        .eq('user_id', user.userId)
+        .eq('date', date);
+      if (delRes.error && (delRes.error.message?.includes('user_id') || delRes.error.code === '42703')) {
+        await supabase.from('day_notes').delete().eq('date', date);
+      }
+      return { success: true };
+    }
+
     const notePayload = {
       user_id: user.userId,
       date,
-      content: content ?? '',
+      content: cleanContent,
       updated_at: new Date().toISOString(),
     };
 

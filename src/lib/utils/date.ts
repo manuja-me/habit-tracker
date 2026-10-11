@@ -1,5 +1,54 @@
-import { format, parseISO, subDays, addDays, startOfWeek, getDay } from 'date-fns';
+import { format, parseISO, subDays, addDays, subMonths, addMonths, startOfWeek, getDay } from 'date-fns';
 import type { Habit } from '../types';
+
+export const PLANNER_RETENTION_MONTHS = 3;
+
+export function getPlannerCutoffDate(now: Date = new Date()): Date {
+  return subMonths(now, PLANNER_RETENTION_MONTHS);
+}
+
+export function getPlannerCutoffDateString(now: Date = new Date()): string {
+  return format(getPlannerCutoffDate(now), 'yyyy-MM-dd');
+}
+
+export function isPlannerNoteExpired(
+  dateStr: string,
+  createdAtIso?: string | null,
+  now: Date = new Date()
+): boolean {
+  const cutoffDate = getPlannerCutoffDate(now);
+  const cutoffDateStr = format(cutoffDate, 'yyyy-MM-dd');
+
+  if (createdAtIso) {
+    const createdDate = /^\d{4}-\d{2}-\d{2}$/.test(createdAtIso)
+      ? parseISO(createdAtIso)
+      : new Date(createdAtIso);
+    if (!isNaN(createdDate.getTime())) {
+      if (addMonths(createdDate, PLANNER_RETENTION_MONTHS).getTime() <= now.getTime()) {
+        return true;
+      }
+      if (createdDate.getTime() <= cutoffDate.getTime()) {
+        return true;
+      }
+    }
+  }
+
+  if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const noteDate = parseISO(dateStr);
+    const todayStart = parseISO(format(now, 'yyyy-MM-dd'));
+    if (
+      !isNaN(noteDate.getTime()) &&
+      addMonths(noteDate, PLANNER_RETENTION_MONTHS).getTime() <= todayStart.getTime()
+    ) {
+      return true;
+    }
+    if (dateStr <= cutoffDateStr) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 export function getTodayDateString(): string {
   return format(new Date(), 'yyyy-MM-dd');
