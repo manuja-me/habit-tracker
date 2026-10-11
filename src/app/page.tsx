@@ -53,6 +53,7 @@ export default function HabitTrackerPage() {
     habits,
     logs,
     currentUser,
+    lastAccountActiveAt,
     isInitialSyncDone,
     toggleHabit,
     addHabit,
@@ -78,35 +79,39 @@ export default function HabitTrackerPage() {
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
   const [modalInitialNature, setModalInitialNature] = useState<'do' | 'dont'>('do');
 
-  // Inactivity / 24-hour absence check upon session unlock
+  // Inactivity / 24-hour absence check after cloud sync completes (checks account-wide activity across devices)
   useEffect(() => {
-    if (isUnlocked) {
+    if (isUnlocked && isInitialSyncDone) {
       const timer = setTimeout(() => {
-        if (typeof window !== 'undefined') {
-          const urlParams = new URLSearchParams(window.location.search);
-          const simulatedHours = urlParams.get('absence');
-          if (simulatedHours) {
-            const hours = parseInt(simulatedHours, 10) || 24;
-            const fakePast = new Date(Date.now() - hours * 3600 * 1000).toISOString();
-            localStorage.setItem(LAST_VISIT_STORAGE_KEY, fakePast);
-            localStorage.removeItem(LAST_ACKNOWLEDGED_ABSENCE_KEY);
-          }
+        const simulatedHours =
+          typeof window !== 'undefined'
+            ? new URLSearchParams(window.location.search).get('absence')
+            : null;
+        if (simulatedHours) {
+          const hours = parseInt(simulatedHours, 10) || 24;
+          const fakePast = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+          localStorage.setItem(LAST_VISIT_STORAGE_KEY, fakePast);
+          localStorage.removeItem(LAST_ACKNOWLEDGED_ABSENCE_KEY);
         }
 
-        const result = checkInactivity(24);
+        const result = checkInactivity(
+          24,
+          simulatedHours ? null : lastAccountActiveAt,
+          currentUser?.id
+        );
         if (result.wasAway && (result.missedDates.length > 0 || result.hoursAway >= 24)) {
           setAbsenceInfo(result);
           setIsAbsenceModalOpen(true);
         } else {
-          recordCurrentVisit();
+          recordCurrentVisit(currentUser?.id, true);
         }
       }, 0);
       return () => clearTimeout(timer);
     }
-  }, [isUnlocked]);
+  }, [isUnlocked, isInitialSyncDone, lastAccountActiveAt, currentUser?.id]);
 
   const handleTriggerAudit = () => {
-    let result = checkInactivity(24);
+    let result = checkInactivity(24, lastAccountActiveAt, currentUser?.id);
     if (!result.wasAway || result.missedDates.length === 0) {
       const yesterday = new Date(Date.now() - 26 * 3600 * 1000);
       result = {
@@ -125,11 +130,11 @@ export default function HabitTrackerPage() {
   useEffect(() => {
     if (!isUnlocked) return;
     const interval = setInterval(() => {
-      recordCurrentVisit();
+      recordCurrentVisit(currentUser?.id);
     }, 10 * 60 * 1000);
 
     const handleUnload = () => {
-      recordCurrentVisit();
+      recordCurrentVisit(currentUser?.id);
     };
     window.addEventListener('beforeunload', handleUnload);
 
@@ -137,7 +142,7 @@ export default function HabitTrackerPage() {
       clearInterval(interval);
       window.removeEventListener('beforeunload', handleUnload);
     };
-  }, [isUnlocked]);
+  }, [isUnlocked, currentUser?.id]);
 
   const handleSaveAbsenceLogs = (
     batch: Array<{ habitId: string; dateStr: string; completed: boolean; value: number }>
@@ -145,7 +150,7 @@ export default function HabitTrackerPage() {
     batch.forEach(({ habitId, dateStr, completed, value }) => {
       toggleHabit(habitId, dateStr, completed, value);
     });
-    recordCurrentVisit();
+    recordCurrentVisit(currentUser?.id, true);
   };
 
   // Validate session on mount

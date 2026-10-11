@@ -40,6 +40,7 @@ interface DbLogRecord {
 interface DbDayNoteRecord {
   date: string;
   content: string;
+  updated_at?: string | null;
 }
 
 export interface AdminUserRecord {
@@ -114,6 +115,7 @@ export async function getHabitsAndLogsAction(): Promise<{
   habits?: Habit[];
   logs?: Record<string, HabitLog>;
   dayNotes?: Record<string, string>;
+  lastActiveAt?: string | null;
   error?: string;
   user?: { id: string; username: string; role: string };
 }> {
@@ -168,8 +170,8 @@ export async function getHabitsAndLogsAction(): Promise<{
     let logsData: DbLogRecord[] = [];
     const dayNotesMap: Record<string, string> = {};
 
-    // Run habit_logs and day_notes queries concurrently to halve serverless latency
-    const [logsRes, notesRes] = await Promise.all([
+    // Run habit_logs, day_notes, and app_users activity queries concurrently
+    const [logsRes, notesRes, userRes] = await Promise.all([
       userHabitIds.length > 0
         ? supabase
             .from('habit_logs')
@@ -180,17 +182,40 @@ export async function getHabitsAndLogsAction(): Promise<{
         : Promise.resolve({ data: [], error: null }),
       supabase
         .from('day_notes')
-        .select('date, content')
+        .select('date, content, updated_at')
         .gte('date', cutoffDateStr)
         .or(isOwner ? `user_id.eq.${user.userId},user_id.is.null` : `user_id.eq.${user.userId}`),
+      supabase
+        .from('app_users')
+        .select('updated_at')
+        .eq('id', user.userId)
+        .maybeSingle(),
     ]);
 
     if (!logsRes.error && logsRes.data) {
       logsData = logsRes.data as DbLogRecord[];
     }
 
+    let latestMs = 0;
+    const trackTime = (iso?: string | null) => {
+      if (!iso) return;
+      const t = Date.parse(iso);
+      if (Number.isFinite(t) && t > latestMs) latestMs = t;
+    };
+
+    trackTime((userRes.data as { updated_at?: string | null } | null)?.updated_at);
+    habitsData.forEach((h) => {
+      trackTime(h.updated_at);
+      trackTime(h.created_at);
+    });
+    logsData.forEach((l) => {
+      trackTime(l.updated_at);
+      trackTime(l.created_at);
+    });
+
     if (!notesRes.error && notesRes.data) {
       (notesRes.data as DbDayNoteRecord[]).forEach((dn) => {
+        trackTime(dn.updated_at);
         if (dn.date && dn.content !== undefined) {
           dayNotesMap[dn.date] = dn.content;
         }
@@ -240,6 +265,7 @@ export async function getHabitsAndLogsAction(): Promise<{
       habits: formattedHabits,
       logs: mappedLogs,
       dayNotes: dayNotesMap,
+      lastActiveAt: latestMs > 0 ? new Date(latestMs).toISOString() : null,
       user: { id: user.userId, username: user.username, role: user.role },
     };
   } catch (err: unknown) {
@@ -248,6 +274,25 @@ export async function getHabitsAndLogsAction(): Promise<{
       isConfigured: Boolean(getCleanSupabaseConfig()),
       error: getErrorMessage(err, 'Failed to fetch data'),
     };
+  }
+}
+
+/**
+ * Server Action: Record account-level visit timestamp across devices
+ */
+export async function recordAccountVisitAction(): Promise<{ success: boolean }> {
+  try {
+    const user = await requireAuth();
+    const supabase = getServerSupabase();
+    if (!supabase) return { success: true };
+
+    await supabase
+      .from('app_users')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', user.userId);
+    return { success: true };
+  } catch {
+    return { success: false };
   }
 }
 

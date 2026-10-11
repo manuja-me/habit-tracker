@@ -27,6 +27,7 @@ export interface HabitStoreState {
   logs: Record<string, HabitLog>;
   dayNotes: Record<string, string>;
   currentUser: { id: string; username: string; role: string } | null;
+  lastAccountActiveAt: string | null;
   isLoading: boolean;
   isInitialSyncDone: boolean;
   isSyncing: boolean;
@@ -39,6 +40,7 @@ let globalHabits: Habit[] = [];
 let globalLogs: Record<string, HabitLog> = {};
 let globalDayNotes: Record<string, string> = {};
 let globalCurrentUser: { id: string; username: string; role: string } | null = null;
+let globalLastAccountActiveAt: string | null = null;
 let globalIsCloudReady = true;
 let globalIsSyncing = false;
 let globalSyncError: string | null = null;
@@ -52,6 +54,7 @@ const INITIAL_STATE: HabitStoreState = {
   logs: {},
   dayNotes: {},
   currentUser: null,
+  lastAccountActiveAt: null,
   isLoading: true,
   isInitialSyncDone: false,
   isSyncing: false,
@@ -68,6 +71,7 @@ function updateStoreSnapshot() {
     logs: globalLogs,
     dayNotes: globalDayNotes,
     currentUser: globalCurrentUser,
+    lastAccountActiveAt: globalLastAccountActiveAt,
     isLoading: !isStorageLoaded,
     isInitialSyncDone,
     isSyncing: globalIsSyncing,
@@ -124,6 +128,7 @@ export function clearLocalUserData() {
   globalLogs = {};
   globalDayNotes = {};
   globalCurrentUser = null;
+  globalLastAccountActiveAt = null;
   lastLocalMutationTime = 0;
   pendingDeletedHabitIds.clear();
   pendingAddedHabits.clear();
@@ -176,6 +181,9 @@ async function executeCloudSync(isBackground = false) {
     lastSuccessfulSyncTime = Date.now();
     globalIsCloudReady = Boolean(res.isConfigured);
     globalSyncError = null;
+    if (res.lastActiveAt) {
+      globalLastAccountActiveAt = res.lastActiveAt;
+    }
 
     if (res.user) {
       if (globalCurrentUser?.id !== res.user.id) {
@@ -564,6 +572,7 @@ export function useHabitStore() {
     logs: store.logs,
     dayNotes: store.dayNotes,
     currentUser: store.currentUser,
+    lastAccountActiveAt: store.lastAccountActiveAt,
     isLoading: store.isLoading,
     isInitialSyncDone: store.isInitialSyncDone,
     isSyncing: store.isSyncing,

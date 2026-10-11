@@ -223,7 +223,6 @@ export async function verifyPinAction(enteredPin: string): Promise<{
           .from('app_users')
           .update({
             last_login_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
           })
           .eq('id', matchedUser.userId);
       } catch (logErr) {
