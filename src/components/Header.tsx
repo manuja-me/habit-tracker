@@ -61,32 +61,34 @@ export function Header({
   return (
     <header className="w-full max-w-4xl xl:max-w-7xl mx-auto pt-6 pb-2 px-4 sm:px-6">
       {/* Top Bar: Brand, Action & Settings */}
-      <div className="flex items-center justify-between gap-4 mb-4">
-        {/* Brand & Gamification Level Chip */}
-        <div className="flex items-center gap-2.5 select-none">
+      <div className="relative flex items-center gap-4 mb-4">
+        {/* Gamification Level Chip */}
+        {playerLevel !== undefined && prestigeTier && (
+          <div
+            className="mr-auto flex items-center gap-1.5 px-2 py-0.5 border text-[10px] font-mono font-bold tracking-wider transition-colors cursor-default"
+            style={{
+              borderColor: `${prestigeTier.color}60`,
+              backgroundColor: `${prestigeTier.color}15`,
+              color: prestigeTier.color,
+            }}
+            title={`Level ${playerLevel} • ${prestigeTier.name} (${prestigeTier.title}) • ${totalXp?.toLocaleString() || 0} Total XP${progressPercent !== undefined ? ` (${progressPercent}% to Next Level)` : ''}`}
+          >
+            <span>LVL {playerLevel}</span>
+            <span className="opacity-40">•</span>
+            <span className="uppercase">{prestigeTier.name}</span>
+          </div>
+        )}
+
+        {/* Brand */}
+        <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 flex items-center gap-2.5 select-none">
           <ZenithLogo className="w-6 h-6 flex-shrink-0" />
           <span className="text-base font-black tracking-tight uppercase font-sans text-main">
             Zenith
           </span>
-          {playerLevel !== undefined && prestigeTier && (
-            <div
-              className="flex items-center gap-1.5 px-2 py-0.5 border text-[10px] font-mono font-bold tracking-wider transition-colors cursor-default"
-              style={{
-                borderColor: `${prestigeTier.color}60`,
-                backgroundColor: `${prestigeTier.color}15`,
-                color: prestigeTier.color,
-              }}
-              title={`Level ${playerLevel} • ${prestigeTier.name} (${prestigeTier.title}) • ${totalXp?.toLocaleString() || 0} Total XP${progressPercent !== undefined ? ` (${progressPercent}% to Next Level)` : ''}`}
-            >
-              <span>LVL {playerLevel}</span>
-              <span className="opacity-40">•</span>
-              <span className="uppercase">{prestigeTier.name}</span>
-            </div>
-          )}
         </div>
 
         {/* Essential Actions: + New Habit and Single Settings Button */}
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2">
           <button
             onClick={onOpenAddModal}
             className="flex items-center gap-1.5 h-9 px-3.5 text-xs font-sans font-black tracking-tight uppercase bg-[#FF3B30] hover:bg-[#E02D24] text-white transition-all active:scale-95 cursor-pointer touch-manipulation"
