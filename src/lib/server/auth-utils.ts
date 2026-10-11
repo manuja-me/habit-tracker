@@ -198,6 +198,69 @@ export function hashPin(pin: string): string {
   return crypto.createHash('sha256').update(pin.trim() + PIN_SALT).digest('hex');
 }
 
+const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1 };
+const SCRYPT_KEYLEN = 64;
+
+/**
+ * Hash a PIN using memory-hard Scrypt with a unique 16-byte per-user random salt
+ * Format: scrypt$<salt_hex>$<derived_key_hex>
+ */
+export function hashPinScrypt(pin: string, customSaltHex?: string): string {
+  const saltHex = customSaltHex || crypto.randomBytes(16).toString('hex');
+  const derivedKey = crypto
+    .scryptSync(pin.trim() + PIN_SALT, saltHex, SCRYPT_KEYLEN, SCRYPT_PARAMS)
+    .toString('hex');
+  return `scrypt$${saltHex}$${derivedKey}`;
+}
+
+export function isScryptHash(storedHash?: string | null): boolean {
+  return Boolean(storedHash && storedHash.startsWith('scrypt$'));
+}
+
+/**
+ * Timing-safe verification supporting both Scrypt per-user salted hashes and legacy SHA-256 hashes
+ */
+export function verifyPinHash(enteredPin: string, storedHash: string): boolean {
+  if (!enteredPin || !storedHash) return false;
+  const cleanPin = enteredPin.trim();
+
+  if (storedHash.startsWith('scrypt$')) {
+    const parts = storedHash.split('$');
+    if (parts.length !== 3) return false;
+    const [, saltHex, keyHex] = parts;
+    if (!saltHex || !keyHex) return false;
+    try {
+      const derivedBuf = crypto.scryptSync(cleanPin + PIN_SALT, saltHex, SCRYPT_KEYLEN, SCRYPT_PARAMS);
+      const storedBuf = Buffer.from(keyHex, 'hex');
+      return derivedBuf.length === storedBuf.length && crypto.timingSafeEqual(derivedBuf, storedBuf);
+    } catch {
+      return false;
+    }
+  }
+
+  // Legacy SHA-256 fallback (zero data loss for existing accounts before auto-upgrade)
+  const computedLegacy = Buffer.from(hashPin(cleanPin));
+  const storedLegacy = Buffer.from(storedHash);
+  return computedLegacy.length === storedLegacy.length && crypto.timingSafeEqual(computedLegacy, storedLegacy);
+}
+
+/**
+ * Validates whether a PIN is a valid 6-digit PIN (or legacy 4-digit PIN when allowLegacy4Digit=true)
+ */
+export function isValidPinFormat(pin: string, allowLegacy4Digit = false): boolean {
+  if (!pin || typeof pin !== 'string') return false;
+  const trimmed = pin.trim();
+  if (/^\d{6}$/.test(trimmed)) return true;
+  if (allowLegacy4Digit && /^\d{4}$/.test(trimmed)) return true;
+  return false;
+}
+
+export function verifyMasterPin(enteredPin: string): boolean {
+  const computedBuf = Buffer.from(hashPin(enteredPin.trim()));
+  const masterBuf = Buffer.from(MASTER_PIN_HASH);
+  return computedBuf.length === masterBuf.length && crypto.timingSafeEqual(computedBuf, masterBuf);
+}
+
 export function createSessionToken(user: SessionUser): string {
   const payload = Buffer.from(
     JSON.stringify({

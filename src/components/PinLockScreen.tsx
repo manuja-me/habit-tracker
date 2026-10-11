@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { verifyPinAction, reactivateAccountAction, lockSessionAction } from '../lib/server/auth';
+import { verifyPinAction, reactivateAccountAction, lockSessionAction, changePinAction } from '../lib/server/auth';
 import { Lock, ShieldAlert, Delete, Clock, ShieldCheck } from 'lucide-react';
 import { ReactivationModal } from './ReactivationModal';
 import { ZenithLogo } from './ui/ZenithLogo';
@@ -15,6 +15,8 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
+  const [legacyPinToUpgrade, setLegacyPinToUpgrade] = useState<string | null>(null);
+  const [pendingNewPin, setPendingNewPin] = useState<string | null>(null);
   const [reactivationInfo, setReactivationInfo] = useState<{
     username: string;
     deactivatedAt: string;
@@ -27,13 +29,17 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   const isVerifyingRef = useRef(isVerifying);
   const lockoutSecondsRef = useRef(lockoutSeconds);
   const reactivationInfoRef = useRef(reactivationInfo);
+  const legacyPinRef = useRef(legacyPinToUpgrade);
+  const pendingNewPinRef = useRef(pendingNewPin);
 
   useEffect(() => {
     pinRef.current = pin;
     isVerifyingRef.current = isVerifying;
     lockoutSecondsRef.current = lockoutSeconds;
     reactivationInfoRef.current = reactivationInfo;
-  }, [pin, isVerifying, lockoutSeconds, reactivationInfo]);
+    legacyPinRef.current = legacyPinToUpgrade;
+    pendingNewPinRef.current = pendingNewPin;
+  }, [pin, isVerifying, lockoutSeconds, reactivationInfo, legacyPinToUpgrade, pendingNewPin]);
 
   // Auto focus container on mount so key events work instantly without clicking
   useEffect(() => {
@@ -54,9 +60,37 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
     }
   }, [lockoutSeconds]);
 
+  const submitPinUpgrade = useCallback(async (oldPin: string, newSixDigitPin: string) => {
+    isVerifyingRef.current = true;
+    setIsVerifying(true);
+    setErrorMsg(null);
+    try {
+      const res = await changePinAction(oldPin, newSixDigitPin);
+      if (res.success) {
+        onUnlock();
+      } else {
+        setErrorMsg(res.error || 'FAILED TO UPGRADE PIN');
+        pendingNewPinRef.current = null;
+        setPendingNewPin(null);
+        pinRef.current = '';
+        setPin('');
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setErrorMsg(message || 'FAILED TO UPGRADE PIN');
+      pendingNewPinRef.current = null;
+      setPendingNewPin(null);
+      pinRef.current = '';
+      setPin('');
+    } finally {
+      isVerifyingRef.current = false;
+      setIsVerifying(false);
+    }
+  }, [onUnlock]);
+
   const verifyAndSubmit = useCallback(async (enteredPin: string) => {
     if (
-      enteredPin.length !== 4 ||
+      (enteredPin.length !== 6 && enteredPin.length !== 4) ||
       isVerifyingRef.current ||
       lockoutSecondsRef.current !== null ||
       reactivationInfoRef.current !== null
@@ -76,6 +110,13 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
             deactivatedAt: result.deactivatedAt,
             remainingMs: result.remainingMs || 0,
           });
+          return;
+        }
+        if (result.isLegacyPin) {
+          legacyPinRef.current = enteredPin;
+          setLegacyPinToUpgrade(enteredPin);
+          pinRef.current = '';
+          setPin('');
           return;
         }
         onUnlock();
@@ -140,15 +181,33 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   const handleDigitPress = useCallback((digit: string) => {
     if (lockoutSecondsRef.current !== null || isVerifyingRef.current) return;
     const currentPin = pinRef.current;
-    if (currentPin.length < 4) {
+    if (currentPin.length < 6) {
       const nextPin = currentPin + digit;
       pinRef.current = nextPin;
       setPin(nextPin);
-      if (nextPin.length === 4) {
-        verifyAndSubmit(nextPin);
+      if (nextPin.length === 6) {
+        if (legacyPinRef.current) {
+          if (!pendingNewPinRef.current) {
+            pendingNewPinRef.current = nextPin;
+            setPendingNewPin(nextPin);
+            pinRef.current = '';
+            setPin('');
+            setErrorMsg(null);
+          } else if (pendingNewPinRef.current === nextPin) {
+            submitPinUpgrade(legacyPinRef.current, nextPin);
+          } else {
+            setErrorMsg('PINS DO NOT MATCH // Enter new 6-digit PIN again.');
+            pendingNewPinRef.current = null;
+            setPendingNewPin(null);
+            pinRef.current = '';
+            setPin('');
+          }
+        } else {
+          verifyAndSubmit(nextPin);
+        }
       }
     }
-  }, [verifyAndSubmit]);
+  }, [verifyAndSubmit, submitPinUpgrade]);
 
   const handleBackspace = useCallback(() => {
     if (lockoutSecondsRef.current !== null || isVerifyingRef.current) return;
@@ -180,6 +239,9 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
       if (e.key >= '0' && e.key <= '9') {
         e.preventDefault();
         handleDigitPress(e.key);
+      } else if (e.key === 'Enter' && !legacyPinRef.current && (pinRef.current.length === 4 || pinRef.current.length === 6)) {
+        e.preventDefault();
+        verifyAndSubmit(pinRef.current);
       } else if (e.key === 'Backspace') {
         e.preventDefault();
         handleBackspace();
@@ -191,11 +253,12 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [handleDigitPress, handleBackspace, handleClear]);
+  }, [handleDigitPress, handleBackspace, handleClear, verifyAndSubmit]);
 
   const handlePaste = (e: React.ClipboardEvent) => {
     const text = e.clipboardData.getData('text').trim();
-    if (/^\d{4}$/.test(text) && lockoutSecondsRef.current === null && !isVerifyingRef.current) {
+    if (legacyPinRef.current) return;
+    if (/^\d{4}$|^\d{6}$/.test(text) && lockoutSecondsRef.current === null && !isVerifyingRef.current) {
       e.preventDefault();
       pinRef.current = text;
       setPin(text);
@@ -220,34 +283,42 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] font-mono font-bold text-[#FF3B30]">00 //</span>
                   <h1 className="text-base sm:text-lg font-black font-sans uppercase tracking-tight text-main">
-                    ZENITH GATE
+                    {legacyPinToUpgrade ? 'PIN MIGRATION' : 'ZENITH GATE'}
                   </h1>
                 </div>
                 <div className="text-[9px] font-mono tracking-widest text-sub uppercase">
-                  AUTHENTICATION PROTOCOL
+                  {legacyPinToUpgrade
+                    ? pendingNewPin
+                      ? 'STEP 2 OF 2 // CONFIRM 6-DIGIT PIN'
+                      : 'STEP 1 OF 2 // SET NEW 6-DIGIT PIN'
+                    : 'AUTHENTICATION PROTOCOL'}
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-[#FF3B30] border border-[#FF3B30] px-2 py-0.5 bg-[#FF3B30]/10">
               <Lock className="w-3 h-3" />
-              <span>SECURED</span>
+              <span>{legacyPinToUpgrade ? 'UPGRADE' : 'SECURED'}</span>
             </div>
           </div>
           <p className="text-xs font-mono text-sub pt-1 leading-tight">
-            Enter 4-digit protocol PIN to unlock your personal workspace.
+            {legacyPinToUpgrade
+              ? pendingNewPin
+                ? 'Re-enter your new 6-digit PIN to save Scrypt upgrade and unlock.'
+                : '4-digit PIN verified. Enter a new 6-digit PIN to upgrade your account.'
+              : 'Enter 6-digit protocol PIN to unlock your personal workspace.'}
           </p>
         </div>
 
-        {/* PIN Digits Display (Swiss Modular Grid) */}
+        {/* PIN Digits Display (Swiss Modular 6-Slot Grid) */}
         <div className="space-y-3">
-          <div className="grid grid-cols-4 gap-2.5 sm:gap-3 py-1">
-            {[0, 1, 2, 3].map((index) => {
+          <div className="grid grid-cols-6 gap-1.5 sm:gap-2 py-1">
+            {[0, 1, 2, 3, 4, 5].map((index) => {
               const isFilled = pin.length > index;
               return (
                 <div
                   key={index}
-                  className={`h-16 sm:h-18 rounded-none flex items-center justify-center border-2 transition-all duration-100 ${
+                  className={`h-13 sm:h-14 rounded-none flex items-center justify-center border-2 transition-all duration-100 ${
                     errorMsg
                       ? 'border-[#FF3B30] bg-[#FF3B30]/10 text-[#FF3B30]'
                       : isFilled
@@ -256,9 +327,9 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
                   }`}
                 >
                   {isFilled ? (
-                    <span className="w-3.5 h-3.5 rounded-none bg-[#FF3B30] shadow-xs" />
+                    <span className="w-3 h-3 rounded-none bg-[#FF3B30] shadow-xs" />
                   ) : (
-                    <span className="text-xs font-mono text-muted-custom font-bold">
+                    <span className="text-[11px] font-mono text-muted-custom font-bold">
                       {`0${index + 1}`}
                     </span>
                   )}
@@ -266,6 +337,26 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
               );
             })}
           </div>
+
+          {!legacyPinToUpgrade && pin.length === 4 && !isVerifying && lockoutSeconds === null && (
+            <button
+              type="button"
+              onClick={() => verifyAndSubmit(pin)}
+              className="w-full py-1.5 px-2.5 bg-subtle hover:bg-[#FF3B30]/15 border border-main hover:border-[#FF3B30] text-[10px] font-mono font-bold uppercase tracking-wider text-sub hover:text-[#FF3B30] transition-colors cursor-pointer"
+            >
+              USING LEGACY 4-DIGIT PIN? PRESS ENTER [↵] TO UNLOCK
+            </button>
+          )}
+
+          {legacyPinToUpgrade && !isVerifying && (
+            <button
+              type="button"
+              onClick={() => onUnlock()}
+              className="w-full py-1.5 px-2.5 bg-subtle hover:bg-input border border-subtle text-[10px] font-mono font-bold uppercase tracking-wider text-sub hover:text-main transition-colors cursor-pointer"
+            >
+              SKIP FOR NOW // UPGRADE LATER IN SETTINGS →
+            </button>
+          )}
 
           {/* Feedback & Status Indicators */}
           {errorMsg && (
@@ -340,7 +431,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
         {/* Telemetry & Keyboard Hint */}
         <div className="pt-3 border-t border-subtle flex items-center justify-between text-[10px] font-mono text-sub">
           <span className="flex items-center gap-1">
-            <ShieldCheck className="w-3 h-3 text-[#FF3B30]" /> SHA-256 SALT
+            <ShieldCheck className="w-3 h-3 text-[#FF3B30]" /> SCRYPT-64 // DB GUARD
           </span>
           <span className="uppercase tracking-widest text-muted-custom">
             KEYBOARD READY [0-9]

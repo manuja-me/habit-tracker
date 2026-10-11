@@ -10,6 +10,11 @@ import {
   checkRateLimit,
   recordFailedAttempt,
   resetFailedAttempts,
+  hashPin,
+  hashPinScrypt,
+  verifyPinHash,
+  isScryptHash,
+  isValidPinFormat,
   SESSION_MAX_AGE_MS,
   SECRET_HMAC_KEY,
 } from '../src/lib/server/auth-utils.ts';
@@ -34,6 +39,10 @@ test('Finding 1: RLS policies in schema.sql restrict habits, habit_logs, and day
   assert.match(
     schema,
     /CREATE POLICY "Allow service role only day_notes" ON public\.day_notes FOR ALL TO service_role USING \(true\) WITH CHECK \(true\);/
+  );
+  assert.match(
+    schema,
+    /CREATE POLICY "Allow service role only auth_rate_limits" ON public\.auth_rate_limits FOR ALL TO service_role USING \(true\) WITH CHECK \(true\);/
   );
 });
 
@@ -281,4 +290,27 @@ test('Finding 5: PIN and username collision error messages are generic to preven
     authCode,
     /Unable to complete registration with the provided details\. Please choose a different PIN or display name\./
   );
+});
+
+test('Finding 6: 6-digit Scrypt per-user salted PIN hashing and zero-data-loss legacy SHA-256 compatibility', () => {
+  // 1. 6-digit format required for new PINs; 4-digit allowed only when allowLegacy4Digit=true
+  assert.equal(isValidPinFormat('482910', false), true);
+  assert.equal(isValidPinFormat('1001', false), false);
+  assert.equal(isValidPinFormat('1001', true), true);
+  assert.equal(isValidPinFormat('12345', true), false);
+
+  // 2. Scrypt hashes use unique per-user salts even for identical PINs
+  const h1 = hashPinScrypt('482910');
+  const h2 = hashPinScrypt('482910');
+  assert.ok(isScryptHash(h1));
+  assert.notEqual(h1, h2, 'Each Scrypt hash must have a unique random salt');
+  assert.equal(verifyPinHash('482910', h1), true);
+  assert.equal(verifyPinHash('482910', h2), true);
+  assert.equal(verifyPinHash('000000', h1), false);
+
+  // 3. Existing legacy SHA-256 hashes still verify (zero data loss for existing DB accounts)
+  const legacyHash = hashPin('1001');
+  assert.equal(isScryptHash(legacyHash), false);
+  assert.equal(verifyPinHash('1001', legacyHash), true);
+  assert.equal(verifyPinHash('9999', legacyHash), false);
 });

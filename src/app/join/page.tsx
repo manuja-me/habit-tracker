@@ -61,8 +61,8 @@ function JoinForm() {
       return;
     }
 
-    if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-      setErrorMsg('PIN must be exactly 4 numeric digits.');
+    if (!pin || pin.length !== 6 || !/^\d{6}$/.test(pin)) {
+      setErrorMsg('PIN must be exactly 6 numeric digits.');
       return;
     }
 
@@ -141,7 +141,7 @@ function JoinForm() {
           PRIVATE PROFILE SETUP
         </h1>
         <p className="text-xs font-mono text-sub mt-1">
-          Set up your private account and choose your personal 4-digit PIN.
+          Set up your private account and choose your personal 6-digit PIN.
         </p>
       </div>
 
@@ -179,22 +179,22 @@ function JoinForm() {
           </div>
         </div>
 
-        {/* 4-digit PIN */}
+        {/* 6-digit PIN */}
         <div className="space-y-1.5">
           <label className="block text-xs font-mono font-bold uppercase tracking-wider text-sub">
-            CHOOSE A 4-DIGIT PIN
+            CHOOSE A 6-DIGIT PIN
           </label>
           <div className="relative flex items-center">
             <KeyRound className="absolute left-3 w-4 h-4 text-sub" />
             <input
               type="password"
               inputMode="numeric"
-              maxLength={4}
+              maxLength={6}
               required
               disabled={isSubmitting || isSuccess}
               value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-              placeholder="••••"
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="••••••"
               className="w-full pl-9 pr-3 py-2.5 bg-input border border-main text-base font-mono tracking-widest text-main placeholder-muted-custom focus:outline-none focus:border-[#FF3B30] transition-colors"
             />
           </div>
@@ -203,19 +203,19 @@ function JoinForm() {
         {/* Confirm PIN */}
         <div className="space-y-1.5">
           <label className="block text-xs font-mono font-bold uppercase tracking-wider text-sub">
-            CONFIRM 4-DIGIT PIN
+            CONFIRM 6-DIGIT PIN
           </label>
           <div className="relative flex items-center">
             <KeyRound className="absolute left-3 w-4 h-4 text-sub" />
             <input
               type="password"
               inputMode="numeric"
-              maxLength={4}
+              maxLength={6}
               required
               disabled={isSubmitting || isSuccess}
               value={confirmPin}
-              onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-              placeholder="••••"
+              onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="••••••"
               className="w-full pl-9 pr-3 py-2.5 bg-input border border-main text-base font-mono tracking-widest text-main placeholder-muted-custom focus:outline-none focus:border-[#FF3B30] transition-colors"
             />
           </div>

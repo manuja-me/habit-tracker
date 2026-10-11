@@ -6,15 +6,20 @@ import { getServerSupabase } from './supabase';
 import { purgeUserData } from './user-management';
 import {
   OWNER_USER_ID,
-  MASTER_PIN_HASH,
   COOKIE_NAME,
   RL_COOKIE_NAME,
   SECRET_HMAC_KEY,
   SessionUser,
+  getBackoffSeconds,
   checkRateLimit,
   recordFailedAttempt,
   resetFailedAttempts,
-  hashPin,
+  signRateLimitToken,
+  hashPinScrypt,
+  isScryptHash,
+  verifyPinHash,
+  verifyMasterPin,
+  isValidPinFormat,
   createSessionToken,
   getSessionUserFromToken,
   getClientIp,
@@ -28,37 +33,117 @@ const COOKIE_OPTS = {
   path: '/',
 };
 
+const RATE_LIMIT_TTL_MS = 24 * 60 * 60 * 1000;
+
 async function getRateLimitContext() {
   const headerList = await headers();
   const clientIp = getClientIp(headerList);
   const rateLimitKey = `pin_rl_${clientIp}`;
   const cookieStore = await cookies();
   const rlCookie = cookieStore.get(RL_COOKIE_NAME)?.value;
-  const rateCheck = checkRateLimit(rateLimitKey, rlCookie);
+  let rateCheck = checkRateLimit(rateLimitKey, rlCookie);
+
+  // Query persistent DB-backed rate limit (survives serverless cold starts & cookie clearing)
+  const supabase = getServerSupabase();
+  if (supabase) {
+    try {
+      const { data } = await supabase
+        .from('auth_rate_limits')
+        .select('count, locked_until, last_attempt')
+        .eq('key', rateLimitKey)
+        .maybeSingle();
+
+      if (data) {
+        const now = Date.now();
+        const lastAttemptMs = data.last_attempt ? new Date(data.last_attempt).getTime() : 0;
+        const isExpired = lastAttemptMs > 0 && now - lastAttemptMs > RATE_LIMIT_TTL_MS;
+        if (!isExpired) {
+          const dbCount = Number(data.count) || 0;
+          const dbLockedUntil = data.locked_until ? new Date(data.locked_until).getTime() : 0;
+          const effectiveCount = Math.max(rateCheck.currentCount, dbCount);
+          const effectiveLockedUntil = Math.max(rateCheck.lockedUntil, dbLockedUntil);
+          if (effectiveLockedUntil > now) {
+            rateCheck = {
+              allowed: false,
+              waitSeconds: Math.ceil((effectiveLockedUntil - now) / 1000),
+              currentCount: effectiveCount,
+              lockedUntil: effectiveLockedUntil,
+            };
+          } else {
+            rateCheck = {
+              allowed: true,
+              currentCount: effectiveCount,
+              lockedUntil: 0,
+            };
+          }
+        }
+      }
+    } catch {
+      // Graceful fallback if auth_rate_limits table is not migrated yet
+    }
+  }
+
   return { rateLimitKey, cookieStore, rlCookie, rateCheck };
 }
 
-function recordAndPersistFailure(
+async function recordAndPersistFailure(
   rateLimitKey: string,
   rlCookie: string | undefined,
+  cookieStore: Awaited<ReturnType<typeof cookies>>,
+  priorCount = 0
+) {
+  const localFail = recordFailedAttempt(rateLimitKey, rlCookie);
+  const nextCount = Math.max(localFail.count, priorCount + 1);
+  const waitSeconds = getBackoffSeconds(nextCount);
+  const now = Date.now();
+  const lockedUntil = waitSeconds > 0 ? now + waitSeconds * 1000 : 0;
+  const token = signRateLimitToken(nextCount, lockedUntil);
+
+  cookieStore.set(RL_COOKIE_NAME, token, {
+    ...COOKIE_OPTS,
+    maxAge: Math.max(86400, waitSeconds || 3600),
+  });
+
+  const supabase = getServerSupabase();
+  if (supabase) {
+    try {
+      await supabase.from('auth_rate_limits').upsert({
+        key: rateLimitKey,
+        count: nextCount,
+        locked_until: lockedUntil > 0 ? new Date(lockedUntil).toISOString() : null,
+        last_attempt: new Date(now).toISOString(),
+      });
+    } catch {
+      // Ignore if auth_rate_limits table is not migrated yet
+    }
+  }
+
+  return { count: nextCount, lockedUntil, waitSeconds, token };
+}
+
+async function clearRateLimits(
+  rateLimitKey: string,
   cookieStore: Awaited<ReturnType<typeof cookies>>
 ) {
-  const fail = recordFailedAttempt(rateLimitKey, rlCookie);
-  cookieStore.set(RL_COOKIE_NAME, fail.token, {
-    ...COOKIE_OPTS,
-    maxAge: Math.max(86400, fail.waitSeconds || 3600),
-  });
-  return fail;
+  resetFailedAttempts(rateLimitKey);
+  cookieStore.delete(RL_COOKIE_NAME);
+  const supabase = getServerSupabase();
+  if (supabase) {
+    try {
+      await supabase.from('auth_rate_limits').delete().eq('key', rateLimitKey);
+    } catch {}
+  }
 }
 
 /**
- * Server Action: Verify 4-digit PIN against Master Owner or Multi-User Database
+ * Server Action: Verify 6-digit PIN (or legacy 4-digit PIN for zero-data-loss migration)
  */
 export async function verifyPinAction(enteredPin: string): Promise<{
   success: boolean;
   error?: string;
   waitSeconds?: number;
   user?: SessionUser;
+  isLegacyPin?: boolean;
   requiresReactivation?: boolean;
   deactivatedAt?: string;
   remainingMs?: number;
@@ -74,89 +159,94 @@ export async function verifyPinAction(enteredPin: string): Promise<{
       };
     }
 
-    if (!enteredPin || enteredPin.length !== 4) {
-      const fail = recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
+    if (!isValidPinFormat(enteredPin, true)) {
+      const fail = await recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore, rateCheck.currentCount);
       return {
         success: false,
         error: fail.waitSeconds > 0
           ? `TOO MANY FAILED ATTEMPTS // Locked out for ${fail.waitSeconds}s.`
-          : 'Invalid PIN length.',
+          : 'PIN must be 6 digits (or 4-digit legacy PIN).',
         waitSeconds: fail.waitSeconds > 0 ? fail.waitSeconds : undefined,
       };
     }
 
     const cleanPin = enteredPin.trim();
-    const computedHash = hashPin(cleanPin);
-
-    // 1. Check Master Owner PIN with buffer length check
-    const computedBuf = Buffer.from(computedHash);
-    const masterBuf = Buffer.from(MASTER_PIN_HASH);
-    const isOwnerMatch =
-      computedBuf.length === masterBuf.length &&
-      crypto.timingSafeEqual(computedBuf, masterBuf);
-
     let matchedUser: SessionUser | null = null;
+    let matchedPinHash: string | null = null;
     let userDeactivatedAt: string | null = null;
+    let ownerHasCustomDbPin = false;
 
-    if (isOwnerMatch) {
+    // 1. Query app_users table in Supabase (supports Scrypt per-user salt & legacy SHA-256)
+    const supabase = getServerSupabase();
+    if (supabase) {
+      try {
+        let rows: Array<{
+          id: string;
+          username: string;
+          role?: string;
+          pin_hash: string;
+          deactivated_at?: string | null;
+        }> = [];
+
+        const { data, error } = await supabase
+          .from('app_users')
+          .select('id, username, role, pin_hash, deactivated_at');
+
+        if (error && (error.message?.includes('deactivated_at') || error.code === '42703')) {
+          const fallback = await supabase
+            .from('app_users')
+            .select('id, username, role, pin_hash');
+
+          if (fallback.error) {
+            console.error('Supabase app_users query error:', fallback.error.message);
+            return { success: false, error: 'Database connection error. Please try again.' };
+          }
+          rows = (fallback.data || []).map((r) => ({ ...r, deactivated_at: null }));
+        } else if (error) {
+          console.error('Supabase app_users query error:', error.message);
+          return { success: false, error: 'Database connection error. Please try again.' };
+        } else {
+          rows = data || [];
+        }
+
+        const ownerRow = rows.find((r) => r.id === OWNER_USER_ID || r.role === 'owner');
+        if (ownerRow && isScryptHash(ownerRow.pin_hash)) {
+          ownerHasCustomDbPin = true;
+        }
+
+        for (const row of rows) {
+          if (verifyPinHash(cleanPin, row.pin_hash)) {
+            matchedUser = {
+              userId: row.id,
+              username: row.username,
+              role: (row.role as 'owner' | 'member') || 'member',
+            };
+            matchedPinHash = row.pin_hash;
+            userDeactivatedAt = row.deactivated_at || null;
+            break;
+          }
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('app_users table lookup exception:', message);
+        return { success: false, error: 'Database connection failed. Please retry in a moment.' };
+      }
+    }
+
+    // 2. Fallback to Master Owner PIN from environment if not overridden by a custom Scrypt DB PIN
+    if (!matchedUser && !ownerHasCustomDbPin && verifyMasterPin(cleanPin)) {
       matchedUser = {
         userId: OWNER_USER_ID,
         username: 'owner',
         role: 'owner',
       };
-    } else {
-      // 2. Query app_users table in Supabase
-      const supabase = getServerSupabase();
-      if (supabase) {
-        try {
-          const { data, error } = await supabase
-            .from('app_users')
-            .select('id, username, role, pin_hash, deactivated_at')
-            .eq('pin_hash', computedHash)
-            .maybeSingle();
-
-          let userData: { id: string; username: string; role?: string; pin_hash: string; deactivated_at?: string | null } | null = null;
-
-          if (error && (error.message?.includes('deactivated_at') || error.code === '42703')) {
-            const fallback = await supabase
-              .from('app_users')
-              .select('id, username, role, pin_hash')
-              .eq('pin_hash', computedHash)
-              .maybeSingle();
-
-            if (fallback.error) {
-              console.error('Supabase app_users query error:', fallback.error.message);
-              return { success: false, error: 'Database connection error. Please try again.' };
-            }
-            userData = fallback.data ? { ...fallback.data, deactivated_at: null } : null;
-          } else if (error) {
-            console.error('Supabase app_users query error:', error.message);
-            return { success: false, error: 'Database connection error. Please try again.' };
-          } else {
-            userData = data;
-          }
-
-          if (userData) {
-            matchedUser = {
-              userId: userData.id,
-              username: userData.username,
-              role: (userData.role as 'owner' | 'member') || 'member',
-            };
-            userDeactivatedAt = userData.deactivated_at || null;
-          }
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : String(err);
-          console.error('app_users table lookup exception:', message);
-          return { success: false, error: 'Database connection failed. Please retry in a moment.' };
-        }
-      }
     }
 
     if (!matchedUser) {
       // Artificial delay to prevent automated high-speed brute-forcing
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 250));
 
-      const fail = recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
+      const fail = await recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore, rateCheck.currentCount);
 
       if (fail.waitSeconds > 0) {
         return {
@@ -184,11 +274,10 @@ export async function verifyPinAction(enteredPin: string): Promise<{
       const remainingMs = SEVEN_DAYS_MS - (now - deactivatedTime);
 
       if (remainingMs <= 0) {
-        // Exceeded 7 days: Permanently wipe user account data
         if (supabaseClient) {
           await purgeUserData(supabaseClient, matchedUser.userId);
         }
-        const fail = recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
+        const fail = await recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore, rateCheck.currentCount);
         return {
           success: false,
           error: 'ACCOUNT EXPIRED // This account was permanently deleted after 7 days of inactivity.',
@@ -196,9 +285,7 @@ export async function verifyPinAction(enteredPin: string): Promise<{
         };
       }
 
-      // Within 7 days: User can reactivate
-      resetFailedAttempts(rateLimitKey);
-      cookieStore.delete(RL_COOKIE_NAME);
+      await clearRateLimits(rateLimitKey, cookieStore);
       cookieStore.set(COOKIE_NAME, createSessionToken({ ...matchedUser, isDeactivated: true }), COOKIE_OPTS);
 
       return {
@@ -207,23 +294,27 @@ export async function verifyPinAction(enteredPin: string): Promise<{
         deactivatedAt: userDeactivatedAt,
         remainingMs,
         user: matchedUser,
+        isLegacyPin: cleanPin.length === 4,
       };
     }
 
     // Normal active login: Reset rate limits and issue secure HttpOnly cookie
-    resetFailedAttempts(rateLimitKey);
-    cookieStore.delete(RL_COOKIE_NAME);
+    await clearRateLimits(rateLimitKey, cookieStore);
     const token = createSessionToken(matchedUser);
 
-    // Record last login timestamp in app_users
+    // Record last login timestamp & transparently upgrade 6-digit SHA-256 hash to Scrypt if needed
     const supabaseClient = getServerSupabase();
     if (supabaseClient) {
       try {
+        const updateFields: Record<string, unknown> = {
+          last_login_at: new Date().toISOString(),
+        };
+        if (cleanPin.length === 6 && matchedPinHash && !isScryptHash(matchedPinHash)) {
+          updateFields.pin_hash = hashPinScrypt(cleanPin);
+        }
         await supabaseClient
           .from('app_users')
-          .update({
-            last_login_at: new Date().toISOString(),
-          })
+          .update(updateFields)
           .eq('id', matchedUser.userId);
       } catch (logErr) {
         console.warn('Could not record last_login_at:', logErr);
@@ -232,7 +323,11 @@ export async function verifyPinAction(enteredPin: string): Promise<{
 
     cookieStore.set(COOKIE_NAME, token, COOKIE_OPTS);
 
-    return { success: true, user: matchedUser };
+    return {
+      success: true,
+      user: matchedUser,
+      isLegacyPin: cleanPin.length === 4,
+    };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('Unhandled verifyPinAction error:', message);
@@ -374,7 +469,7 @@ export async function validateInviteTokenAction(fullToken: string): Promise<{
 }
 
 /**
- * Server Action: Complete friend registration using invite token and private PIN
+ * Server Action: Complete friend registration using invite token and private 6-digit PIN
  */
 export async function completeInviteSetupAction(
   fullToken: string,
@@ -403,21 +498,13 @@ export async function completeInviteSetupAction(
     return { success: false, error: 'Please enter a name of at least 2 characters.' };
   }
 
-  if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-    return { success: false, error: 'PIN must be exactly 4 numeric digits.' };
+  if (!isValidPinFormat(pin, false)) {
+    return { success: false, error: 'PIN must be exactly 6 numeric digits.' };
   }
 
-  const hashedPin = hashPin(pin);
-
-  // Prevent duplicate PIN with Owner (timing-safe comparison)
-  const hashedBuf = Buffer.from(hashedPin);
-  const masterBuf = Buffer.from(MASTER_PIN_HASH);
-  const isOwnerPin =
-    hashedBuf.length === masterBuf.length &&
-    crypto.timingSafeEqual(hashedBuf, masterBuf);
-
-  if (isOwnerPin) {
-    recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
+  // Prevent duplicate PIN with Master Owner
+  if (verifyMasterPin(pin)) {
+    await recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore, rateCheck.currentCount);
     return {
       success: false,
       error: 'Unable to complete registration with the provided details. Please choose a different PIN or display name.',
@@ -430,36 +517,27 @@ export async function completeInviteSetupAction(
   }
 
   try {
-    // Check if username already exists
-    const { data: existingUser } = await supabase
+    // Check if username or PIN already exists across app_users
+    const { data: existingUsers } = await supabase
       .from('app_users')
-      .select('id')
-      .eq('username', cleanUsername)
-      .maybeSingle();
+      .select('id, username, pin_hash');
 
-    if (existingUser) {
-      recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
+    const normalizedName = cleanUsername.toLowerCase();
+    const hasCollision = (existingUsers || []).some(
+      (u) =>
+        u.username?.trim().toLowerCase() === normalizedName ||
+        verifyPinHash(pin, u.pin_hash)
+    );
+
+    if (hasCollision) {
+      await recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore, rateCheck.currentCount);
       return {
         success: false,
         error: 'Unable to complete registration with the provided details. Please choose a different PIN or display name.',
       };
     }
 
-    // Check if PIN already used by another user
-    const { data: existingPin } = await supabase
-      .from('app_users')
-      .select('id')
-      .eq('pin_hash', hashedPin)
-      .maybeSingle();
-
-    if (existingPin) {
-      recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
-      return {
-        success: false,
-        error: 'Unable to complete registration with the provided details. Please choose a different PIN or display name.',
-      };
-    }
-
+    const hashedPin = hashPinScrypt(pin);
     const [rawToken] = fullToken.split('.');
     const nowIso = new Date().toISOString();
 
@@ -477,7 +555,7 @@ export async function completeInviteSetupAction(
       return { success: false, error: 'This invitation has already been used or has expired.' };
     }
 
-    // Insert new user
+    // Insert new user with per-user salted Scrypt hash
     const newUserPayload = {
       username: cleanUsername,
       pin_hash: hashedPin,
@@ -521,14 +599,116 @@ export async function completeInviteSetupAction(
       role: 'member',
     };
 
-    resetFailedAttempts(rateLimitKey);
-    cookieStore.delete(RL_COOKIE_NAME);
+    await clearRateLimits(rateLimitKey, cookieStore);
     cookieStore.set(COOKIE_NAME, createSessionToken(sessionUser), COOKIE_OPTS);
 
     return { success: true, user: sessionUser };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     return { success: false, error: message || 'Failed to complete registration' };
+  }
+}
+
+/**
+ * Server Action: Change / Upgrade current user's PIN to a 6-digit Scrypt-hashed PIN (Zero Data Loss)
+ */
+export async function changePinAction(
+  currentPin: string,
+  newPin: string
+): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    const user = await requireAuth();
+    const { rateLimitKey, cookieStore, rlCookie, rateCheck } = await getRateLimitContext();
+    if (!rateCheck.allowed) {
+      return {
+        success: false,
+        error: `SECURITY LOCKOUT ACTIVE // ${rateCheck.waitSeconds}s remaining.`,
+      };
+    }
+
+    if (!isValidPinFormat(currentPin, true)) {
+      return { success: false, error: 'Current PIN must be 4 or 6 numeric digits.' };
+    }
+
+    if (!isValidPinFormat(newPin, false)) {
+      return { success: false, error: 'New PIN must be exactly 6 numeric digits.' };
+    }
+
+    const supabase = getServerSupabase();
+    if (!supabase) {
+      return { success: false, error: 'Database connection required to update PIN.' };
+    }
+
+    const { data: allUsers, error: fetchErr } = await supabase
+      .from('app_users')
+      .select('id, username, role, pin_hash');
+
+    if (fetchErr) {
+      return { success: false, error: 'Failed to verify current credentials.' };
+    }
+
+    const rows = allUsers || [];
+    const currentRow = rows.find((r) => r.id === user.userId);
+    const isOwner = isOwnerUser(user);
+
+    let currentPinValid = false;
+    if (currentRow && verifyPinHash(currentPin, currentRow.pin_hash)) {
+      currentPinValid = true;
+    } else if (isOwner && (!currentRow || !isScryptHash(currentRow.pin_hash)) && verifyMasterPin(currentPin)) {
+      currentPinValid = true;
+    }
+
+    if (!currentPinValid) {
+      const fail = await recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore, rateCheck.currentCount);
+      return {
+        success: false,
+        error: fail.waitSeconds > 0
+          ? `TOO MANY FAILED ATTEMPTS // Locked out for ${fail.waitSeconds}s.`
+          : 'Current PIN is incorrect.',
+      };
+    }
+
+    // Ensure new PIN does not collide with another user's PIN
+    const pinTakenByOther = rows.some(
+      (r) => r.id !== user.userId && verifyPinHash(newPin, r.pin_hash)
+    );
+    if (pinTakenByOther || (!isOwner && verifyMasterPin(newPin))) {
+      return {
+        success: false,
+        error: 'Please choose a different 6-digit PIN.',
+      };
+    }
+
+    const newScryptHash = hashPinScrypt(newPin);
+    const nowIso = new Date().toISOString();
+
+    if (currentRow) {
+      const { error: updateErr } = await supabase
+        .from('app_users')
+        .update({ pin_hash: newScryptHash, updated_at: nowIso })
+        .eq('id', user.userId);
+      if (updateErr) return { success: false, error: updateErr.message };
+    } else if (isOwner) {
+      const { error: upsertErr } = await supabase.from('app_users').upsert({
+        id: OWNER_USER_ID,
+        username: 'owner',
+        pin_hash: newScryptHash,
+        role: 'owner',
+        updated_at: nowIso,
+      });
+      if (upsertErr) return { success: false, error: upsertErr.message };
+    } else {
+      return { success: false, error: 'User account record not found.' };
+    }
+
+    await clearRateLimits(rateLimitKey, cookieStore);
+    return { success: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { success: false, error: message || 'Failed to update PIN.' };
   }
 }
 
@@ -617,13 +797,12 @@ export async function deactivateAccountAction(enteredPin: string): Promise<{
       };
     }
 
-    if (!enteredPin || enteredPin.length !== 4) {
-      recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
-      return { success: false, error: 'PIN must be exactly 4 digits.' };
+    if (!isValidPinFormat(enteredPin, true)) {
+      await recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore, rateCheck.currentCount);
+      return { success: false, error: 'PIN must be 6 digits (or 4-digit legacy PIN).' };
     }
 
     const cleanPin = enteredPin.trim();
-    const computedHash = hashPin(cleanPin);
 
     const supabase = getServerSupabase();
     if (!supabase) {
@@ -641,14 +820,10 @@ export async function deactivateAccountAction(enteredPin: string): Promise<{
       return { success: false, error: 'User record not found.' };
     }
 
-    const hashBuf = Buffer.from(computedHash);
-    const recordBuf = Buffer.from(userRecord.pin_hash);
-    const isPinValid =
-      hashBuf.length === recordBuf.length &&
-      crypto.timingSafeEqual(hashBuf, recordBuf);
+    const isPinValid = verifyPinHash(cleanPin, userRecord.pin_hash);
 
     if (!isPinValid) {
-      const fail = recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore);
+      const fail = await recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore, rateCheck.currentCount);
       return {
         success: false,
         error: fail.waitSeconds > 0
@@ -657,8 +832,7 @@ export async function deactivateAccountAction(enteredPin: string): Promise<{
       };
     }
 
-    resetFailedAttempts(rateLimitKey);
-    cookieStore.delete(RL_COOKIE_NAME);
+    await clearRateLimits(rateLimitKey, cookieStore);
 
     const nowIso = new Date().toISOString();
     const { error: updateErr } = await supabase

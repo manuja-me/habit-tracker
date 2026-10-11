@@ -20,12 +20,13 @@ import {
   ExternalLink,
   AlertTriangle,
   UserX,
+  KeyRound,
 } from 'lucide-react';
 import { GithubIcon } from './ui/GithubIcon';
 import { useHabitStore } from '../lib/store';
 import { useTheme, Theme, GruvboxAccent } from '../lib/theme';
 import { LAST_VISIT_STORAGE_KEY, formatLastVisitReadable } from '../lib/utils/presence';
-import { deactivateAccountAction } from '../lib/server/auth';
+import { deactivateAccountAction, changePinAction } from '../lib/server/auth';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -67,6 +68,12 @@ function SettingsModalDialog({
   const [isDeactivating, setIsDeactivating] = useState(false);
   const [deactivateError, setDeactivateError] = useState<string | null>(null);
 
+  const [showChangePin, setShowChangePin] = useState(false);
+  const [currentPinInput, setCurrentPinInput] = useState('');
+  const [newPinInput, setNewPinInput] = useState('');
+  const [isChangingPin, setIsChangingPin] = useState(false);
+  const [changePinMsg, setChangePinMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -84,8 +91,38 @@ function SettingsModalDialog({
     setTimeout(() => setJustSynced(false), 2000);
   };
 
+  const handleChangePinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isChangingPin) return;
+    setChangePinMsg(null);
+    if (currentPinInput.length !== 4 && currentPinInput.length !== 6) {
+      setChangePinMsg({ type: 'err', text: 'Enter your current 4 or 6-digit PIN.' });
+      return;
+    }
+    if (newPinInput.length !== 6) {
+      setChangePinMsg({ type: 'err', text: 'New PIN must be 6 digits.' });
+      return;
+    }
+    setIsChangingPin(true);
+    try {
+      const res = await changePinAction(currentPinInput, newPinInput);
+      if (res.success) {
+        setChangePinMsg({ type: 'ok', text: '6-digit Scrypt PIN saved (zero data loss).' });
+        setCurrentPinInput('');
+        setNewPinInput('');
+        setTimeout(() => setShowChangePin(false), 1500);
+      } else {
+        setChangePinMsg({ type: 'err', text: res.error || 'Failed to update PIN.' });
+      }
+    } catch {
+      setChangePinMsg({ type: 'err', text: 'Error updating PIN.' });
+    } finally {
+      setIsChangingPin(false);
+    }
+  };
+
   const handleDeactivateConfirm = async () => {
-    if (deactivatePin.length !== 4 || isDeactivating) return;
+    if ((deactivatePin.length !== 6 && deactivatePin.length !== 4) || isDeactivating) return;
     setIsDeactivating(true);
     setDeactivateError(null);
 
@@ -382,46 +419,112 @@ function SettingsModalDialog({
             Account & Security
           </label>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 bg-input border border-subtle">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 bg-card border border-main flex items-center justify-center text-main flex-shrink-0">
-                <Shield className="w-3.5 h-3.5 text-[#FF3B30]" />
-              </div>
-              <div>
-                <div className="text-xs font-sans font-bold text-main">
-                  {currentUser?.username ? currentUser.username.toUpperCase() : 'MASTER OWNER'}
+          <div className="p-3.5 bg-input border border-subtle space-y-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 bg-card border border-main flex items-center justify-center text-main flex-shrink-0">
+                  <Shield className="w-3.5 h-3.5 text-[#FF3B30]" />
                 </div>
-                <div className="text-[10px] font-mono text-sub uppercase">
-                  Role: {currentUser?.role || 'Owner'} &bull; Protected Vault
+                <div>
+                  <div className="text-xs font-sans font-bold text-main">
+                    {currentUser?.username ? currentUser.username.toUpperCase() : 'MASTER OWNER'}
+                  </div>
+                  <div className="text-[10px] font-mono text-sub uppercase">
+                    Role: {currentUser?.role || 'Owner'} &bull; Scrypt-64 Vault
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="flex items-center gap-2">
-              {onOpenInviteModal && (currentUser?.role === 'owner' || !currentUser) && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowChangePin((prev) => !prev);
+                    setChangePinMsg(null);
+                  }}
+                  className="flex items-center gap-1.5 h-8 px-3 border border-main hover:border-[#FF3B30] bg-card text-main text-xs font-mono font-bold transition-all cursor-pointer"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-[#FF3B30]" />
+                  <span>6-DIGIT PIN</span>
+                </button>
+
+                {onOpenInviteModal && (currentUser?.role === 'owner' || !currentUser) && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenInviteModal();
+                    }}
+                    className="flex items-center gap-1.5 h-8 px-3 border border-[#FF3B30]/40 hover:border-[#FF3B30] text-[#FF3B30] bg-[#FF3B30]/5 text-xs font-mono font-bold transition-all cursor-pointer"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>INVITE</span>
+                  </button>
+                )}
+
                 <button
                   onClick={() => {
                     onClose();
-                    onOpenInviteModal();
+                    onLockApp();
                   }}
-                  className="flex items-center gap-1.5 h-8 px-3 border border-[#FF3B30]/40 hover:border-[#FF3B30] text-[#FF3B30] bg-[#FF3B30]/5 text-xs font-mono font-bold transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 h-8 px-3 border border-subtle hover:border-rose-500 hover:text-rose-400 bg-card text-sub text-xs font-mono font-bold transition-all cursor-pointer"
                 >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  <span>INVITE</span>
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>LOCK</span>
                 </button>
-              )}
-
-              <button
-                onClick={() => {
-                  onClose();
-                  onLockApp();
-                }}
-                className="flex items-center gap-1.5 h-8 px-3 border border-subtle hover:border-rose-500 hover:text-rose-400 bg-card text-sub text-xs font-mono font-bold transition-all cursor-pointer"
-              >
-                <Lock className="w-3.5 h-3.5" />
-                <span>LOCK</span>
-              </button>
+              </div>
             </div>
+
+            {showChangePin && (
+              <form
+                onSubmit={handleChangePinSubmit}
+                className="p-3 bg-card border border-main space-y-2.5 animate-in fade-in"
+              >
+                <div className="text-[11px] font-mono font-bold text-main uppercase">
+                  UPGRADE / CHANGE TO 6-DIGIT SCRYPT PIN (ZERO DATA LOSS)
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={currentPinInput}
+                    onChange={(e) => setCurrentPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="Current PIN (4 or 6 digits)"
+                    className="h-8 px-2.5 bg-input border border-main text-xs font-mono text-main focus:outline-none focus:border-[#FF3B30]"
+                  />
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={newPinInput}
+                    onChange={(e) => setNewPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="New 6-digit PIN"
+                    className="h-8 px-2.5 bg-input border border-main text-xs font-mono text-main focus:outline-none focus:border-[#FF3B30]"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-mono text-sub">
+                    All habits, logs, planner notes & projects stay intact.
+                  </span>
+                  <button
+                    type="submit"
+                    disabled={isChangingPin}
+                    className="h-7 px-3 bg-[#FF3B30] hover:bg-[#E02D24] text-white text-[11px] font-mono font-bold uppercase cursor-pointer disabled:opacity-50"
+                  >
+                    {isChangingPin ? 'SAVING...' : 'SAVE 6-DIGIT PIN'}
+                  </button>
+                </div>
+                {changePinMsg && (
+                  <div
+                    className={`text-[11px] font-mono font-bold ${
+                      changePinMsg.type === 'ok' ? 'text-emerald-400' : 'text-rose-400'
+                    }`}
+                  >
+                    {changePinMsg.text}
+                  </div>
+                )}
+              </form>
+            )}
           </div>
         </div>
 
@@ -460,32 +563,36 @@ function SettingsModalDialog({
               ) : (
                 <div className="p-3 bg-card border border-rose-500/50 space-y-2.5 animate-in fade-in">
                   <div className="text-xs font-mono font-bold text-main">
-                    ENTER 4-DIGIT PIN TO CONFIRM DEACTIVATION:
+                    ENTER PIN TO CONFIRM DEACTIVATION:
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <input
                       type="password"
                       inputMode="numeric"
-                      maxLength={4}
+                      maxLength={6}
                       value={deactivatePin}
                       onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 6);
                         setDeactivatePin(val);
                         setDeactivateError(null);
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && deactivatePin.length === 4 && !isDeactivating) {
+                        if (
+                          e.key === 'Enter' &&
+                          (deactivatePin.length === 6 || deactivatePin.length === 4) &&
+                          !isDeactivating
+                        ) {
                           e.preventDefault();
                           handleDeactivateConfirm();
                         }
                       }}
-                      placeholder="••••"
-                      className="w-28 h-8 px-2.5 bg-input border border-main text-center text-sm font-mono tracking-widest text-main focus:outline-none focus:border-rose-500"
+                      placeholder="••••••"
+                      className="w-32 h-8 px-2.5 bg-input border border-main text-center text-sm font-mono tracking-widest text-main focus:outline-none focus:border-rose-500"
                       autoFocus
                     />
                     <button
                       type="button"
-                      disabled={deactivatePin.length !== 4 || isDeactivating}
+                      disabled={(deactivatePin.length !== 6 && deactivatePin.length !== 4) || isDeactivating}
                       onClick={handleDeactivateConfirm}
                       className="h-8 px-3 bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white font-mono font-bold text-xs uppercase cursor-pointer flex items-center gap-1.5 transition-colors"
                     >

@@ -282,3 +282,19 @@ CREATE TRIGGER set_project_groups_updated_at
     BEFORE UPDATE ON public.project_groups
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_updated_at();
+
+-- ================================================================
+-- 12. AUTH_RATE_LIMITS table (Additive DB-backed brute-force lockout)
+-- Persists progressive lockout counts across serverless instances
+-- ================================================================
+CREATE TABLE IF NOT EXISTS public.auth_rate_limits (
+    key TEXT PRIMARY KEY,
+    count INTEGER NOT NULL DEFAULT 0,
+    locked_until TIMESTAMPTZ,
+    last_attempt TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.auth_rate_limits ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow service role only auth_rate_limits" ON public.auth_rate_limits;
+CREATE POLICY "Allow service role only auth_rate_limits" ON public.auth_rate_limits FOR ALL TO service_role USING (true) WITH CHECK (true);
+
