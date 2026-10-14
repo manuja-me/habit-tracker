@@ -3,9 +3,15 @@ import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import { format, subDays } from 'date-fns';
 
-// Resolve extensionless relative TypeScript imports when running directly under Node's test runner
+// Resolve extensionless relative TypeScript imports and Next stubs when running directly under Node's test runner
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === 'next/headers') {
+      return {
+        url: 'data:text/javascript,export const cookies = () => ({ get: () => undefined, set: () => {}, delete: () => {} }); export const headers = () => new Map();',
+        shortCircuit: true,
+      };
+    }
     try {
       return nextResolve(specifier, context);
     } catch (err) {
@@ -200,4 +206,37 @@ test('Planner retention: deletes planner content 3 months after creation date', 
   assert.equal(dayNotes['2026-10-11'], 'Today note');
   assert.equal(meta['2026-08-01'], '2026-08-01T08:00:00.000Z');
   assert.ok(meta['2026-10-11']);
+});
+
+test('Presence & inactivity: midnight rollover within threshold does not trigger absence', async () => {
+  globalThis.window = {};
+  const mockStorage = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => mockStorage.get(k) ?? null,
+    setItem: (k, v) => mockStorage.set(k, String(v)),
+    removeItem: (k) => mockStorage.delete(k),
+  };
+
+  const { checkInactivity, LAST_VISIT_STORAGE_KEY } = await import('../src/lib/utils/presence.ts');
+
+  // Visit was 10 minutes ago across midnight (e.g. 23:55 yesterday, now 00:05 today)
+  const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  mockStorage.set(LAST_VISIT_STORAGE_KEY, tenMinutesAgo);
+
+  const resultRecent = checkInactivity(24);
+  assert.equal(resultRecent.wasAway, false);
+  assert.equal(resultRecent.hoursAway, 0);
+  assert.deepEqual(resultRecent.missedDates, []);
+
+  // Visit was 26 hours ago (exceeds 24h threshold)
+  const twentySixHoursAgo = new Date(Date.now() - 26 * 3600 * 1000).toISOString();
+  mockStorage.set(LAST_VISIT_STORAGE_KEY, twentySixHoursAgo);
+
+  const resultAway = checkInactivity(24);
+  assert.equal(resultAway.wasAway, true);
+  assert.ok(resultAway.hoursAway >= 24);
+  assert.ok(resultAway.missedDates.length >= 1);
+
+  delete globalThis.window;
+  delete globalThis.localStorage;
 });

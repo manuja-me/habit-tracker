@@ -103,7 +103,7 @@ export function checkInactivity(
       };
     }
 
-    const wasAway = hoursAway >= thresholdHours || daysAway >= 1;
+    const wasAway = hoursAway >= thresholdHours;
 
     // Calculate missed calendar dates (excluding today, only prior complete or partial missed days)
     const missedDates: string[] = [];

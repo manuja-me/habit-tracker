@@ -9,7 +9,7 @@ import {
   COOKIE_NAME,
   RL_COOKIE_NAME,
   SECRET_HMAC_KEY,
-  SessionUser,
+  type SessionUser,
   getBackoffSeconds,
   checkRateLimit,
   recordFailedAttempt,

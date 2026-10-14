@@ -4,7 +4,7 @@ import { requireAuth } from './auth';
 import { OWNER_USER_ID, isOwnerUser, canAccessUserRecord } from './auth-utils';
 import { getCleanSupabaseConfig, getServerSupabase } from './supabase';
 import { purgeUserData, purgeExpiredDeactivatedUsers } from './user-management';
-import { Habit, HabitCategory, HabitFrequency, HabitLog, HabitType, Project, ProjectGroup, ProjectStatus, ProjectTask } from '../types';
+import type { Habit, HabitCategory, HabitFrequency, HabitLog, HabitType, Project, ProjectGroup, ProjectStatus, ProjectTask } from '../types';
 import { getPlannerCutoffDate, getPlannerCutoffDateString, isPlannerNoteExpired } from '../utils/date';
 
 export { purgeExpiredDeactivatedUsers };
