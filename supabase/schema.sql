@@ -64,6 +64,9 @@ CREATE TABLE IF NOT EXISTS public.habits (
 
 -- Safe migration for existing installations (Add user_id column if not exists)
 ALTER TABLE public.habits ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES public.app_users(id) ON DELETE CASCADE;
+-- Safe additive migration: Habit replacement pairing (CBT Habit Reversal Training)
+ALTER TABLE public.habits ADD COLUMN IF NOT EXISTS replacement_habit_id UUID REFERENCES public.habits(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_habits_replacement_habit_id ON public.habits(replacement_habit_id);
 
 -- 4. Create HABIT_LOGS table (Pure completions & numerical values - NO notes column)
 CREATE TABLE IF NOT EXISTS public.habit_logs (

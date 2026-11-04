@@ -477,6 +477,7 @@ export default function HabitTrackerPage() {
         onSave={handleSaveHabit}
         editingHabit={editingHabit}
         initialNature={modalInitialNature}
+        availableHabits={habits}
       />
 
       {/* Keyboard Shortcuts Modal */}

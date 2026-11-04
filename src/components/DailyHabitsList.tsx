@@ -139,6 +139,7 @@ export function DailyHabitsList({
                       habit={habit}
                       log={logs[`${habit.id}_${selectedDate}`]}
                       allLogs={logs}
+                      allHabits={habits}
                       stats={
                         statsMap[habit.id] || {
                           currentStreak: 0,
@@ -181,6 +182,7 @@ export function DailyHabitsList({
                       habit={habit}
                       log={logs[`${habit.id}_${selectedDate}`]}
                       allLogs={logs}
+                      allHabits={habits}
                       stats={
                         statsMap[habit.id] || {
                           currentStreak: 0,

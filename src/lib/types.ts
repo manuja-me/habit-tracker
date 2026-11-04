@@ -29,6 +29,7 @@ export interface Habit {
   type: HabitType;
   nature?: HabitNature; // 'do' for build habits, 'dont' for quit/addiction habits
   weaning?: WeaningConfig; // addiction tapering / spaced interval configuration
+  replacement_habit_id?: string; // CBT habit reversal: linked positive routine
   target_value: number;
   target_unit?: string;
   frequency: HabitFrequency;

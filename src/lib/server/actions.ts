@@ -6,6 +6,7 @@ import { getCleanSupabaseConfig, getServerSupabase } from './supabase';
 import { purgeUserData, purgeExpiredDeactivatedUsers } from './user-management';
 import type { Habit, HabitCategory, HabitFrequency, HabitLog, HabitType, Project, ProjectGroup, ProjectStatus, ProjectTask } from '../types';
 import { getPlannerCutoffDate, getPlannerCutoffDateString, isPlannerNoteExpired } from '../utils/date';
+import { parseHabitDescription, serializeHabitDescription } from '../utils/habit-serialization';
 
 export { purgeExpiredDeactivatedUsers };
 
@@ -91,44 +92,6 @@ function getErrorMessage(err: unknown, defaultMessage = 'An unexpected error occ
   if (err instanceof Error) return err.message;
   if (typeof err === 'string') return err;
   return defaultMessage;
-}
-
-function parseHabitDescription(rawDesc?: string | null): {
-  cleanDescription: string;
-  isDont: boolean;
-  weaningConfig?: Habit['weaning'];
-} {
-  const desc = rawDesc || '';
-  const isDont = desc.includes('[NATURE:DONT]');
-  let weaningConfig: Habit['weaning'] = undefined;
-  const weaningMatch = desc.match(/\[WEANING:(.*?)\]/);
-  if (weaningMatch && weaningMatch[1]) {
-    try {
-      weaningConfig = JSON.parse(weaningMatch[1]);
-    } catch {}
-  }
-  const cleanDescription = desc
-    .replace(/\s*\[NATURE:DONT\]/g, '')
-    .replace(/\s*\[WEANING:.*?\]/g, '')
-    .trim();
-
-  return { cleanDescription, isDont, weaningConfig };
-}
-
-function serializeHabitDescription(habit: Habit): string {
-  const rawDesc = habit.description || '';
-  let storedDesc = rawDesc
-    .replace(/\s*\[NATURE:DONT\]/g, '')
-    .replace(/\s*\[WEANING:.*?\]/g, '')
-    .trim();
-
-  if (habit.nature === 'dont') {
-    storedDesc = storedDesc ? `${storedDesc} [NATURE:DONT]` : '[NATURE:DONT]';
-    if (habit.weaning?.enabled) {
-      storedDesc += ` [WEANING:${JSON.stringify(habit.weaning)}]`;
-    }
-  }
-  return storedDesc;
 }
 
 /**
@@ -257,7 +220,7 @@ export async function getHabitsAndLogsAction(): Promise<{
     }
 
     const formattedHabits: Habit[] = habitsData.map((h) => {
-      const { cleanDescription, isDont, weaningConfig } = parseHabitDescription(h.description);
+      const { cleanDescription, isDont, weaningConfig, replacement_habit_id } = parseHabitDescription(h.description);
 
       return {
         id: h.id,
@@ -269,6 +232,7 @@ export async function getHabitsAndLogsAction(): Promise<{
         type: h.type,
         nature: (isDont ? 'dont' : 'do') as Habit['nature'],
         weaning: weaningConfig || (isDont ? { enabled: true, protocol: 'exponential' } : undefined),
+        replacement_habit_id: replacement_habit_id || (h as unknown as Record<string, unknown>).replacement_habit_id as string | undefined || undefined,
         target_value: Number(h.target_value) || 1,
         target_unit: h.target_unit || '',
         frequency: h.frequency,
@@ -352,7 +316,7 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
 
     const storedDesc = serializeHabitDescription(habit);
 
-    const habitPayload = {
+    const habitPayload: Record<string, unknown> = {
       id: habit.id,
       user_id: user.userId,
       title: habit.title,
@@ -370,13 +334,24 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
       updated_at: new Date().toISOString(),
     };
 
+    if (habit.nature === 'dont') {
+      habitPayload.replacement_habit_id = habit.replacement_habit_id || null;
+    }
+
     let { error } = await supabase.from('habits').upsert(habitPayload);
 
-    // Resilient fallback if user_id column doesn't exist yet
-    if (error && (error.message?.includes('user_id') || error.code === '42703')) {
+    // Resilient fallback if optional columns (replacement_habit_id, user_id) don't exist yet
+    if (error && (error.code === '42703' || error.message?.includes('replacement_habit_id') || error.message?.includes('user_id'))) {
       const fallbackPayload: Record<string, unknown> = { ...habitPayload };
-      delete fallbackPayload.user_id;
-      const retry = await supabase.from('habits').upsert(fallbackPayload);
+      delete fallbackPayload.replacement_habit_id;
+      if (error.message?.includes('user_id')) {
+        delete fallbackPayload.user_id;
+      }
+      let retry = await supabase.from('habits').upsert(fallbackPayload);
+      if (retry.error && (retry.error.code === '42703' || retry.error.message?.includes('user_id'))) {
+        delete fallbackPayload.user_id;
+        retry = await supabase.from('habits').upsert(fallbackPayload);
+      }
       error = retry.error;
     }
 

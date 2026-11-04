@@ -9,12 +9,15 @@ import {
   Minus, 
   GripVertical,
   ShieldCheck,
-  ShieldAlert
+  ShieldAlert,
+  Wind,
+  Sparkles
 } from 'lucide-react';
 import { Habit, HabitLog, HabitStats } from '../lib/types';
 import { AVAILABLE_ICONS, COLOR_PALETTES } from '../lib/utils/icons';
 import { calculateWeaningStatus } from '../lib/utils/tapering';
 import { Progress } from './ui/progress';
+import { UrgeSurferModal } from './UrgeSurferModal';
 
 function HabitIconDisplay({ iconName, className }: { iconName: string; className?: string }) {
   const Icon = AVAILABLE_ICONS[iconName] || Flame;
@@ -26,6 +29,7 @@ interface MinimalHabitItemProps {
   log?: HabitLog;
   stats: HabitStats;
   allLogs?: Record<string, HabitLog>;
+  allHabits?: Habit[];
   dateStr: string;
   isFocused?: boolean;
   isDraggable?: boolean;
@@ -43,6 +47,7 @@ export function MinimalHabitItem({
   log,
   stats,
   allLogs = {},
+  allHabits = [],
   dateStr,
   isDraggable = true,
   onToggle,
@@ -54,20 +59,41 @@ export function MinimalHabitItem({
   onDragEnd,
 }: MinimalHabitItemProps) {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isUrgeSurferOpen, setIsUrgeSurferOpen] = useState(false);
 
   const isDont = habit.nature === 'dont';
-  const isSlippedUp = isDont && log !== undefined && log.completed === false;
+  const isSlippedUp = isDont
+    ? habit.type === 'number'
+      ? (log !== undefined && (log.completed === false || (log.value ?? 0) > habit.target_value))
+      : (log !== undefined && log.completed === false)
+    : false;
   const isCompleted = isDont ? !isSlippedUp : Boolean(log?.completed);
 
+  const replacementHabit = isDont && habit.replacement_habit_id
+    ? allHabits.find((h) => h.id === habit.replacement_habit_id)
+    : null;
+
+  const isReplacementCompleted = replacementHabit
+    ? Boolean(allLogs[`${replacementHabit.id}_${dateStr}`]?.completed)
+    : false;
+
   const weaningStatus = calculateWeaningStatus(habit, allLogs);
-  const currentValue = log?.value ?? (isCompleted ? habit.target_value : 0);
+  const currentValue = log?.value ?? (isDont ? 0 : (isCompleted ? habit.target_value : 0));
   const colorConfig = COLOR_PALETTES.find(c => c.hex.toLowerCase() === habit.color.toLowerCase()) || COLOR_PALETTES[0];
 
   const handleCheckboxClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isDont) {
-      const nextCompleted = isSlippedUp;
-      onToggle(habit.id, dateStr, nextCompleted, nextCompleted ? 0 : 1);
+      if (habit.type === 'number') {
+        const nextCompleted = isSlippedUp;
+        const nextVal = nextCompleted
+          ? (currentValue > habit.target_value ? habit.target_value : currentValue)
+          : Math.max(currentValue, habit.target_value + 1);
+        onToggle(habit.id, dateStr, nextCompleted, nextVal);
+      } else {
+        const nextCompleted = isSlippedUp;
+        onToggle(habit.id, dateStr, nextCompleted, nextCompleted ? 0 : 1);
+      }
     } else {
       const nextCompleted = !isCompleted;
       onToggle(habit.id, dateStr, nextCompleted, nextCompleted ? habit.target_value : 0);
@@ -77,7 +103,7 @@ export function MinimalHabitItem({
   const handleIncrement = (e: React.MouseEvent, amount: number) => {
     e.stopPropagation();
     const nextVal = Math.max(0, currentValue + amount);
-    const nextCompleted = nextVal >= habit.target_value;
+    const nextCompleted = isDont ? nextVal <= habit.target_value : nextVal >= habit.target_value;
     onToggle(habit.id, dateStr, nextCompleted, nextVal);
   };
 
@@ -189,6 +215,32 @@ export function MinimalHabitItem({
                 </span>
               )}
               
+              {/* Rolling 30d clean rate (reduces Abstinence Violation Effect) */}
+              {isDont && (
+                <span
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/30"
+                  title="Rolling 30-day clean adherence"
+                >
+                  <span>{stats.completionRate30Days}% 30d clean</span>
+                </span>
+              )}
+
+              {/* Surf Urge button for DONT habits */}
+              {isDont && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsUrgeSurferOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono font-bold text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 transition-colors cursor-pointer"
+                  title="ACT 3-minute acute craving box breathing"
+                >
+                  <Wind className="w-3 h-3" />
+                  <span>SURF URGE</span>
+                </button>
+              )}
+
               {/* Streak Badge */}
               {stats.currentStreak > 0 && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono font-bold text-[#FF3B30] bg-[#FF3B30]/5 border border-[#FF3B30]/20">
@@ -256,7 +308,7 @@ export function MinimalHabitItem({
                 {currentValue.toLocaleString()}
               </span>
               <span className="text-sub font-mono text-[11px]">
-                / {habit.target_value.toLocaleString()} {habit.target_unit}
+                / {habit.target_value.toLocaleString()} {habit.target_unit}{isDont ? ' ceiling' : ''}
               </span>
               <span className="text-[10px] font-mono text-sub">
                 ({progressPercent}%)
@@ -288,7 +340,7 @@ export function MinimalHabitItem({
             value={currentValue}
             max={habit.target_value}
             size="sm"
-            indicatorColor={isCompleted ? '#FF3B30' : habit.color}
+            indicatorColor={isDont ? (isSlippedUp ? '#FF3B30' : '#10B981') : (isCompleted ? '#FF3B30' : habit.color)}
           />
         </div>
       )}
@@ -322,6 +374,57 @@ export function MinimalHabitItem({
             indicatorColor={weaningStatus.isGoalReached ? '#FF3B30' : '#F43F5E'}
           />
         </div>
+      )}
+
+      {/* CBT Habit Replacement Routine Shortcut */}
+      {isDont && replacementHabit && (
+        <div className="mt-2.5 pt-2 border-t border-subtle/50 flex items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-[10px] font-mono text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-0.5">
+              <Sparkles className="w-3 h-3 text-emerald-400" />
+              REPLACE:
+            </span>
+            <span className="text-[11px] font-mono text-main truncate font-medium">
+              {replacementHabit.title}
+            </span>
+          </div>
+          {isReplacementCompleted ? (
+            <span
+              className="px-2 py-0.5 text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 inline-flex items-center gap-1 select-none"
+              title="Replacement habit completed today"
+            >
+              <Check className="w-3 h-3 stroke-[2.5]" />
+              DONE
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggle(replacementHabit.id, dateStr, true, replacementHabit.target_value || 1);
+              }}
+              className="px-2 py-0.5 text-[10px] font-mono font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-colors cursor-pointer"
+              title="Log replacement habit completed today"
+            >
+              DO NOW (+30 XP)
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ACT Urge Surfer Acute Craving Modal */}
+      {isUrgeSurferOpen && (
+        <UrgeSurferModal
+          isOpen={isUrgeSurferOpen}
+          onClose={() => setIsUrgeSurferOpen(false)}
+          habit={habit}
+          replacementHabit={replacementHabit}
+          isReplacementCompleted={isReplacementCompleted}
+          onCompleteReplacement={(repId) => {
+            const repl = allHabits.find((h) => h.id === repId);
+            onToggle(repId, dateStr, true, repl?.target_value ?? 1);
+          }}
+        />
       )}
     </div>
   );

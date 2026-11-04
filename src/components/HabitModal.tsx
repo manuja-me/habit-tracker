@@ -13,6 +13,7 @@ export interface HabitFormData {
     enabled: boolean;
     protocol: WeaningProtocolType;
   };
+  replacement_habit_id?: string;
   title: string;
   description: string;
   category: HabitCategory;
@@ -31,6 +32,7 @@ interface HabitModalProps {
   onSave: (habitData: HabitFormData) => void;
   editingHabit?: Habit | null;
   initialNature?: HabitNature;
+  availableHabits?: Habit[];
 }
 
 const CATEGORIES: { id: HabitCategory; label: string }[] = [
@@ -64,6 +66,7 @@ function HabitModalDialog({
   onSave,
   editingHabit,
   initialNature = 'do',
+  availableHabits = [],
 }: HabitModalProps) {
   const defaultNat = editingHabit?.nature || initialNature || 'do';
   const [nature, setNature] = useState<HabitNature>(defaultNat);
@@ -73,6 +76,9 @@ function HabitModalDialog({
     }
     return 'exponential';
   });
+  const [replacementHabitId, setReplacementHabitId] = useState<string>(
+    editingHabit?.replacement_habit_id || ''
+  );
   const [title, setTitle] = useState(editingHabit?.title || '');
   const [description, setDescription] = useState(editingHabit?.description || '');
   const [category, setCategory] = useState<HabitCategory>(
@@ -111,6 +117,7 @@ function HabitModalDialog({
         enabled: weaningProtocol !== 'none',
         protocol: weaningProtocol,
       } : undefined,
+      replacement_habit_id: nature === 'dont' && replacementHabitId ? replacementHabitId : undefined,
       title: title.trim(),
       description: description.trim(),
       category,
@@ -268,6 +275,33 @@ function HabitModalDialog({
             </div>
           )}
 
+          {/* CBT Habit Replacement Routine (DON'T habits only) */}
+          {nature === 'dont' && (
+            <div className="p-3 sm:p-3 bg-input border border-emerald-500/30 space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5" />
+                CBT REPLACEMENT HABIT (HABIT REVERSAL)
+              </label>
+              <p className="text-[11px] sm:text-[10px] text-sub leading-tight">
+                Pair an existing positive DO routine to perform whenever acute craving spikes strike.
+              </p>
+              <select
+                value={replacementHabitId}
+                onChange={(e) => setReplacementHabitId(e.target.value)}
+                className="w-full px-3 py-2 rounded-none bg-card border border-main text-xs text-main focus:outline-none focus:border-emerald-400 font-mono"
+              >
+                <option value="">-- None (No replacement routine) --</option>
+                {availableHabits
+                  .filter((h) => h.nature !== 'dont' && h.id !== editingHabit?.id && !h.archived)
+                  .map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.title} ({h.category})
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
+
           {/* Category */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-sub mb-1.5">
@@ -382,7 +416,9 @@ function HabitModalDialog({
             {type === 'number' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 p-3 rounded-none bg-input border border-subtle">
                 <div>
-                  <label className="block text-[10px] font-mono text-sub mb-1">TARGET VALUE</label>
+                  <label className="block text-[10px] font-mono text-sub mb-1">
+                    {nature === 'dont' ? 'DAILY CEILING (MAX ALLOWED)' : 'TARGET VALUE'}
+                  </label>
                   <input
                     type="number"
                     min="1"
@@ -392,12 +428,14 @@ function HabitModalDialog({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-mono text-sub mb-1">UNIT (ML, PAGES, REPS)</label>
+                  <label className="block text-[10px] font-mono text-sub mb-1">
+                    {nature === 'dont' ? 'UNIT (CIGS, CUPS, DRINKS)' : 'UNIT (ML, PAGES, REPS)'}
+                  </label>
                   <input
                     type="text"
                     value={targetUnit}
                     onChange={(e) => setTargetUnit(e.target.value)}
-                    placeholder="ml, pages, reps"
+                    placeholder={nature === 'dont' ? 'cigs, drinks, cups' : 'ml, pages, reps'}
                     className="w-full px-3 py-2.5 sm:py-1.5 rounded-none bg-card border border-main text-sm sm:text-xs text-main focus:outline-none focus:border-[#FF3B30] font-mono min-h-[40px] sm:min-h-0"
                   />
                 </div>

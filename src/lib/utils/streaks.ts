@@ -29,6 +29,10 @@ export function isDaySuccessful(
 
   const log = logs[`${habit.id}_${dateStr}`];
   if (habit.nature === 'dont') {
+    if (habit.type === 'number') {
+      const val = log?.value ?? 0;
+      return val <= (habit.target_value ?? 0) && (log === undefined || log.completed !== false);
+    }
     if (log === undefined) return true;
     return Boolean(log.completed);
   }
@@ -83,7 +87,7 @@ export function calculateHabitStats(habit: Habit, logs: Record<string, HabitLog>
         }
       } else {
         tempStreak = 0;
-        if (i > 0 || isCompletedToday) {
+        if (i > 0 || isCompletedToday || habit.nature === 'dont') {
           streakBroken = true;
         }
       }

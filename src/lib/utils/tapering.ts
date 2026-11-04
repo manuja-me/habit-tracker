@@ -63,17 +63,24 @@ export function calculateWeaningStatus(
 
   // Find the date of the most recent slip-up
   const slipUpDates = Object.values(logs)
-    .filter((l) => l.habit_id === habit.id && l.completed === false)
+    .filter((l) => {
+      if (l.habit_id !== habit.id) return false;
+      if (l.completed === false) return true;
+      if (habit.type === 'number' && (habit.target_value ?? 0) > 0) {
+        return (l.value ?? 0) > (habit.target_value ?? 0);
+      }
+      return false;
+    })
     .map((l) => l.date)
     .sort();
 
   const todayStr = getTodayDateString();
   const lastSlipUpDateStr = slipUpDates.length > 0 ? slipUpDates[slipUpDates.length - 1] : null;
 
+  const createdStr = getHabitCreatedDateString(habit, todayStr);
   let daysClean = 0;
   if (!lastSlipUpDateStr) {
     // No slip-ups logged yet: count days since habit creation
-    const createdStr = getHabitCreatedDateString(habit, todayStr);
     try {
       daysClean = Math.max(0, differenceInCalendarDays(parseISO(todayStr), parseISO(createdStr)));
     } catch {
@@ -87,22 +94,35 @@ export function calculateWeaningStatus(
     }
   }
 
-  // Determine current weaning level based on days clean or stored level
+  // Determine current weaning level based on days clean
   let currentLevelIdx = 0;
-  for (let i = 0; i < intervals.length; i++) {
-    if (daysClean >= intervals[i]) {
-      currentLevelIdx = i;
-    } else {
-      currentLevelIdx = i;
-      break;
+  let isGoalReached = false;
+  const maxInterval = intervals[intervals.length - 1];
+
+  if (daysClean >= maxInterval) {
+    currentLevelIdx = intervals.length - 1;
+    isGoalReached = true;
+  } else {
+    for (let i = 0; i < intervals.length; i++) {
+      if (daysClean === intervals[i]) {
+        currentLevelIdx = i;
+        isGoalReached = true;
+        break;
+      }
+      if (daysClean < intervals[i]) {
+        currentLevelIdx = i;
+        isGoalReached = false;
+        break;
+      }
     }
   }
 
   const targetDaysClean = intervals[currentLevelIdx] || intervals[intervals.length - 1];
   const progressPercent = Math.min(100, Math.round((daysClean / targetDaysClean) * 100));
-  const isGoalReached = daysClean >= targetDaysClean;
 
-  const baseDate = lastSlipUpDateStr ? parseISO(lastSlipUpDateStr) : parseISO(todayStr);
+  const baseDate = lastSlipUpDateStr
+    ? parseISO(lastSlipUpDateStr)
+    : (createdStr ? parseISO(createdStr) : parseISO(todayStr));
   const targetDate = format(addDays(baseDate, targetDaysClean), 'yyyy-MM-dd');
 
   let statusMessage = '';

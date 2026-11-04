@@ -818,8 +818,8 @@ export function calculateGamificationProfile(
         } else {
           dayXp += 15 * dayMultiplier;
         }
-      } else if (h.type === 'number') {
-        // Proportional incremental steps for number habits
+      } else if (h.type === 'number' && h.nature !== 'dont') {
+        // Proportional incremental steps for DO number habits
         const log = logs[`${h.id}_${dStr}`];
         if (log && log.value > 0 && h.target_value > 0) {
           const ratio = Math.min(0.99, Math.max(0, log.value / h.target_value));
