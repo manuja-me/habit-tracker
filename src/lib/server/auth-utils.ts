@@ -1,4 +1,24 @@
 import crypto from 'crypto';
+import net from 'net';
+function scryptAsync(
+  password: crypto.BinaryLike,
+  salt: crypto.BinaryLike,
+  keylen: number,
+  options: crypto.ScryptOptions
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(password, salt, keylen, options, (err, derivedKey) => {
+      if (err) reject(err);
+      else resolve(derivedKey);
+    });
+  });
+}
+
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidUuid(id?: string | null): boolean {
+  return typeof id === 'string' && UUID_RE.test(id.trim());
+}
 
 const DEFAULT_SALT = 'zenith_server_salt_88f2_secret';
 const DEFAULT_HMAC_SECRET = 'zenith_session_hmac_secret_key_44b1c8';
@@ -6,6 +26,10 @@ const DEFAULT_HMAC_SECRET = 'zenith_session_hmac_secret_key_44b1c8';
 export const OWNER_USER_ID = '00000000-0000-0000-0000-000000000001';
 export const PIN_SALT = process.env.PIN_SALT || DEFAULT_SALT;
 export const SECRET_HMAC_KEY = process.env.SESSION_SECRET || process.env.SECRET_HMAC_KEY || DEFAULT_HMAC_SECRET;
+
+const rawMasterPin = process.env.APP_SECRET_PIN || process.env.MASTER_PIN;
+const configuredMasterPin = (rawMasterPin || '1001').trim().replace(/^["']|["']$/g, '');
+export const MASTER_PIN_HASH = crypto.createHash('sha256').update(configuredMasterPin + PIN_SALT).digest('hex');
 
 const sessionSecretEnv = process.env.SESSION_SECRET || process.env.SECRET_HMAC_KEY;
 if (process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE !== 'phase-production-build') {
@@ -19,16 +43,17 @@ if (process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE !== 'phase-p
     !sessionSecretEnv.trim() ||
     SECRET_HMAC_KEY.trim() === DEFAULT_HMAC_SECRET;
 
-  if (isPinSaltInsecure || isSessionSecretInsecure) {
+  const isMasterPinInsecure =
+    !rawMasterPin ||
+    !rawMasterPin.trim() ||
+    configuredMasterPin === '1001';
+
+  if (isPinSaltInsecure || isSessionSecretInsecure || isMasterPinInsecure) {
     throw new Error(
-      'FATAL SECURITY ERROR: Insecure default PIN_SALT or SESSION_SECRET detected in production. You must define custom secrets in your environment variables.'
+      'FATAL SECURITY ERROR: Insecure default or missing PIN_SALT, SESSION_SECRET, or MASTER_PIN/APP_SECRET_PIN detected in production. You must define custom secrets in your environment variables.'
     );
   }
 }
-
-const rawMasterPin = process.env.APP_SECRET_PIN || process.env.MASTER_PIN || '1001';
-const configuredMasterPin = rawMasterPin.trim().replace(/^["']|["']$/g, '');
-export const MASTER_PIN_HASH = crypto.createHash('sha256').update(configuredMasterPin + PIN_SALT).digest('hex');
 export const COOKIE_NAME = 'zenith_session_v1';
 
 export interface SessionUser {
@@ -115,7 +140,8 @@ export function checkRateLimit(
 
 export const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-function normalizeIp(ip: string): string {
+export function normalizeIp(ip: string): string | null {
+  if (!ip || typeof ip !== 'string') return null;
   let cleaned = ip.trim();
   // Strip port from IPv4 (e.g., "192.0.2.1:12345" -> "192.0.2.1")
   if (/^(\d{1,3}\.){3}\d{1,3}:\d+$/.test(cleaned)) {
@@ -125,6 +151,9 @@ function normalizeIp(ip: string): string {
   if (cleaned.startsWith('[') && cleaned.includes(']')) {
     cleaned = cleaned.slice(1, cleaned.indexOf(']'));
   }
+  if (net.isIP(cleaned) === 0) {
+    return null;
+  }
   return cleaned;
 }
 
@@ -133,19 +162,28 @@ export function getClientIp(headerList: { get(name: string): string | null }): s
   const vercelIp = headerList.get('x-vercel-forwarded-for');
   if (vercelIp?.trim()) {
     const parts = vercelIp.split(',').map((p) => p.trim()).filter(Boolean);
-    if (parts.length > 0) return normalizeIp(parts[parts.length - 1]);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const normalized = normalizeIp(parts[i]);
+      if (normalized) return normalized;
+    }
   }
 
   // Right-most entry in x-forwarded-for represents the most trusted upstream hop appended by reverse proxies
   const forwarded = headerList.get('x-forwarded-for');
   if (forwarded?.trim()) {
     const parts = forwarded.split(',').map((p) => p.trim()).filter(Boolean);
-    if (parts.length > 0) return normalizeIp(parts[parts.length - 1]);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const normalized = normalizeIp(parts[i]);
+      if (normalized) return normalized;
+    }
   }
 
   // Fallback to direct reverse proxy real IP if x-forwarded-for was not provided
   const realIp = headerList.get('x-real-ip');
-  if (realIp?.trim()) return normalizeIp(realIp.trim());
+  if (realIp?.trim()) {
+    const normalized = normalizeIp(realIp.trim());
+    if (normalized) return normalized;
+  }
 
   return '127.0.0.1';
 }
@@ -205,12 +243,12 @@ const SCRYPT_KEYLEN = 64;
  * Hash a PIN using memory-hard Scrypt with a unique 16-byte per-user random salt
  * Format: scrypt$<salt_hex>$<derived_key_hex>
  */
-export function hashPinScrypt(pin: string, customSaltHex?: string): string {
+export async function hashPinScrypt(pin: string, customSaltHex?: string): Promise<string> {
   const saltHex = customSaltHex || crypto.randomBytes(16).toString('hex');
-  const derivedKey = crypto
-    .scryptSync(pin.trim() + PIN_SALT, saltHex, SCRYPT_KEYLEN, SCRYPT_PARAMS)
-    .toString('hex');
-  return `scrypt$${saltHex}$${derivedKey}`;
+  const derivedKey = (
+    await scryptAsync(pin.trim() + PIN_SALT, saltHex, SCRYPT_KEYLEN, SCRYPT_PARAMS)
+  ) as Buffer;
+  return `scrypt$${saltHex}$${derivedKey.toString('hex')}`;
 }
 
 export function isScryptHash(storedHash?: string | null): boolean {
@@ -220,7 +258,7 @@ export function isScryptHash(storedHash?: string | null): boolean {
 /**
  * Timing-safe verification supporting both Scrypt per-user salted hashes and legacy SHA-256 hashes
  */
-export function verifyPinHash(enteredPin: string, storedHash: string): boolean {
+export async function verifyPinHash(enteredPin: string, storedHash: string): Promise<boolean> {
   if (!enteredPin || !storedHash) return false;
   const cleanPin = enteredPin.trim();
 
@@ -230,7 +268,7 @@ export function verifyPinHash(enteredPin: string, storedHash: string): boolean {
     const [, saltHex, keyHex] = parts;
     if (!saltHex || !keyHex) return false;
     try {
-      const derivedBuf = crypto.scryptSync(cleanPin + PIN_SALT, saltHex, SCRYPT_KEYLEN, SCRYPT_PARAMS);
+      const derivedBuf = (await scryptAsync(cleanPin + PIN_SALT, saltHex, SCRYPT_KEYLEN, SCRYPT_PARAMS)) as Buffer;
       const storedBuf = Buffer.from(keyHex, 'hex');
       return derivedBuf.length === storedBuf.length && crypto.timingSafeEqual(derivedBuf, storedBuf);
     } catch {
@@ -306,9 +344,9 @@ export function getSessionUserFromToken(token: string): SessionUser | null {
       return null;
     }
 
-    if (data.userId && typeof data.userId === 'string' && data.userId.trim().length > 0) {
+    if (data.userId && typeof data.userId === 'string' && isValidUuid(data.userId)) {
       return {
-        userId: data.userId,
+        userId: data.userId.trim(),
         username: typeof data.username === 'string' ? data.username : 'user',
         role: data.role === 'owner' ? 'owner' : 'member',
         isDeactivated: Boolean(data.isDeactivated),

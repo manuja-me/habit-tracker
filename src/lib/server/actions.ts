@@ -1,7 +1,7 @@
 'use server';
 
 import { requireAuth } from './auth';
-import { OWNER_USER_ID, isOwnerUser, canAccessUserRecord } from './auth-utils';
+import { OWNER_USER_ID, isOwnerUser, canAccessUserRecord, isValidUuid } from './auth-utils';
 import { getCleanSupabaseConfig, getServerSupabase } from './supabase';
 import { purgeUserData, purgeExpiredDeactivatedUsers } from './user-management';
 import type { Habit, HabitCategory, HabitFrequency, HabitLog, HabitType, Project, ProjectGroup, ProjectStatus, ProjectTask } from '../types';
@@ -482,6 +482,9 @@ export async function reorderHabitsAction(orderedHabits: Habit[]): Promise<{ suc
 export async function saveDayNoteAction(date: string, content: string): Promise<{ success: boolean; error?: string }> {
   try {
     const user = await requireAuth();
+    if (!isValidUuid(user.userId)) {
+      throw new Error('Invalid authenticated user ID.');
+    }
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
@@ -494,7 +497,7 @@ export async function saveDayNoteAction(date: string, content: string): Promise<
         .delete()
         .eq('user_id', user.userId)
         .eq('date', date);
-      if (delRes.error && (delRes.error.message?.includes('user_id') || delRes.error.code === '42703')) {
+      if (delRes.error && isOwnerUser(user) && (delRes.error.message?.includes('user_id') || delRes.error.code === '42703')) {
         await supabase.from('day_notes').delete().eq('date', date);
       }
       return { success: true };
@@ -509,8 +512,8 @@ export async function saveDayNoteAction(date: string, content: string): Promise<
 
     let { error } = await supabase.from('day_notes').upsert(notePayload, { onConflict: 'user_id,date' });
 
-    // Fallback if day_notes table has constraint only on date
-    if (error && (error.message?.includes('user_id') || error.code === '42703' || error.code === '42P10')) {
+    // Fallback only if legacy day_notes table lacks user_id column entirely (owner only)
+    if (error && isOwnerUser(user) && (error.message?.includes('user_id') || error.code === '42703')) {
       const fallbackPayload: Record<string, unknown> = { ...notePayload };
       delete fallbackPayload.user_id;
       const retry = await supabase.from('day_notes').upsert(fallbackPayload, { onConflict: 'date' });

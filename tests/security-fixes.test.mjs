@@ -15,6 +15,7 @@ import {
   verifyPinHash,
   isScryptHash,
   isValidPinFormat,
+  isValidUuid,
   SESSION_MAX_AGE_MS,
   SECRET_HMAC_KEY,
 } from '../src/lib/server/auth-utils.ts';
@@ -91,11 +92,33 @@ test('Finding 2: Insecure default secrets throw fatal error on startup in produc
         NODE_ENV: 'production',
         SESSION_SECRET: 'my_production_super_secret_session_key_32bytes_long',
         PIN_SALT: 'my_production_super_secret_salt_32bytes_long',
+        APP_SECRET_PIN: '987654',
       },
       stdio: 'pipe',
     }
   ).toString();
   assert.ok(successOutput.includes('OK'), 'Should start up cleanly when custom secrets are provided');
+
+  // 4. Should throw in production when master PIN is default 1001
+  assert.throws(
+    () => {
+      execSync('node --experimental-strip-types -e "import(\'./src/lib/server/auth-utils.ts\')"', {
+        env: {
+          ...process.env,
+          NODE_ENV: 'production',
+          SESSION_SECRET: 'my_production_super_secret_session_key_32bytes_long',
+          PIN_SALT: 'my_production_super_secret_salt_32bytes_long',
+          APP_SECRET_PIN: '1001',
+        },
+        stdio: 'pipe',
+      });
+    },
+    (err) => {
+      const output = err.stderr ? err.stderr.toString() : '';
+      return output.includes('FATAL SECURITY ERROR');
+    },
+    'Expected fatal startup error when default 1001 master PIN is used in production'
+  );
 });
 
 test('Finding 3: Session token expiration enforcement and structural validation', () => {
@@ -184,6 +207,17 @@ test('Finding 3: Session token expiration enforcement and structural validation'
 
   // 9. Malformed token structure (3 segments) is rejected
   assert.equal(getSessionUserFromToken(`${validToken}.extra`), null, 'Token with extra parts must return null');
+
+  // 10. Non-UUID userId in payload is rejected (prevents PostgREST injection)
+  const nonUuidToken = makeTokenWithPayload({
+    userId: 'invalid-user-id;drop-table',
+    username: user.username,
+    role: user.role,
+    ts: Date.now(),
+  });
+  assert.equal(getSessionUserFromToken(nonUuidToken), null, 'Token with non-UUID userId must return null');
+  assert.equal(isValidUuid('invalid-user-id'), false);
+  assert.equal(isValidUuid(user.userId), true);
 });
 
 test('Finding 4: Client IP extraction prevents X-Forwarded-For spoofing and enforces progressive lockout without cookies', () => {
@@ -223,6 +257,13 @@ test('Finding 4: Client IP extraction prevents X-Forwarded-For spoofing and enfo
 
   // 5. Missing headers fall back to 127.0.0.1
   assert.equal(getClientIp(makeHeaders({})), '127.0.0.1');
+
+  // 5b. Malformed non-IP entries in X-Forwarded-For are ignored and fall back
+  const malformedHeaders = makeHeaders({
+    'x-forwarded-for': 'spoofed-fake-ip, 999.999.999.999',
+    'x-real-ip': '198.51.100.99',
+  });
+  assert.equal(getClientIp(malformedHeaders), '198.51.100.99', 'Must reject malformed IP and fallback');
 
   // 6. Progressive rate-limiting ladder WITHOUT cookies (cannot be bypassed by dropping cookies)
   const testKey = 'test_cookie_bypass_suite_' + Date.now();
@@ -292,7 +333,7 @@ test('Finding 5: PIN and username collision error messages are generic to preven
   );
 });
 
-test('Finding 6: 6-digit Scrypt per-user salted PIN hashing and zero-data-loss legacy SHA-256 compatibility', () => {
+test('Finding 6: 6-digit Scrypt per-user salted PIN hashing and zero-data-loss legacy SHA-256 compatibility', async () => {
   // 1. 6-digit format required for new PINs; 4-digit allowed only when allowLegacy4Digit=true
   assert.equal(isValidPinFormat('482910', false), true);
   assert.equal(isValidPinFormat('1001', false), false);
@@ -300,17 +341,29 @@ test('Finding 6: 6-digit Scrypt per-user salted PIN hashing and zero-data-loss l
   assert.equal(isValidPinFormat('12345', true), false);
 
   // 2. Scrypt hashes use unique per-user salts even for identical PINs
-  const h1 = hashPinScrypt('482910');
-  const h2 = hashPinScrypt('482910');
+  const h1 = await hashPinScrypt('482910');
+  const h2 = await hashPinScrypt('482910');
   assert.ok(isScryptHash(h1));
   assert.notEqual(h1, h2, 'Each Scrypt hash must have a unique random salt');
-  assert.equal(verifyPinHash('482910', h1), true);
-  assert.equal(verifyPinHash('482910', h2), true);
-  assert.equal(verifyPinHash('000000', h1), false);
+  assert.equal(await verifyPinHash('482910', h1), true);
+  assert.equal(await verifyPinHash('482910', h2), true);
+  assert.equal(await verifyPinHash('000000', h1), false);
 
   // 3. Existing legacy SHA-256 hashes still verify (zero data loss for existing DB accounts)
   const legacyHash = hashPin('1001');
   assert.equal(isScryptHash(legacyHash), false);
-  assert.equal(verifyPinHash('1001', legacyHash), true);
-  assert.equal(verifyPinHash('9999', legacyHash), false);
+  assert.equal(await verifyPinHash('1001', legacyHash), true);
+  assert.equal(await verifyPinHash('9999', legacyHash), false);
+});
+
+test('Finding 7: Cross-tenant day note fallback protection and production debug parameter disabling', () => {
+  const actionsCode = readFileSync(new URL('../src/lib/server/actions.ts', import.meta.url), 'utf-8');
+  const pageCode = readFileSync(new URL('../src/app/page.tsx', import.meta.url), 'utf-8');
+
+  // Verify saveDayNoteAction does not have unsafe 42P10 fallback that strips user_id for non-owners
+  assert.doesNotMatch(actionsCode, /42P10/);
+  assert.match(actionsCode, /isOwnerUser\(user\) && \(error\.message\?\.includes\('user_id'\) \|\| error\.code === '42703'\)/);
+
+  // Verify ?absence debug parameter is disabled in production
+  assert.match(pageCode, /process\.env\.NODE_ENV !== 'production' && typeof window !== 'undefined'/);
 });

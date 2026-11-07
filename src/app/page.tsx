@@ -84,7 +84,7 @@ export default function HabitTrackerPage() {
     if (isUnlocked && isInitialSyncDone) {
       const timer = setTimeout(() => {
         const simulatedHours =
-          typeof window !== 'undefined'
+          process.env.NODE_ENV !== 'production' && typeof window !== 'undefined'
             ? new URLSearchParams(window.location.search).get('absence')
             : null;
         if (simulatedHours) {

@@ -24,6 +24,7 @@ import {
   getSessionUserFromToken,
   getClientIp,
   isOwnerUser,
+  isValidUuid,
 } from './auth-utils';
 
 const COOKIE_OPTS = {
@@ -215,7 +216,7 @@ export async function verifyPinAction(enteredPin: string): Promise<{
         }
 
         for (const row of rows) {
-          if (verifyPinHash(cleanPin, row.pin_hash)) {
+          if (await verifyPinHash(cleanPin, row.pin_hash)) {
             matchedUser = {
               userId: row.id,
               username: row.username,
@@ -310,7 +311,7 @@ export async function verifyPinAction(enteredPin: string): Promise<{
           last_login_at: new Date().toISOString(),
         };
         if (cleanPin.length === 6 && matchedPinHash && !isScryptHash(matchedPinHash)) {
-          updateFields.pin_hash = hashPinScrypt(cleanPin);
+          updateFields.pin_hash = await hashPinScrypt(cleanPin);
         }
         await supabaseClient
           .from('app_users')
@@ -369,7 +370,7 @@ export async function lockSessionAction(): Promise<void> {
  */
 export async function requireAuth(): Promise<SessionUser> {
   const user = await getCurrentUserAction();
-  if (!user) {
+  if (!user || !isValidUuid(user.userId)) {
     throw new Error('Unauthorized: Valid session required.');
   }
   if (user.isDeactivated) {
@@ -523,11 +524,16 @@ export async function completeInviteSetupAction(
       .select('id, username, pin_hash');
 
     const normalizedName = cleanUsername.toLowerCase();
-    const hasCollision = (existingUsers || []).some(
-      (u) =>
+    let hasCollision = false;
+    for (const u of existingUsers || []) {
+      if (
         u.username?.trim().toLowerCase() === normalizedName ||
-        verifyPinHash(pin, u.pin_hash)
-    );
+        (await verifyPinHash(pin, u.pin_hash))
+      ) {
+        hasCollision = true;
+        break;
+      }
+    }
 
     if (hasCollision) {
       await recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore, rateCheck.currentCount);
@@ -537,7 +543,7 @@ export async function completeInviteSetupAction(
       };
     }
 
-    const hashedPin = hashPinScrypt(pin);
+    const hashedPin = await hashPinScrypt(pin);
     const [rawToken] = fullToken.split('.');
     const nowIso = new Date().toISOString();
 
@@ -655,7 +661,7 @@ export async function changePinAction(
     const isOwner = isOwnerUser(user);
 
     let currentPinValid = false;
-    if (currentRow && verifyPinHash(currentPin, currentRow.pin_hash)) {
+    if (currentRow && (await verifyPinHash(currentPin, currentRow.pin_hash))) {
       currentPinValid = true;
     } else if (isOwner && (!currentRow || !isScryptHash(currentRow.pin_hash)) && verifyMasterPin(currentPin)) {
       currentPinValid = true;
@@ -672,9 +678,13 @@ export async function changePinAction(
     }
 
     // Ensure new PIN does not collide with another user's PIN
-    const pinTakenByOther = rows.some(
-      (r) => r.id !== user.userId && verifyPinHash(newPin, r.pin_hash)
-    );
+    let pinTakenByOther = false;
+    for (const r of rows) {
+      if (r.id !== user.userId && (await verifyPinHash(newPin, r.pin_hash))) {
+        pinTakenByOther = true;
+        break;
+      }
+    }
     if (pinTakenByOther || (!isOwner && verifyMasterPin(newPin))) {
       return {
         success: false,
@@ -682,7 +692,7 @@ export async function changePinAction(
       };
     }
 
-    const newScryptHash = hashPinScrypt(newPin);
+    const newScryptHash = await hashPinScrypt(newPin);
     const nowIso = new Date().toISOString();
 
     if (currentRow) {
@@ -820,7 +830,7 @@ export async function deactivateAccountAction(enteredPin: string): Promise<{
       return { success: false, error: 'User record not found.' };
     }
 
-    const isPinValid = verifyPinHash(cleanPin, userRecord.pin_hash);
+    const isPinValid = await verifyPinHash(cleanPin, userRecord.pin_hash);
 
     if (!isPinValid) {
       const fail = await recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore, rateCheck.currentCount);
