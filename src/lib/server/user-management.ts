@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { OWNER_USER_ID } from './auth-utils';
+import { OWNER_USER_ID, isValidUuid } from './auth-utils';
 import { getServerSupabase } from './supabase';
 
 /**
@@ -14,7 +14,7 @@ export async function purgeUserData(
   supabaseClient: SupabaseClient | ReturnType<typeof getServerSupabase>,
   targetUserId: string
 ): Promise<boolean> {
-  if (!supabaseClient || !targetUserId || targetUserId === OWNER_USER_ID) {
+  if (!supabaseClient || !targetUserId || !isValidUuid(targetUserId) || targetUserId === OWNER_USER_ID) {
     return false;
   }
 

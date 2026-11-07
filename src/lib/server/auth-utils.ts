@@ -158,13 +158,13 @@ export function normalizeIp(ip: string): string | null {
 }
 
 export function getClientIp(headerList: { get(name: string): string | null }): string {
-  // Check Vercel trusted edge header if present
-  const vercelIp = headerList.get('x-vercel-forwarded-for');
-  if (vercelIp?.trim()) {
-    const parts = vercelIp.split(',').map((p) => p.trim()).filter(Boolean);
-    for (let i = parts.length - 1; i >= 0; i--) {
-      const normalized = normalizeIp(parts[i]);
-      if (normalized) return normalized;
+  // Only trust Vercel edge header if running on Vercel platform
+  if (process.env.VERCEL) {
+    const vercelIp = headerList.get('x-vercel-forwarded-for');
+    if (vercelIp?.trim()) {
+      const parts = vercelIp.split(',').map((p) => p.trim()).filter(Boolean);
+      const rightmost = parts.length > 0 ? normalizeIp(parts[parts.length - 1]) : null;
+      if (rightmost) return rightmost;
     }
   }
 
@@ -172,13 +172,13 @@ export function getClientIp(headerList: { get(name: string): string | null }): s
   const forwarded = headerList.get('x-forwarded-for');
   if (forwarded?.trim()) {
     const parts = forwarded.split(',').map((p) => p.trim()).filter(Boolean);
-    for (let i = parts.length - 1; i >= 0; i--) {
-      const normalized = normalizeIp(parts[i]);
-      if (normalized) return normalized;
+    if (parts.length > 0) {
+      const rightmost = normalizeIp(parts[parts.length - 1]);
+      if (rightmost) return rightmost;
     }
   }
 
-  // Fallback to direct reverse proxy real IP if x-forwarded-for was not provided
+  // Fallback to direct reverse proxy real IP if x-forwarded-for was not provided or rightmost hop was invalid
   const realIp = headerList.get('x-real-ip');
   if (realIp?.trim()) {
     const normalized = normalizeIp(realIp.trim());

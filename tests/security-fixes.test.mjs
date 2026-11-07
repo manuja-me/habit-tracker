@@ -3,7 +3,28 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import crypto from 'node:crypto';
-import {
+import { registerHooks } from 'node:module';
+
+// Resolve extensionless relative TypeScript imports and Next stubs when running directly under Node's test runner
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === 'next/headers') {
+      return {
+        url: 'data:text/javascript,export const cookies = () => ({ get: () => undefined, set: () => {}, delete: () => {} }); export const headers = () => new Map();',
+        shortCircuit: true,
+      };
+    }
+    try {
+      return nextResolve(specifier, context);
+    } catch (err) {
+      if (specifier.startsWith('.') && !specifier.endsWith('.ts')) {
+        return nextResolve(`${specifier}.ts`, context);
+      }
+      throw err;
+    }
+  },
+});
+const {
   createSessionToken,
   getSessionUserFromToken,
   getClientIp,
@@ -18,7 +39,8 @@ import {
   isValidUuid,
   SESSION_MAX_AGE_MS,
   SECRET_HMAC_KEY,
-} from '../src/lib/server/auth-utils.ts';
+} = await import('../src/lib/server/auth-utils.ts');
+const { purgeUserData } = await import('../src/lib/server/user-management.ts');
 
 test('Finding 1: RLS policies in schema.sql restrict habits, habit_logs, and day_notes to service_role', () => {
   const schema = readFileSync(new URL('../supabase/schema.sql', import.meta.url), 'utf-8');
@@ -265,6 +287,51 @@ test('Finding 4: Client IP extraction prevents X-Forwarded-For spoofing and enfo
   });
   assert.equal(getClientIp(malformedHeaders), '198.51.100.99', 'Must reject malformed IP and fallback');
 
+  // 5c. Gating of x-vercel-forwarded-for behind process.env.VERCEL
+  const vercelSpoofedHeaders = makeHeaders({
+    'x-vercel-forwarded-for': '10.99.99.99',
+    'x-forwarded-for': '203.0.113.195',
+  });
+  const savedVercelEnv = process.env.VERCEL;
+  try {
+    delete process.env.VERCEL;
+    assert.equal(
+      getClientIp(vercelSpoofedHeaders),
+      '203.0.113.195',
+      'x-vercel-forwarded-for must be ignored when not deployed on Vercel'
+    );
+
+    process.env.VERCEL = '1';
+    assert.equal(
+      getClientIp(vercelSpoofedHeaders),
+      '10.99.99.99',
+      'x-vercel-forwarded-for should be used when VERCEL environment is set'
+    );
+  } finally {
+    if (savedVercelEnv !== undefined) {
+      process.env.VERCEL = savedVercelEnv;
+    } else {
+      delete process.env.VERCEL;
+    }
+  }
+
+  // 5d. Trailing invalid token in X-Forwarded-For must NOT pick spoofed upstream IP
+  const trailingInvalidXff = makeHeaders({
+    'x-forwarded-for': '198.51.100.42, 999.999.999.999',
+    'x-real-ip': '203.0.113.195',
+  });
+  assert.equal(
+    getClientIp(trailingInvalidXff),
+    '203.0.113.195',
+    'Must fall back to x-real-ip and not pick spoofed upstream IP when rightmost hop is invalid'
+  );
+
+  // 5e. IPv6 with bracket and port
+  const ipv6WithPort = makeHeaders({
+    'x-forwarded-for': '[2001:db8::1]:8080',
+  });
+  assert.equal(getClientIp(ipv6WithPort), '2001:db8::1', 'Must strip brackets and port from IPv6');
+
   // 6. Progressive rate-limiting ladder WITHOUT cookies (cannot be bypassed by dropping cookies)
   const testKey = 'test_cookie_bypass_suite_' + Date.now();
   resetFailedAttempts(testKey);
@@ -356,7 +423,7 @@ test('Finding 6: 6-digit Scrypt per-user salted PIN hashing and zero-data-loss l
   assert.equal(await verifyPinHash('9999', legacyHash), false);
 });
 
-test('Finding 7: Cross-tenant day note fallback protection and production debug parameter disabling', () => {
+test('Finding 7: Cross-tenant day note fallback protection and production debug parameter disabling', async () => {
   const actionsCode = readFileSync(new URL('../src/lib/server/actions.ts', import.meta.url), 'utf-8');
   const pageCode = readFileSync(new URL('../src/app/page.tsx', import.meta.url), 'utf-8');
 
@@ -366,4 +433,13 @@ test('Finding 7: Cross-tenant day note fallback protection and production debug 
 
   // Verify ?absence debug parameter is disabled in production
   assert.match(pageCode, /process\.env\.NODE_ENV !== 'production' && typeof window !== 'undefined'/);
+
+  // Verify purgeUserData rejects invalid non-UUID targetUserId without querying DB
+  const mockClient = { from: () => { throw new Error('Should not query DB for invalid UUID'); } };
+  const purged = await purgeUserData(mockClient, 'invalid-target-id');
+  assert.equal(purged, false, 'purgeUserData must immediately return false on invalid UUID');
+
+  // Verify adminDeleteUserAction validates targetUserId UUID format
+  assert.match(actionsCode, /if \(!targetUserId \|\| !isValidUuid\(targetUserId\)\)/);
+  assert.doesNotMatch(actionsCode, /const UUID_RE =/);
 });

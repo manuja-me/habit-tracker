@@ -109,6 +109,9 @@ export async function getHabitsAndLogsAction(): Promise<{
 }> {
   try {
     const user = await requireAuth();
+    if (!isValidUuid(user.userId)) {
+      throw new Error('Invalid authenticated user ID.');
+    }
 
     const config = getCleanSupabaseConfig();
     if (!config) {
@@ -300,6 +303,9 @@ export async function recordAccountVisitAction(): Promise<{ success: boolean }> 
 export async function saveHabitAction(habit: Habit): Promise<{ success: boolean; error?: string }> {
   try {
     const user = await requireAuth();
+    if (!habit || !isValidUuid(habit.id)) {
+      return { success: false, error: 'Invalid habit ID.' };
+    }
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
@@ -368,6 +374,9 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
 export async function deleteHabitAction(habitId: string): Promise<{ success: boolean; error?: string }> {
   try {
     const user = await requireAuth();
+    if (!isValidUuid(habitId)) {
+      return { success: false, error: 'Invalid habit ID.' };
+    }
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
@@ -410,6 +419,9 @@ export async function deleteHabitAction(habitId: string): Promise<{ success: boo
 export async function saveHabitLogAction(log: HabitLog): Promise<{ success: boolean; error?: string }> {
   try {
     const user = await requireAuth();
+    if (!log || !isValidUuid(log.habit_id)) {
+      return { success: false, error: 'Invalid habit ID.' };
+    }
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
@@ -456,6 +468,9 @@ export async function saveHabitLogAction(log: HabitLog): Promise<{ success: bool
 export async function reorderHabitsAction(orderedHabits: Habit[]): Promise<{ success: boolean; error?: string }> {
   try {
     const user = await requireAuth();
+    if (!isValidUuid(user.userId)) {
+      throw new Error('Invalid authenticated user ID.');
+    }
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
@@ -530,8 +545,6 @@ export async function saveDayNoteAction(date: string, content: string): Promise<
   }
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 interface DbProjectRecord {
   id: string;
   title: string;
@@ -600,14 +613,14 @@ export async function saveProjectAction(project: Project): Promise<{ success: bo
 
     const title = String(project?.title ?? '').trim().slice(0, 200);
     const groupId = project?.group_id ?? null;
-    if (!UUID_RE.test(String(project?.id))) return { success: false, error: 'Invalid project id.' };
+    if (!isValidUuid(project?.id)) return { success: false, error: 'Invalid project id.' };
     if (!title) return { success: false, error: 'Project title is required.' };
     if (project.status !== 'active' && project.status !== 'planned') return { success: false, error: 'Invalid status.' };
     if (!Array.isArray(project.tasks) || project.tasks.length > 500) return { success: false, error: 'Invalid subtasks.' };
 
     // Only allow assigning to an org/person owned by this user
     if (groupId !== null) {
-      if (!UUID_RE.test(String(groupId))) return { success: false, error: 'Invalid organization.' };
+      if (!isValidUuid(groupId)) return { success: false, error: 'Invalid organization.' };
       const { data: group } = await supabase
         .from('project_groups')
         .select('id')
@@ -656,7 +669,7 @@ export async function saveProjectGroupAction(group: ProjectGroup): Promise<{ suc
     if (!supabase) return { success: true };
 
     const name = String(group?.name ?? '').trim().slice(0, 100);
-    if (!UUID_RE.test(String(group?.id))) return { success: false, error: 'Invalid id.' };
+    if (!isValidUuid(group?.id)) return { success: false, error: 'Invalid id.' };
     if (!name) return { success: false, error: 'Name is required.' };
     if (group.kind !== 'org' && group.kind !== 'person') return { success: false, error: 'Invalid type.' };
 
@@ -695,7 +708,7 @@ export async function deleteProjectGroupAction(groupId: string): Promise<{ succe
     const user = await requireAuth();
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
-    if (!UUID_RE.test(String(groupId))) return { success: false, error: 'Invalid id.' };
+    if (!isValidUuid(groupId)) return { success: false, error: 'Invalid id.' };
 
     const { error } = await supabase.from('project_groups').delete().eq('id', groupId).eq('user_id', user.userId);
     if (error) throw error;
@@ -713,7 +726,7 @@ export async function deleteProjectAction(projectId: string): Promise<{ success:
     const user = await requireAuth();
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
-    if (!UUID_RE.test(String(projectId))) return { success: false, error: 'Invalid project id.' };
+    if (!isValidUuid(projectId)) return { success: false, error: 'Invalid project id.' };
 
     const { error } = await supabase.from('projects').delete().eq('id', projectId).eq('user_id', user.userId);
     if (error) throw error;
@@ -738,7 +751,11 @@ export async function adminDeleteUserAction(targetUserId: string): Promise<{
       return { success: false, error: 'Unauthorized: Only the system owner can delete users.' };
     }
 
-    if (!targetUserId || targetUserId === OWNER_USER_ID || targetUserId === caller.userId) {
+    if (!targetUserId || !isValidUuid(targetUserId)) {
+      return { success: false, error: 'Invalid user ID format.' };
+    }
+
+    if (targetUserId === OWNER_USER_ID || targetUserId === caller.userId) {
       return { success: false, error: 'The Master Owner account cannot be deleted.' };
     }
 
