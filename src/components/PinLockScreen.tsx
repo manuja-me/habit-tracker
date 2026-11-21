@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { verifyPinAction, reactivateAccountAction, lockSessionAction, changePinAction } from '../lib/server/auth';
+import { verifyPinAction, reactivateAccountAction, lockSessionAction, changePinAction, type SessionUser } from '../lib/server/auth';
 import { Lock, ShieldAlert, Delete, Clock, ShieldCheck } from 'lucide-react';
 import { ReactivationModal } from './ReactivationModal';
 import { ZenithLogo } from './ui/ZenithLogo';
 
 interface PinLockScreenProps {
-  onUnlock: () => void;
+  onUnlock: (user?: SessionUser) => void;
 }
 
 export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
@@ -25,6 +25,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
   const [isReactivating, setIsReactivating] = useState<boolean>(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const authenticatedUserRef = useRef<SessionUser | undefined>(undefined);
   const pinRef = useRef(pin);
   const isVerifyingRef = useRef(isVerifying);
   const lockoutSecondsRef = useRef(lockoutSeconds);
@@ -67,7 +68,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
     try {
       const res = await changePinAction(oldPin, newSixDigitPin);
       if (res.success) {
-        onUnlock();
+        onUnlock(authenticatedUserRef.current);
       } else {
         setErrorMsg(res.error || 'FAILED TO UPGRADE PIN');
         pendingNewPinRef.current = null;
@@ -104,6 +105,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
     try {
       const result = await verifyPinAction(enteredPin);
       if (result.success) {
+        authenticatedUserRef.current = result.user;
         if (result.requiresReactivation && result.deactivatedAt) {
           setReactivationInfo({
             username: result.user?.username || 'member',
@@ -119,7 +121,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
           setPin('');
           return;
         }
-        onUnlock();
+        onUnlock(result.user);
       } else {
         setErrorMsg(result.error || 'INVALID PIN // ACCESS DENIED');
         if (result.waitSeconds) {
@@ -150,7 +152,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
         setReactivationInfo(null);
         pinRef.current = '';
         setPin('');
-        onUnlock();
+        onUnlock(res.user || authenticatedUserRef.current);
       } else {
         setErrorMsg(res.error || 'Failed to reactivate account.');
         setReactivationInfo(null);

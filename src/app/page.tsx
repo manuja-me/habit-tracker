@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { useHabitStore, clearLocalUserData, loadLocalDataFromStorage } from '../lib/store';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useHabitStore, clearLocalUserData, loadLocalDataFromStorage, setCurrentUser } from '../lib/store';
 import { Habit } from '../lib/types';
 import { calculateHabitStats, isDaySuccessful } from '../lib/utils/streaks';
 import { getTodayDateString, isHabitDueOnDate } from '../lib/utils/date';
 import { calculateGamificationProfile } from '../lib/utils/gamification';
-import { checkSessionAction, lockSessionAction } from '../lib/server/auth';
+import { checkSessionUserAction, lockSessionAction, type SessionUser } from '../lib/server/auth';
 import { useAppShortcuts } from '../lib/hooks/useAppShortcuts';
 import { useGamificationFeedback } from '../lib/hooks/useGamificationFeedback';
 
@@ -160,16 +160,39 @@ export default function HabitTrackerPage() {
       return;
     }
 
+    if (isUnlocked === true) {
+      return;
+    }
+
     let isMounted = true;
 
     const checkAuth = async () => {
       try {
-        const authenticated = await checkSessionAction();
+        const { authenticated, user: sessionUser } = await checkSessionUserAction();
         if (isMounted) {
           if (authenticated) {
             setIsUnlocked(true);
-            loadLocalDataFromStorage();
-            syncWithCloud();
+            if (sessionUser) {
+              setCurrentUser({
+                id: sessionUser.userId,
+                username: sessionUser.username,
+                role: sessionUser.role,
+              });
+              const localData = loadLocalDataFromStorage(sessionUser.userId);
+              if (localData && localData.habits.length > 0) {
+                setIsVaultReady(true);
+                syncWithCloud(true);
+                return;
+              }
+            } else {
+              const localData = loadLocalDataFromStorage();
+              if (localData && localData.habits.length > 0) {
+                setIsVaultReady(true);
+                syncWithCloud(true);
+                return;
+              }
+            }
+            syncWithCloud(false);
           } else {
             clearLocalUserData();
             if (typeof window !== 'undefined') {
@@ -196,15 +219,40 @@ export default function HabitTrackerPage() {
     };
   }, [isUnlocked, syncWithCloud]);
 
-  const handleUnlockSuccess = () => {
+  const handleUnlockSuccess = (sessionUser?: SessionUser) => {
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('zenith_session_unlocked', 'true');
     }
     setIsUnlocked(true);
+
+    if (sessionUser) {
+      setCurrentUser({
+        id: sessionUser.userId,
+        username: sessionUser.username,
+        role: sessionUser.role,
+      });
+      const localData = loadLocalDataFromStorage(sessionUser.userId);
+      if (localData && localData.habits.length > 0) {
+        setIsVaultReady(true);
+        syncWithCloud(true);
+        return;
+      }
+    } else {
+      const localData = loadLocalDataFromStorage();
+      if (localData && localData.habits.length > 0) {
+        setIsVaultReady(true);
+        syncWithCloud(true);
+        return;
+      }
+    }
+
     setIsVaultReady(false);
-    loadLocalDataFromStorage();
-    syncWithCloud();
+    syncWithCloud(false);
   };
+
+  const handleVaultReady = useCallback(() => {
+    setIsVaultReady(true);
+  }, []);
 
   const handleLockApp = async () => {
     if (typeof window !== 'undefined') {
@@ -358,7 +406,7 @@ export default function HabitTrackerPage() {
         message={isUnlocked === null ? 'VALIDATING SECURE SESSION...' : 'CONNECTING TO DATABASE...'}
         statusText="ZENITH // SUPABASE CLOUD"
         isReady={isUnlocked === true && isInitialSyncDone}
-        onComplete={() => setIsVaultReady(true)}
+        onComplete={handleVaultReady}
       />
     );
   }

@@ -122,17 +122,22 @@ async function recordAndPersistFailure(
   return { count: nextCount, lockedUntil, waitSeconds, token };
 }
 
+export type { SessionUser } from './auth-utils';
+
 async function clearRateLimits(
   rateLimitKey: string,
-  cookieStore: Awaited<ReturnType<typeof cookies>>
+  cookieStore: Awaited<ReturnType<typeof cookies>>,
+  shouldClearDb = true
 ) {
   resetFailedAttempts(rateLimitKey);
   cookieStore.delete(RL_COOKIE_NAME);
-  const supabase = getServerSupabase();
-  if (supabase) {
-    try {
-      await supabase.from('auth_rate_limits').delete().eq('key', rateLimitKey);
-    } catch {}
+  if (shouldClearDb) {
+    const supabase = getServerSupabase();
+    if (supabase) {
+      try {
+        await supabase.from('auth_rate_limits').delete().eq('key', rateLimitKey);
+      } catch {}
+    }
   }
 }
 
@@ -286,7 +291,7 @@ export async function verifyPinAction(enteredPin: string): Promise<{
         };
       }
 
-      await clearRateLimits(rateLimitKey, cookieStore);
+      await clearRateLimits(rateLimitKey, cookieStore, rateCheck.currentCount > 0);
       cookieStore.set(COOKIE_NAME, createSessionToken({ ...matchedUser, isDeactivated: true }), COOKIE_OPTS);
 
       return {
@@ -300,29 +305,37 @@ export async function verifyPinAction(enteredPin: string): Promise<{
     }
 
     // Normal active login: Reset rate limits and issue secure HttpOnly cookie
-    await clearRateLimits(rateLimitKey, cookieStore);
     const token = createSessionToken(matchedUser);
+    cookieStore.set(COOKIE_NAME, token, COOKIE_OPTS);
+
+    const postAuthTasks: Promise<unknown>[] = [
+      clearRateLimits(rateLimitKey, cookieStore, rateCheck.currentCount > 0),
+    ];
 
     // Record last login timestamp & transparently upgrade 6-digit SHA-256 hash to Scrypt if needed
     const supabaseClient = getServerSupabase();
     if (supabaseClient) {
-      try {
-        const updateFields: Record<string, unknown> = {
-          last_login_at: new Date().toISOString(),
-        };
-        if (cleanPin.length === 6 && matchedPinHash && !isScryptHash(matchedPinHash)) {
-          updateFields.pin_hash = await hashPinScrypt(cleanPin);
-        }
-        await supabaseClient
-          .from('app_users')
-          .update(updateFields)
-          .eq('id', matchedUser.userId);
-      } catch (logErr) {
-        console.warn('Could not record last_login_at:', logErr);
-      }
+      postAuthTasks.push(
+        (async () => {
+          try {
+            const updateFields: Record<string, unknown> = {
+              last_login_at: new Date().toISOString(),
+            };
+            if (cleanPin.length === 6 && matchedPinHash && !isScryptHash(matchedPinHash)) {
+              updateFields.pin_hash = await hashPinScrypt(cleanPin);
+            }
+            await supabaseClient
+              .from('app_users')
+              .update(updateFields)
+              .eq('id', matchedUser.userId);
+          } catch (logErr) {
+            console.warn('Could not record last_login_at:', logErr);
+          }
+        })()
+      );
     }
 
-    cookieStore.set(COOKIE_NAME, token, COOKIE_OPTS);
+    await Promise.allSettled(postAuthTasks);
 
     return {
       success: true,
@@ -340,11 +353,25 @@ export async function verifyPinAction(enteredPin: string): Promise<{
 }
 
 /**
+ * Server Action: Check if client has a valid session cookie and return user metadata
+ */
+export async function checkSessionUserAction(): Promise<{
+  authenticated: boolean;
+  user: SessionUser | null;
+}> {
+  const user = await getCurrentUserAction();
+  if (user && !user.isDeactivated) {
+    return { authenticated: true, user };
+  }
+  return { authenticated: false, user: null };
+}
+
+/**
  * Server Action: Check if client has a valid session cookie
  */
 export async function checkSessionAction(): Promise<boolean> {
-  const user = await getCurrentUserAction();
-  return Boolean(user && !user.isDeactivated);
+  const { authenticated } = await checkSessionUserAction();
+  return authenticated;
 }
 
 /**

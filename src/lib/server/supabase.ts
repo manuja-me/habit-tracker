@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 // Server-side private credentials
 export function getCleanSupabaseConfig() {
@@ -19,23 +19,33 @@ export function getCleanSupabaseConfig() {
     url = url.replace(/\/rest\/v1.*$/, '');
   }
 
-  if (!url.startsWith('https://') || url.includes('your-project-url')) {
+  const isLocal = url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost');
+  if ((!url.startsWith('https://') && !isLocal) || url.includes('your-project-url')) {
     return null;
   }
 
   return { url, key };
 }
 
-export function getServerSupabase() {
+let cachedServerSupabase: SupabaseClient | null = null;
+let lastConfigHash: string | null = null;
+
+export function getServerSupabase(): SupabaseClient | null {
   try {
     const config = getCleanSupabaseConfig();
     if (!config) return null;
-    return createClient(config.url, config.key, {
+    const configHash = `${config.url}::${config.key}`;
+    if (cachedServerSupabase && lastConfigHash === configHash) {
+      return cachedServerSupabase;
+    }
+    cachedServerSupabase = createClient(config.url, config.key, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
       },
     });
+    lastConfigHash = configHash;
+    return cachedServerSupabase;
   } catch (err) {
     console.error('Failed to create Supabase client:', err);
     return null;

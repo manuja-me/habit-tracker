@@ -144,8 +144,24 @@ export function clearLocalUserData() {
   updateStoreSnapshot();
 }
 
-export function loadLocalDataFromStorage(userId?: string) {
-  if (typeof window === 'undefined') return;
+export function setCurrentUser(user: { id: string; username: string; role: string } | null) {
+  globalCurrentUser = user;
+  if (user && typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(LAST_USER_KEY, user.id);
+    } catch {}
+  }
+  updateStoreSnapshot();
+}
+
+export function loadLocalDataFromStorage(userId?: string): {
+  habits: Habit[];
+  logs: Record<string, HabitLog>;
+  dayNotes: Record<string, string>;
+} {
+  if (typeof window === 'undefined') {
+    return { habits: [], logs: {}, dayNotes: {} };
+  }
   const uid = userId || globalCurrentUser?.id;
   const { habits, logs, dayNotes } = loadLocalData(uid);
   globalHabits = habits;
@@ -153,13 +169,21 @@ export function loadLocalDataFromStorage(userId?: string) {
   globalDayNotes = dayNotes;
   isStorageLoaded = true;
   updateStoreSnapshot();
+  return { habits, logs, dayNotes };
 }
 
 // Unified Single Cloud Sync Executor
-async function executeCloudSync(isBackground = false) {
+let activeSyncPromise: Promise<void> | null = null;
+
+async function executeCloudSync(isBackground = false): Promise<void> {
   // Skip cloud sync if current tab session is locked
   if (typeof window !== 'undefined' && sessionStorage.getItem('zenith_session_unlocked') !== 'true') {
     return;
+  }
+
+  // Deduplicate concurrent sync calls: reuse active in-flight request
+  if (activeSyncPromise) {
+    return activeSyncPromise;
   }
 
   // If user performed a local action (add, delete, toggle) within the last 3.5s, skip sync to avoid race conditions
@@ -167,11 +191,12 @@ async function executeCloudSync(isBackground = false) {
     return;
   }
 
-  const requestStartTime = Date.now();
-  if (!isBackground) {
-    globalIsSyncing = true;
-    updateStoreSnapshot();
-  }
+  activeSyncPromise = (async () => {
+    const requestStartTime = Date.now();
+    if (!isBackground) {
+      globalIsSyncing = true;
+      updateStoreSnapshot();
+    }
 
   try {
     const res = await getHabitsAndLogsAction();
@@ -314,6 +339,11 @@ async function executeCloudSync(isBackground = false) {
     }
     updateStoreSnapshot();
   }
+  })().finally(() => {
+    activeSyncPromise = null;
+  });
+
+  return activeSyncPromise;
 }
 
 // Singleton Sync Coordinator
@@ -591,5 +621,6 @@ export function useHabitStore() {
     reorderHabits,
     syncWithCloud,
     saveDayNote,
+    setCurrentUser,
   };
 }

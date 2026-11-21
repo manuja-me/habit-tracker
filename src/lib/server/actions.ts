@@ -123,18 +123,46 @@ export async function getHabitsAndLogsAction(): Promise<{
       return { success: true, isConfigured: false, habits: [], logs: {}, dayNotes: {}, user: { id: user.userId, username: user.username, role: user.role } };
     }
 
-    // 1. Fetch habits scoped to this user
-    let habitsData: DbHabitRecord[] = [];
     const isOwner = isOwnerUser(user);
 
-    // Try scoped query with user_id
-    const habitsRes = await supabase
-      .from('habits')
-      .select('*')
-      .eq('archived', false)
-      .or(isOwner ? `user_id.eq.${user.userId},user_id.is.null` : `user_id.eq.${user.userId}`)
-      .order('sort_order', { ascending: true });
+    // Compute date cutoffs: 370 days for habit_logs (52-week heatmap), 3 months for planner day_notes
+    const now = new Date();
+    const cutoffDate = new Date(now);
+    cutoffDate.setDate(cutoffDate.getDate() - 370);
+    const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
 
+    const plannerCutoffDateStr = getPlannerCutoffDateString(now);
+
+    // Decouple day notes purge from critical read path
+    void purgeExpiredDayNotes(supabase, now).catch(() => {});
+
+    // Query habits, habit_logs (scoped by user_id with fallback), day_notes, and app_users concurrently in 1 round-trip
+    const [habitsRes, logsRes, notesRes, userRes] = await Promise.all([
+      supabase
+        .from('habits')
+        .select('*')
+        .eq('archived', false)
+        .or(isOwner ? `user_id.eq.${user.userId},user_id.is.null` : `user_id.eq.${user.userId}`)
+        .order('sort_order', { ascending: true }),
+      supabase
+        .from('habit_logs')
+        .select('id, habit_id, date, completed, value, created_at, updated_at')
+        .gte('date', cutoffDateStr)
+        .or(isOwner ? `user_id.eq.${user.userId},user_id.is.null` : `user_id.eq.${user.userId}`)
+        .order('date', { ascending: false }),
+      supabase
+        .from('day_notes')
+        .select('date, content, created_at, updated_at')
+        .gt('date', plannerCutoffDateStr)
+        .or(isOwner ? `user_id.eq.${user.userId},user_id.is.null` : `user_id.eq.${user.userId}`),
+      supabase
+        .from('app_users')
+        .select('updated_at')
+        .eq('id', user.userId)
+        .maybeSingle(),
+    ]);
+
+    let habitsData: DbHabitRecord[] = [];
     if (habitsRes.error) {
       // Fallback for pre-migration databases: owner gets all, new member gets empty
       if (isOwner) {
@@ -152,44 +180,28 @@ export async function getHabitsAndLogsAction(): Promise<{
       habitsData = (habitsRes.data as DbHabitRecord[]) || [];
     }
 
-    // 2. Compute date cutoffs: 370 days for habit_logs (52-week heatmap), 3 months for planner day_notes
-    const now = new Date();
-    const cutoffDate = new Date(now);
-    cutoffDate.setDate(cutoffDate.getDate() - 370);
-    const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
-
-    const plannerCutoffDateStr = getPlannerCutoffDateString(now);
-    await purgeExpiredDayNotes(supabase, now);
-
-    const userHabitIds = habitsData.map((h) => h.id);
+    const validHabitIdSet = new Set(habitsData.map((h) => h.id));
     let logsData: DbLogRecord[] = [];
-    const dayNotesMap: Record<string, string> = {};
 
-    // Run habit_logs, day_notes, and app_users activity queries concurrently
-    const [logsRes, notesRes, userRes] = await Promise.all([
-      userHabitIds.length > 0
-        ? supabase
-            .from('habit_logs')
-            .select('id, habit_id, date, completed, value, created_at, updated_at')
-            .in('habit_id', userHabitIds)
-            .gte('date', cutoffDateStr)
-            .order('date', { ascending: false })
-        : Promise.resolve({ data: [], error: null }),
-      supabase
-        .from('day_notes')
-        .select('date, content, created_at, updated_at')
-        .gt('date', plannerCutoffDateStr)
-        .or(isOwner ? `user_id.eq.${user.userId},user_id.is.null` : `user_id.eq.${user.userId}`),
-      supabase
-        .from('app_users')
-        .select('updated_at')
-        .eq('id', user.userId)
-        .maybeSingle(),
-    ]);
-
-    if (!logsRes.error && logsRes.data) {
-      logsData = logsRes.data as DbLogRecord[];
+    if (logsRes.error) {
+      // Fallback for pre-migration databases without user_id column on habit_logs
+      const userHabitIds = habitsData.map((h) => h.id);
+      if (userHabitIds.length > 0) {
+        const fallbackLogsRes = await supabase
+          .from('habit_logs')
+          .select('id, habit_id, date, completed, value, created_at, updated_at')
+          .in('habit_id', userHabitIds)
+          .gte('date', cutoffDateStr)
+          .order('date', { ascending: false });
+        if (!fallbackLogsRes.error && fallbackLogsRes.data) {
+          logsData = fallbackLogsRes.data as DbLogRecord[];
+        }
+      }
+    } else if (logsRes.data) {
+      logsData = (logsRes.data as DbLogRecord[]).filter((l) => validHabitIdSet.has(l.habit_id));
     }
+
+    const dayNotesMap: Record<string, string> = {};
 
     let latestMs = 0;
     const trackTime = (iso?: string | null) => {

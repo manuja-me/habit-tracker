@@ -26,20 +26,20 @@ export function LoadingScreen({
   useEffect(() => {
     isReadyRef.current = isReady;
     onCompleteRef.current = onComplete;
+    if (isReady) {
+      onCompleteRef.current?.();
+    }
   }, [isReady, onComplete]);
 
   // When external targetProgress reaches 100, trigger completion
   useEffect(() => {
     if (targetProgress !== undefined && targetProgress >= 100) {
-      const timeout = setTimeout(() => {
-        onCompleteRef.current?.();
-      }, 250);
-      return () => clearTimeout(timeout);
+      onCompleteRef.current?.();
     }
   }, [targetProgress]);
 
   useEffect(() => {
-    if (targetProgress !== undefined) {
+    if (targetProgress !== undefined || isReady) {
       return;
     }
 
@@ -91,7 +91,7 @@ export function LoadingScreen({
     }, 40);
 
     return () => clearInterval(interval);
-  }, [targetProgress]);
+  }, [targetProgress, isReady]);
 
   // When 100% is reached, give user 250ms to see the 100% complete state, then trigger onComplete
   useEffect(() => {

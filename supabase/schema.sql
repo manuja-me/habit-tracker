@@ -167,6 +167,8 @@ CREATE INDEX IF NOT EXISTS idx_day_notes_user_date ON public.day_notes(user_id, 
 CREATE INDEX IF NOT EXISTS idx_day_notes_created_at ON public.day_notes(created_at);
 CREATE INDEX IF NOT EXISTS idx_app_users_deactivated_at ON public.app_users(deactivated_at);
 CREATE INDEX IF NOT EXISTS idx_invitations_token ON public.invitations(token);
+CREATE INDEX IF NOT EXISTS idx_habits_user_archived ON public.habits(user_id, archived, sort_order);
+CREATE INDEX IF NOT EXISTS idx_habit_logs_user_date ON public.habit_logs(user_id, date DESC);
 
 -- 7. Row Level Security (RLS)
 ALTER TABLE public.app_users ENABLE ROW LEVEL SECURITY;
