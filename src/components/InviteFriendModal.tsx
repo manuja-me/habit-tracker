@@ -78,7 +78,7 @@ export function InviteFriendModal({ isOpen, onClose }: InviteFriendModalProps) {
         {/* Body */}
         <div className="space-y-4">
           <p className="text-xs text-sub leading-relaxed">
-            Generate a one-time secret link for your friend. When he opens it, he will create his own name and choose his own private 4-digit PIN.
+            Generate a one-time secret link for your friend. When he opens it, he will create his own name and choose his own private 6-digit PIN.
           </p>
 
           <div className="p-3 bg-subtle/50 border border-main text-[11px] space-y-1.5">

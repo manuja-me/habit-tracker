@@ -12,7 +12,7 @@ This guide walks you through deploying your personal habit tracker completely fo
 4. Copy the entire contents of [`supabase/schema.sql`](./supabase/schema.sql) and paste it into the editor, then click **Run**.
 5. Go to **Project Settings** -> **API**:
    - Copy **Project URL**
-   - Copy **service_role secret Key** (or `anon public Key`)
+   - Copy **`service_role` secret Key** (never expose this in client-side code; used exclusively by server actions)
 
 ---
 
@@ -21,12 +21,16 @@ This guide walks you through deploying your personal habit tracker completely fo
 1. Go to [vercel.com](https://vercel.com) and sign in with your GitHub account.
 2. Click **"Add New..."** -> **"Project"**.
 3. Select your private repository: `manuja-me/habit-tracker`.
-4. In the **Environment Variables** section, add your configuration:
+4. In the **Environment Variables** section, add your 5 configuration variables:
    - `SUPABASE_URL` = `<your_project_url>`
    - `SUPABASE_SERVICE_ROLE_KEY` = `<your_service_role_secret_key>`
-   - `APP_SECRET_PIN` = `<your_private_4_digit_pin>`
+   - `PIN_SALT` = `<random_32_byte_hex_string>` (required in production; generate via `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`)
+   - `SESSION_SECRET` = `<second_random_32_byte_hex_string>` (required in production; generate via `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`)
+   - `APP_SECRET_PIN` = `<your_private_6_digit_pin>` (e.g., `100100`; must be a 6-digit numeric PIN, not default `1001`)
 5. Click **"Deploy"**.
 6. In ~60 seconds, your site will be live on a `*.vercel.app` URL!
+
+> **Note on Security Enforcements**: Production builds strictly require custom non-default secrets for `PIN_SALT`, `SESSION_SECRET`, and `APP_SECRET_PIN`. If any of these are missing or left as default (`1001`), server actions will reject requests with a security guard error.
 
 ---
 
@@ -57,6 +61,6 @@ This guide walks you through deploying your personal habit tracker completely fo
 ---
 
 ## 5. Security & Access
-- **PIN Protected**: Access is guarded by your private 4-digit PIN configured in `APP_SECRET_PIN`.
-- **HttpOnly Cookie**: Once entered on any device, a secure session cookie keeps your phone or laptop unlocked.
+- **PIN Protected**: Access is guarded by your private 6-digit PIN configured in `APP_SECRET_PIN` (salted with `PIN_SALT` and hashed with memory-hard Scrypt / SHA-256).
+- **HttpOnly Cookie**: Once entered on any device, an encrypted session cookie signed with `SESSION_SECRET` keeps your phone or laptop unlocked.
 - **Server Gateway**: The public internet cannot query your Supabase database directly; all traffic is mediated by Next.js Server Actions with strict Row Level Security.
