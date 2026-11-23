@@ -188,7 +188,7 @@ export async function getHabitsAndLogsAction(expectedUserId?: string): Promise<{
         .or(isOwner ? `user_id.eq.${user.userId},user_id.is.null` : `user_id.eq.${user.userId}`),
       supabase
         .from('app_users')
-        .select('updated_at')
+        .select('updated_at, last_login_at')
         .eq('id', user.userId)
         .maybeSingle(),
     ]);
@@ -244,7 +244,9 @@ export async function getHabitsAndLogsAction(expectedUserId?: string): Promise<{
       if (Number.isFinite(t) && t > latestMs) latestMs = t;
     };
 
-    trackTime((userRes.data as { updated_at?: string | null } | null)?.updated_at);
+    const userRow = userRes.data as { updated_at?: string | null; last_login_at?: string | null } | null;
+    trackTime(userRow?.last_login_at);
+    trackTime(userRow?.updated_at);
     habitsData.forEach((h) => {
       trackTime(h.updated_at);
       trackTime(h.created_at);
@@ -347,7 +349,7 @@ export async function recordAccountVisitAction(expectedUserId?: string): Promise
 
     const { error } = await supabase
       .from('app_users')
-      .update({ updated_at: new Date().toISOString() })
+      .update({ last_login_at: new Date().toISOString() })
       .eq('id', user.userId);
     return { success: !error };
   } catch {

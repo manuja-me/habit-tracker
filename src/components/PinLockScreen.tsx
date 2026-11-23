@@ -2,15 +2,17 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { verifyPinAction, reactivateAccountAction, lockSessionAction, changePinAction, type SessionUser } from '../lib/server/auth';
-import { Lock, ShieldAlert, Delete, Clock, ShieldCheck } from 'lucide-react';
+import { Lock, ShieldAlert, Delete, Clock, ShieldCheck, X } from 'lucide-react';
 import { ReactivationModal } from './ReactivationModal';
 import { ZenithLogo } from './ui/ZenithLogo';
 
 interface PinLockScreenProps {
   onUnlock: (user?: SessionUser) => void;
+  onCancel?: () => void;
+  className?: string;
 }
 
-export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
+export function PinLockScreen({ onUnlock, onCancel, className }: PinLockScreenProps) {
   const [pin, setPin] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
@@ -250,13 +252,17 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
         handleBackspace();
       } else if (e.key === 'Escape' || e.key.toLowerCase() === 'c') {
         e.preventDefault();
-        handleClear();
+        if (pinRef.current) {
+          handleClear();
+        } else if (onCancel) {
+          onCancel();
+        }
       }
     };
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [handleDigitPress, handleBackspace, handleClear, verifyAndSubmit]);
+  }, [handleDigitPress, handleBackspace, handleClear, verifyAndSubmit, onCancel]);
 
   const handlePaste = (e: React.ClipboardEvent) => {
     const text = e.clipboardData.getData('text').trim();
@@ -274,7 +280,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
       ref={containerRef}
       tabIndex={0}
       onPaste={handlePaste}
-      className="min-h-screen bg-main text-main flex flex-col items-center justify-center p-3.5 sm:p-6 font-mono select-none outline-none focus:outline-none"
+      className={className || "min-h-screen bg-main text-main flex flex-col items-center justify-center p-3.5 sm:p-6 font-mono select-none outline-none focus:outline-none"}
     >
       <div className="w-full max-w-[360px] sm:max-w-[400px] bg-card border-2 border-main p-6 sm:p-8 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-150">
         {/* Swiss Masthead */}
@@ -299,9 +305,21 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
               </div>
             </div>
 
-            <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-[#FF3B30] border border-[#FF3B30] px-2 py-0.5 bg-[#FF3B30]/10">
-              <Lock className="w-3 h-3" />
-              <span>{legacyPinToUpgrade ? 'UPGRADE' : 'SECURED'}</span>
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-[#FF3B30] border border-[#FF3B30] px-2 py-0.5 bg-[#FF3B30]/10">
+                <Lock className="w-3 h-3" />
+                <span>{legacyPinToUpgrade ? 'UPGRADE' : 'SECURED'}</span>
+              </div>
+              {onCancel && (
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  aria-label="Close"
+                  className="w-6 h-6 flex items-center justify-center text-sub hover:text-main hover:bg-subtle cursor-pointer transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
           <p className="text-xs font-mono text-sub pt-1 leading-tight">

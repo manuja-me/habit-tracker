@@ -396,11 +396,11 @@ export async function getCurrentUserAction(): Promise<SessionUser | null> {
   if (!supabase) return user;
 
   const { data, error } = await supabase.from('app_users')
-    .select('id, username, role, deactivated_at, updated_at')
+    .select('id, username, role, deactivated_at, updated_at, pin_changed_at')
     .eq('id', user.userId)
     .maybeSingle();
 
-  if (error?.code === '42703' && error.message.includes('deactivated_at')) {
+  if (error?.code === '42703' && (error.message.includes('deactivated_at') || error.message.includes('pin_changed_at'))) {
     const legacy = await supabase.from('app_users').select('id, username, role, updated_at').eq('id', user.userId).maybeSingle();
     if (legacy.error || !legacy.data || user.isDeactivated) {
       if (user.userId === OWNER_USER_ID && !legacy.data) return user;
@@ -408,7 +408,7 @@ export async function getCurrentUserAction(): Promise<SessionUser | null> {
     }
     if (user.issuedAt && legacy.data.updated_at) {
       const updatedMs = new Date(legacy.data.updated_at).getTime();
-      if (user.issuedAt < updatedMs - 2000) return null;
+      if (user.issuedAt < updatedMs - 5000) return null;
     }
     return { ...user, username: legacy.data.username, role: legacy.data.role === 'owner' ? 'owner' : 'member' };
   }
@@ -418,9 +418,14 @@ export async function getCurrentUserAction(): Promise<SessionUser | null> {
     return null;
   }
 
-  if (user.issuedAt && data.updated_at) {
-    const updatedMs = new Date(data.updated_at).getTime();
-    if (user.issuedAt < updatedMs - 2000) return null;
+  // Revoke session if credentials were changed after token was issued.
+  // Prefer explicit pin_changed_at (null = PIN never changed, preserving active sessions across visit pings).
+  // Fall back to updated_at when pin_changed_at is undefined in test/legacy context.
+  const pinChangedAt = (data as { pin_changed_at?: string | null }).pin_changed_at;
+  const revocationTimestamp = pinChangedAt !== undefined ? pinChangedAt : data.updated_at;
+  if (user.issuedAt && revocationTimestamp) {
+    const updatedMs = new Date(revocationTimestamp).getTime();
+    if (user.issuedAt < updatedMs - 5000) return null;
   }
 
   return { ...user, username: data.username, role: data.role === 'owner' ? 'owner' : 'member' };
@@ -781,13 +786,13 @@ export async function changePinAction(
     if (currentRow) {
       let { data: updated, error: updateErr } = await supabase
         .from('app_users')
-        .update({ pin_hash: newScryptHash, pin_lookup_hash: newLookupHash, updated_at: nowIso })
+        .update({ pin_hash: newScryptHash, pin_lookup_hash: newLookupHash, updated_at: nowIso, pin_changed_at: nowIso })
         .eq('id', user.userId)
         .eq('pin_hash', currentRow.pin_hash)
         .select('id')
         .maybeSingle();
 
-      if (updateErr && (updateErr.code === '42703' || updateErr.message?.includes('pin_lookup_hash'))) {
+      if (updateErr && (updateErr.code === '42703' || updateErr.message?.includes('pin_changed_at') || updateErr.message?.includes('pin_lookup_hash'))) {
         const retry = await supabase
           .from('app_users')
           .update({ pin_hash: newScryptHash, updated_at: nowIso })
@@ -814,8 +819,9 @@ export async function changePinAction(
         pin_lookup_hash: newLookupHash,
         role: 'owner',
         updated_at: nowIso,
+        pin_changed_at: nowIso,
       });
-      if (insertErr && (insertErr.code === '42703' || insertErr.message?.includes('pin_lookup_hash'))) {
+      if (insertErr && (insertErr.code === '42703' || insertErr.message?.includes('pin_changed_at') || insertErr.message?.includes('pin_lookup_hash'))) {
         const retry = await supabase.from('app_users').insert({
           id: OWNER_USER_ID,
           username: 'owner',

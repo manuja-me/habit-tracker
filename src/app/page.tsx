@@ -41,6 +41,7 @@ import {
 export default function HabitTrackerPage() {
   const [isUnlocked, setIsUnlocked] = useState<boolean | null>(null);
   const [isVaultReady, setIsVaultReady] = useState<boolean>(false);
+  const [isReauthOpen, setIsReauthOpen] = useState<boolean>(false);
 
   const {
     habits,
@@ -191,6 +192,10 @@ export default function HabitTrackerPage() {
 
   const handleVaultReady = useCallback(() => {
     setIsVaultReady(true);
+  }, []);
+
+  const handleSessionExpired = useCallback(() => {
+    setIsReauthOpen(true);
   }, []);
 
   const handleLockApp = () => {
@@ -417,7 +422,13 @@ export default function HabitTrackerPage() {
           </div>
         )}
 
-        {activeTab === 'projects' && currentUser && <ProjectsView key={currentUser.id} userId={currentUser.id} />}
+        {activeTab === 'projects' && currentUser && (
+          <ProjectsView
+            key={currentUser.id}
+            userId={currentUser.id}
+            onSessionExpired={handleSessionExpired}
+          />
+        )}
 
         {activeTab === 'week' && (
           <WeeklyGrid
@@ -521,6 +532,18 @@ export default function HabitTrackerPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Session Re-authentication Modal */}
+      {isReauthOpen && (
+        <PinLockScreen
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-center p-3.5 sm:p-6 font-mono select-none outline-none focus:outline-none"
+          onUnlock={(sessionUser) => {
+            setIsReauthOpen(false);
+            handleUnlockSuccess(sessionUser);
+          }}
+          onCancel={() => setIsReauthOpen(false)}
+        />
       )}
     </div>
   );

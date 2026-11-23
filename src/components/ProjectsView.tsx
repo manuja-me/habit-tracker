@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, createContext, useContext } from 'react';
 import {
   Plus,
   Trash2,
@@ -28,6 +28,18 @@ import {
 const LOCAL_KEY = 'zenith_projects_v1';
 const getProjectsStorageKey = (uid?: string) => uid ? `zenith_projects_v1_${uid}` : LOCAL_KEY;
 
+const SessionExpiredContext = createContext<(() => void) | undefined>(undefined);
+
+function isAuthError(err?: string | null): boolean {
+  if (!err) return false;
+  return (
+    err.includes('Unauthorized') ||
+    err.includes('Valid session required') ||
+    err.includes('signed-in account changed') ||
+    err.includes('ACCOUNT DEACTIVATED')
+  );
+}
+
 type Result = { success: boolean; error?: string };
 type ProjectEdit = (project: Project) => Project;
 type GroupChanges = Partial<Pick<ProjectGroup, 'name' | 'color'>>;
@@ -43,6 +55,7 @@ function AddForm({
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const onSessionExpired = useContext(SessionExpiredContext);
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -67,7 +80,20 @@ function AddForm({
       <fieldset disabled={pending} aria-busy={pending} className={className}>
         {children}
       </fieldset>
-      {error && <p role="alert" className="mt-1 text-xs text-[#FF3B30]">{error}</p>}
+      {error && (
+        <div role="alert" className="mt-1 text-xs text-[#FF3B30] flex items-center gap-2">
+          <span>{isAuthError(error) ? 'Session expired: Valid session required.' : error}</span>
+          {isAuthError(error) && onSessionExpired && (
+            <button
+              type="button"
+              onClick={onSessionExpired}
+              className="underline font-bold hover:text-white cursor-pointer"
+            >
+              Enter PIN
+            </button>
+          )}
+        </div>
+      )}
     </form>
   );
 }
@@ -927,7 +953,13 @@ type ProjectBoard = { projects: Project[]; groups: ProjectGroup[] };
 type BoardEdit = (board: ProjectBoard) => ProjectBoard;
 const boardWrites = new Map<string, Promise<void>>();
 
-export function ProjectsView({ userId }: { userId: string }) {
+export function ProjectsView({
+  userId,
+  onSessionExpired,
+}: {
+  userId: string;
+  onSessionExpired?: () => void;
+}) {
   const [board, setBoard] = useState<ProjectBoard>({ projects: [], groups: [] });
   const { projects, groups } = board;
   const saved = useRef(board);
@@ -980,13 +1012,17 @@ export function ProjectsView({ userId }: { userId: string }) {
               setLoading(false);
             }
           } catch {}
-          setError(err instanceof Error ? err.message : 'Failed to load projects');
+          const msg = err instanceof Error ? err.message : 'Failed to load projects';
+          if (isAuthError(msg)) {
+            onSessionExpired?.();
+          }
+          setError(msg);
         }
       }
     };
     void load();
     return () => { active = false; };
-  }, [userId]);
+  }, [userId, onSessionExpired]);
 
   // Replay pending edits over confirmed data so one failed save only rolls back its own change.
   const apply = (op: (next: ProjectBoard) => Promise<Result>, edit: BoardEdit): Promise<Result> => {
@@ -997,16 +1033,23 @@ export function ProjectsView({ userId }: { userId: string }) {
       let result: Result;
       try {
         const next = edit(saved.current);
-        if (!isCloud) localStorage.setItem(LOCAL_KEY, JSON.stringify(next));
-        localStorage.setItem(getProjectsStorageKey(userId), JSON.stringify(next));
         result = isCloud ? await op(next) : { success: true };
-        if (result.success) saved.current = next;
+        if (result.success) {
+          saved.current = next;
+          if (!isCloud) localStorage.setItem(LOCAL_KEY, JSON.stringify(next));
+          localStorage.setItem(getProjectsStorageKey(userId), JSON.stringify(next));
+        }
       } catch {
         result = { success: false, error: 'Could not save changes. Try again.' };
       }
       pending.current.shift();
       setBoard(pending.current.reduce((state, change) => change(state), saved.current));
-      if (!result.success) setError(result.error || 'Save failed');
+      if (!result.success) {
+        setError(result.error || 'Save failed');
+        if (isAuthError(result.error)) {
+          onSessionExpired?.();
+        }
+      }
       return result;
     });
     const settled = write.then(() => {}, () => {});
@@ -1158,54 +1201,65 @@ export function ProjectsView({ userId }: { userId: string }) {
   };
 
   return (
-    <div className="w-full max-w-4xl xl:max-w-7xl mx-auto px-4 sm:px-6">
-      <div className="bg-card p-4 sm:p-6 border border-main shadow-xs space-y-8">
-        {error && (
-          <p role="alert" className="text-xs font-mono text-[#FF3B30] border border-[#FF3B30] px-3 py-2">
-            {error}
-          </p>
-        )}
+    <SessionExpiredContext.Provider value={onSessionExpired}>
+      <div className="w-full max-w-4xl xl:max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="bg-card p-4 sm:p-6 border border-main shadow-xs space-y-8">
+          {error && (
+            <div role="alert" className="text-xs font-mono text-[#FF3B30] border border-[#FF3B30] px-3 py-2 flex items-center justify-between gap-2">
+              <span>{isAuthError(error) ? 'Session expired: Valid session required.' : error}</span>
+              {isAuthError(error) && onSessionExpired && (
+                <button
+                  type="button"
+                  onClick={onSessionExpired}
+                  className="underline font-bold uppercase hover:text-white cursor-pointer text-[11px] shrink-0"
+                >
+                  Unlock with PIN
+                </button>
+              )}
+            </div>
+          )}
 
-        {/* Top Header bar with clean action: Settings button */}
-        <div className="flex items-center justify-between pb-3 border-b border-subtle">
-          <div>
-            <h2 className="text-sm sm:text-base font-black font-sans uppercase tracking-tight text-main">
-              Projects & Directives
-            </h2>
-            <p className="text-[11px] font-mono text-sub uppercase tracking-wider">
-              Manage ongoing execution and strategic planning
-            </p>
+          {/* Top Header bar with clean action: Settings button */}
+          <div className="flex items-center justify-between pb-3 border-b border-subtle">
+            <div>
+              <h2 className="text-sm sm:text-base font-black font-sans uppercase tracking-tight text-main">
+                Projects & Directives
+              </h2>
+              <p className="text-[11px] font-mono text-sub uppercase tracking-wider">
+                Manage ongoing execution and strategic planning
+              </p>
+            </div>
+
+            <button
+              disabled={loading}
+              onClick={() => setIsGlobalSettingsOpen(true)}
+              className="flex items-center gap-1.5 h-8 px-3 border border-main bg-input hover:bg-subtle text-xs font-mono font-bold text-sub hover:text-main cursor-pointer transition-colors"
+              title="Configure Organizations and People"
+            >
+              <Settings className="w-3.5 h-3.5 text-[#FF3B30]" />
+              <span className="hidden sm:inline">ORGANIZATIONS & PEOPLE</span>
+            </button>
           </div>
 
-          <button
-            disabled={loading}
-            onClick={() => setIsGlobalSettingsOpen(true)}
-            className="flex items-center gap-1.5 h-8 px-3 border border-main bg-input hover:bg-subtle text-xs font-mono font-bold text-sub hover:text-main cursor-pointer transition-colors"
-            title="Configure Organizations and People"
-          >
-            <Settings className="w-3.5 h-3.5 text-[#FF3B30]" />
-            <span className="hidden sm:inline">ORGANIZATIONS & PEOPLE</span>
-          </button>
+          {loading ? (
+            <p className="text-xs font-mono text-sub uppercase tracking-wider">{error ? 'Reopen the Projects tab to retry.' : 'Loading projects...'}</p>
+          ) : (
+            <>
+              {renderSection('active', 'Ongoing Projects', 'In progress right now', 'Add ongoing project')}
+              {renderSection('planned', 'Future Projects', 'Plan before you start', 'Add future project')}
+            </>
+          )}
         </div>
 
-        {loading ? (
-          <p className="text-xs font-mono text-sub uppercase tracking-wider">{error ? 'Reopen the Projects tab to retry.' : 'Loading projects...'}</p>
-        ) : (
-          <>
-            {renderSection('active', 'Ongoing Projects', 'In progress right now', 'Add ongoing project')}
-            {renderSection('planned', 'Future Projects', 'Plan before you start', 'Add future project')}
-          </>
-        )}
+        <GlobalProjectSettingsModal
+          isOpen={isGlobalSettingsOpen}
+          onClose={() => setIsGlobalSettingsOpen(false)}
+          groups={groups}
+          onSaveGroup={saveGroup}
+          onUpdateGroup={updateGroup}
+          onDeleteGroup={removeGroup}
+        />
       </div>
-
-      <GlobalProjectSettingsModal
-        isOpen={isGlobalSettingsOpen}
-        onClose={() => setIsGlobalSettingsOpen(false)}
-        groups={groups}
-        onSaveGroup={saveGroup}
-        onUpdateGroup={updateGroup}
-        onDeleteGroup={removeGroup}
-      />
-    </div>
+    </SessionExpiredContext.Provider>
   );
 }

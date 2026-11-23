@@ -17,10 +17,11 @@ CREATE TABLE IF NOT EXISTS public.app_users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Safe migration for existing installations (Add last_login_at, deactivated_at, pin_lookup_hash if not exists)
+-- Safe migration for existing installations (Add last_login_at, deactivated_at, pin_lookup_hash, pin_changed_at if not exists)
 ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
 ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS deactivated_at TIMESTAMPTZ DEFAULT NULL;
 ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS pin_lookup_hash TEXT UNIQUE;
+ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS pin_changed_at TIMESTAMPTZ DEFAULT NULL;
 
 -- Ensure fixed Owner user exists (Default PIN 1001 with salt)
 INSERT INTO public.app_users (id, username, pin_hash, pin_lookup_hash, role)

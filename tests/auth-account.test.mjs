@@ -38,7 +38,7 @@ registerHooks({
     }
     if (specifier === './supabase') {
       return {
-        url: 'data:text/javascript,export const getServerSupabase = () => globalThis.authTestSupabase;',
+        url: 'data:text/javascript,export const getServerSupabase = () => globalThis.authTestSupabase; export const getCleanSupabaseConfig = () => ({});',
         shortCircuit: true,
       };
     }
@@ -53,6 +53,7 @@ registerHooks({
 
 const { COOKIE_NAME, createSessionToken, hashPin } = await import('../src/lib/server/auth-utils.ts');
 const { changePinAction, getCurrentUserAction, lockSessionAction, validateInviteTokenAction } = await import('../src/lib/server/auth.ts');
+const { recordAccountVisitAction } = await import('../src/lib/server/actions.ts');
 const { purgeUserData } = await import('../src/lib/server/user-management.ts');
 const member = { userId: '11111111-1111-1111-1111-111111111111', username: 'Member', role: 'member' };
 
@@ -122,4 +123,55 @@ test('sessions issued before credential update are revoked', async () => {
   });
   const user = await getCurrentUserAction();
   assert.equal(user, null);
+});
+
+test('active sessions are NOT revoked when updated_at is newer but PIN was never changed', async () => {
+  const token = createSessionToken({ ...member, issuedAt: Date.now() - 10000 });
+  cookieValues.set(COOKIE_NAME, token);
+  query = () => ({
+    data: {
+      id: member.userId,
+      role: 'member',
+      username: 'Member',
+      deactivated_at: null,
+      updated_at: new Date(Date.now() - 1000).toISOString(),
+      pin_changed_at: null,
+    },
+  });
+  const user = await getCurrentUserAction();
+  assert.equal(user?.userId, member.userId);
+});
+
+test('recordAccountVisitAction updates last_login_at without touching updated_at', async () => {
+  cookieValues.set(COOKIE_NAME, createSessionToken(member));
+  let updatedPayload = null;
+  globalThis.authTestSupabase = {
+    from: () => {
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        maybeSingle: () => ({
+          data: {
+            id: member.userId,
+            username: member.username,
+            role: member.role,
+            deactivated_at: null,
+            pin_changed_at: null,
+            updated_at: new Date().toISOString(),
+          },
+        }),
+        update: (payload) => {
+          updatedPayload = payload;
+          return builder;
+        },
+        then: (resolve) => resolve({ error: null }),
+      };
+      return builder;
+    },
+  };
+
+  const result = await recordAccountVisitAction(member.userId);
+  assert.equal(result.success, true);
+  assert.ok(updatedPayload?.last_login_at);
+  assert.equal(updatedPayload?.updated_at, undefined);
 });
