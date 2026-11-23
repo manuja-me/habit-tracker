@@ -1,5 +1,9 @@
 import crypto from 'crypto';
 import net from 'net';
+import { OWNER_USER_ID } from '../types';
+
+export { OWNER_USER_ID };
+
 function scryptAsync(
   password: crypto.BinaryLike,
   salt: crypto.BinaryLike,
@@ -23,7 +27,6 @@ export function isValidUuid(id?: string | null): boolean {
 const DEFAULT_SALT = 'zenith_server_salt_88f2_secret';
 const DEFAULT_HMAC_SECRET = 'zenith_session_hmac_secret_key_44b1c8';
 
-export const OWNER_USER_ID = '00000000-0000-0000-0000-000000000001';
 export const PIN_SALT = process.env.PIN_SALT || DEFAULT_SALT;
 export const SECRET_HMAC_KEY = process.env.SESSION_SECRET || process.env.SECRET_HMAC_KEY || DEFAULT_HMAC_SECRET;
 

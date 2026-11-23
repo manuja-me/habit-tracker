@@ -53,6 +53,10 @@ test('Supabase client singleton connection caching and local CLI URL support', (
   process.env.SUPABASE_URL = 'http://insecure-external-domain.com';
   const insecureConfig = getCleanSupabaseConfig();
   assert.strictEqual(insecureConfig, null, 'Must reject insecure non-localhost HTTP URL');
+  process.env.SUPABASE_URL = 'http://localhost.example.test:54321';
+  assert.strictEqual(getCleanSupabaseConfig(), null, 'Must match the complete loopback hostname');
+  process.env.SUPABASE_URL = 'https://user:password@database.example.test';
+  assert.strictEqual(getCleanSupabaseConfig(), null, 'Must reject credentials in the URL');
 });
 
 test('checkSessionUserAction returns false and null user when unauthenticated', async () => {
@@ -102,23 +106,14 @@ test('Optimistic local-first unlock and session check guard in PinLockScreen, Lo
   assert.match(loadingScreenCode, /if \(isReady\) \{\s*onCompleteRef\.current\?\.\(\);\s*\}/);
   assert.match(loadingScreenCode, /\}, \[targetProgress, isReady\]\);/);
 
-  // page.tsx guards against re-verifying session when isUnlocked === true
-  assert.match(pageCode, /if \(isUnlocked === true\) \{\s*return;\s*\}/);
+  // page.tsx verifies sessions only while restoring an unlocked tab.
+  assert.match(pageCode, /if \(isUnlocked !== null\) return;/);
 
   // page.tsx consumes checkSessionUserAction on mount
   assert.match(pageCode, /const \{ authenticated, user: sessionUser \} = await checkSessionUserAction\(\)/);
 
   // page.tsx unlocks immediately (setIsVaultReady(true)) if local cached habits exist
-  assert.match(pageCode, /if \(localData && localData\.habits\.length > 0\) \{\s*setIsVaultReady\(true\);\s*syncWithCloud\(true\);/);
-});
-
-test('Cloud sync in-flight promise deduplication in store.ts', () => {
-  const storeCode = readFileSync(new URL('../src/lib/store.ts', import.meta.url), 'utf-8');
-
-  // Verify activeSyncPromise singleton guards against duplicate concurrent sync calls
-  assert.match(storeCode, /let activeSyncPromise: Promise<void> \| null = null;/);
-  assert.match(storeCode, /if \(activeSyncPromise\) \{\s*return activeSyncPromise;\s*\}/);
-  assert.match(storeCode, /activeSyncPromise = null;/);
+  assert.match(pageCode, /const hasCachedHabits = localData\.habits\.length > 0;\s*setIsVaultReady\(hasCachedHabits\);/);
 });
 
 test('Composite database performance indexes in schema.sql', () => {

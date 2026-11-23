@@ -19,8 +19,14 @@ export function getCleanSupabaseConfig() {
     url = url.replace(/\/rest\/v1.*$/, '');
   }
 
-  const isLocal = url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost');
-  if ((!url.startsWith('https://') && !isLocal) || url.includes('your-project-url')) {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const isLocal = parsed.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname);
+  if ((!isLocal && parsed.protocol !== 'https:') || parsed.username || parsed.password || parsed.hostname.includes('your-project-url')) {
     return null;
   }
 

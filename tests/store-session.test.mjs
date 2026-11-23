@@ -2,20 +2,40 @@ import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
 
-test('habit store ignores another tab’s account and sync replies received after locking', async () => {
+test('habit store isolates accounts, deduplicates reads, and retries failed note writes', async () => {
   let receive;
   let finishSync;
+  let reads = 0;
+  let writes = 0;
+  let tabUserId = 'account-a';
+  let note = '';
+  let rejectNote = true;
+  const storage = new Map();
   globalThis.window = globalThis;
   globalThis.BroadcastChannel = class {
     set onmessage(handler) { receive = handler; }
   };
   globalThis.localStorage = {
-    getItem: () => null,
-    setItem() {},
-    removeItem() {},
+    getItem: key => storage.get(key) ?? null,
+    setItem: (key, value) => storage.set(key, value),
+    removeItem: key => storage.delete(key),
   };
-  globalThis.sessionStorage = { getItem: () => 'true' };
-  globalThis.getTestHabits = () => new Promise((resolve) => { finishSync = resolve; });
+  globalThis.sessionStorage = {
+    getItem: key => key === 'zenith_session_unlocked' ? 'true' : tabUserId,
+  };
+  globalThis.getTestHabits = expectedUser => {
+    reads++;
+    assert.equal(expectedUser, tabUserId);
+    return new Promise((resolve) => { finishSync = resolve; });
+  };
+  globalThis.writeTestNote = async (date, value, expectedUser) => {
+    writes++;
+    assert.match(date, /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(expectedUser, tabUserId);
+    if (rejectNote) return { success: false, error: 'Cloud unavailable' };
+    note = value;
+    return { success: true };
+  };
 
   registerHooks({
     resolve(specifier, context, nextResolve) {
@@ -27,7 +47,7 @@ test('habit store ignores another tab’s account and sync replies received afte
       }
       if (specifier === './server/actions') {
         return {
-          url: 'data:text/javascript,export const getHabitsAndLogsAction = () => globalThis.getTestHabits(); export const saveHabitAction = () => {}, deleteHabitAction = () => {}, saveHabitLogAction = () => {}, reorderHabitsAction = () => {}, saveDayNoteAction = () => {};',
+          url: 'data:text/javascript,export const getHabitsAndLogsAction = globalThis.getTestHabits; export const saveHabitAction = () => {}, deleteHabitAction = () => {}, saveHabitLogAction = () => {}, reorderHabitsAction = () => {}, saveDayNoteAction = globalThis.writeTestNote;',
           shortCircuit: true,
         };
       }
@@ -40,19 +60,57 @@ test('habit store ignores another tab’s account and sync replies received afte
     },
   });
 
-  const { useHabitStore, setCurrentUser, clearLocalUserData } = await import('../src/lib/store.ts');
+  const { useHabitStore, setCurrentUser, clearLocalUserData, loadLocalDataFromStorage } = await import('../src/lib/store.ts');
+  const { getTodayDateString } = await import('../src/lib/utils/date.ts');
+  const { OWNER_USER_ID } = await import('../src/lib/types.ts');
   const user = { id: 'account-a', username: 'A', role: 'member' };
   const habit = { id: 'habit-a', title: 'Private habit' };
   setCurrentUser(user);
+  assert.deepEqual(loadLocalDataFromStorage('account-b').habits, []);
   receive({ data: { type: 'SYNC_STATE', userId: 'account-b', habits: [{ id: 'habit-b' }] } });
   assert.deepEqual(useHabitStore().habits, []);
   receive({ data: { type: 'SYNC_STATE', userId: user.id, habits: [habit] } });
   assert.deepEqual(useHabitStore().habits, [habit]);
 
   const syncing = useHabitStore().syncWithCloud();
+  const secondSync = useHabitStore().syncWithCloud();
+  assert.equal(reads, 1);
   clearLocalUserData();
   finishSync({ success: true, isConfigured: true, user, habits: [habit] });
-  await syncing;
+  await Promise.all([syncing, secondSync]);
   assert.equal(useHabitStore().currentUser, null);
   assert.deepEqual(useHabitStore().habits, []);
+
+  setCurrentUser(user);
+  const date = getTodayDateString();
+  const oldSessionSave = useHabitStore().saveDayNote;
+  oldSessionSave(date, 'draft');
+  await useHabitStore().syncWithCloud();
+  assert.equal(reads, 1);
+  assert.equal(useHabitStore().dayNotes[date], 'draft');
+  assert.equal(useHabitStore().syncError, 'Cloud unavailable');
+  assert.equal(JSON.parse(storage.get('zenith_day_notes_account-a'))[date], 'draft');
+
+  rejectNote = false;
+  const retry = useHabitStore().syncWithCloud();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(writes, 2);
+  assert.equal(note, 'draft');
+  assert.equal(reads, 2);
+  finishSync({ success: true, isConfigured: true, user, dayNotes: { [date]: note } });
+  await retry;
+  assert.equal(useHabitStore().syncError, null);
+  assert.equal(useHabitStore().dayNotes[date], 'draft');
+
+  tabUserId = 'account-b';
+  setCurrentUser({ id: tabUserId, username: 'B', role: 'member' });
+  oldSessionSave(date, 'stale draft');
+  assert.equal(useHabitStore().dayNotes[date], undefined);
+  assert.equal(writes, 2);
+
+  storage.set('zenith_habits_owner', JSON.stringify([habit]));
+  assert.deepEqual(loadLocalDataFromStorage(tabUserId).habits, []);
+  tabUserId = OWNER_USER_ID;
+  setCurrentUser({ id: tabUserId, username: 'Owner', role: 'owner' });
+  assert.deepEqual(loadLocalDataFromStorage(tabUserId).habits, [habit]);
 });

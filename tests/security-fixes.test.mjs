@@ -383,7 +383,7 @@ test('Finding 7: Cross-tenant day note fallback protection and production debug 
 
   // Verify saveDayNoteAction does not have unsafe 42P10 fallback that strips user_id for non-owners
   assert.doesNotMatch(actionsCode, /42P10/);
-  assert.match(actionsCode, /isOwnerUser\(user\) && \(error\.message\?\.includes\('user_id'\) \|\| error\.code === '42703'\)/);
+  assert.match(actionsCode, /isOwnerUser\(user\) && isMissingColumn\(error, 'user_id'\)/);
 
   // Verify ?absence debug parameter is disabled in production
   assert.match(pageCode, /process\.env\.NODE_ENV !== 'production' && typeof window !== 'undefined'/);

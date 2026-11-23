@@ -6,6 +6,7 @@ export type HabitCategory =
   | 'learning' 
   | 'finance' 
   | 'lifestyle';
+export const OWNER_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 export type HabitFrequency = 'daily' | 'weekdays' | 'weekends' | 'custom';
 

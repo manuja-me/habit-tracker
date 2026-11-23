@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useCallback, useSyncExternalStore } from 'react';
-import type { Habit, HabitLog } from './types';
+import { OWNER_USER_ID, type Habit, type HabitLog } from './types';
 import { 
   getHabitsAndLogsAction, 
   saveHabitAction, 
@@ -20,6 +20,7 @@ import {
   loadLocalData,
 } from './utils/storage';
 import { isPlannerNoteExpired } from './utils/date';
+import { getUnlockedTabUserId } from './utils/tab-session';
 
 export { generateId };
 
@@ -86,10 +87,58 @@ function updateStoreSnapshot() {
   }
 }
 
-// Mutation Safety Trackers (Prevents split-second disappear/reappear race conditions)
-const pendingDeletedHabitIds = new Set<string>();
-const pendingAddedHabits = new Map<string, Habit>();
+type CloudWrite = () => Promise<{ success: boolean; error?: string }>;
+const pendingWrites = new Map<string, CloudWrite>();
+let activeWritePromise: Promise<boolean> | null = null;
 let lastLocalMutationTime = 0;
+let localRevision = 0;
+
+function isUnlocked() {
+  return typeof window !== 'undefined' && !!globalCurrentUser &&
+    getUnlockedTabUserId() === globalCurrentUser.id;
+}
+
+function flushPendingWrites() {
+  if (activeWritePromise) return activeWritePromise;
+  if (!pendingWrites.size) return Promise.resolve(true);
+
+  const generation = sessionGeneration;
+  activeWritePromise = (async () => {
+    let failure = '';
+    // Attempt each queued revision once. A later sync retries failed revisions.
+    const attempted = new Set<CloudWrite>();
+    while (generation === sessionGeneration && isUnlocked()) {
+      const next = [...pendingWrites].find(([, write]) => !attempted.has(write));
+      if (!next) break;
+      const [key, write] = next;
+      attempted.add(write);
+      let result;
+      try {
+        result = await write();
+      } catch {
+        result = { success: false, error: 'Could not save changes. Sync to retry.' };
+      }
+      if (generation !== sessionGeneration) return false;
+      if (pendingWrites.get(key) !== write) continue;
+      if (result.success) pendingWrites.delete(key);
+      else failure = result.error || 'Could not save changes. Sync to retry.';
+    }
+    if (generation !== sessionGeneration) return false;
+    globalSyncError = failure || null;
+    updateStoreSnapshot();
+    return pendingWrites.size === 0;
+  })().finally(() => {
+    if (generation === sessionGeneration) activeWritePromise = null;
+  });
+  return activeWritePromise;
+}
+
+function queueCloudWrite(key: string, write: CloudWrite) {
+  lastLocalMutationTime = Date.now();
+  localRevision++;
+  pendingWrites.set(key, write);
+  queueMicrotask(() => { void flushPendingWrites(); });
+}
 
 // Cross-tab synchronization via BroadcastChannel
 let broadcastChannel: BroadcastChannel | null = null;
@@ -101,8 +150,10 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         event.data?.type === 'SYNC_STATE' &&
         globalCurrentUser &&
         event.data.userId === globalCurrentUser.id &&
-        sessionStorage.getItem('zenith_session_unlocked') === 'true'
+        !pendingWrites.size &&
+        isUnlocked()
       ) {
+        localRevision++;
         if (Array.isArray(event.data.habits)) {
           globalHabits = event.data.habits;
         }
@@ -135,6 +186,8 @@ function broadcastLocalUpdate() {
 export function clearLocalUserData() {
   sessionGeneration++;
   activeSyncPromise = null;
+  activeWritePromise = null;
+  globalIsCloudReady = true;
   globalIsSyncing = false;
   globalSyncError = null;
   globalHabits = [];
@@ -143,8 +196,7 @@ export function clearLocalUserData() {
   globalCurrentUser = null;
   globalLastAccountActiveAt = null;
   lastLocalMutationTime = 0;
-  pendingDeletedHabitIds.clear();
-  pendingAddedHabits.clear();
+  pendingWrites.clear();
   isStorageLoaded = false;
   isInitialSyncDone = false;
   if (typeof window !== 'undefined') {
@@ -171,10 +223,10 @@ export function loadLocalDataFromStorage(userId?: string): {
   logs: Record<string, HabitLog>;
   dayNotes: Record<string, string>;
 } {
-  if (typeof window === 'undefined') {
+  const uid = globalCurrentUser?.id;
+  if (!isUnlocked() || !uid || (userId && userId !== uid)) {
     return { habits: [], logs: {}, dayNotes: {} };
   }
-  const uid = userId || globalCurrentUser?.id;
   const { habits, logs, dayNotes } = loadLocalData(uid);
   globalHabits = habits;
   globalLogs = logs;
@@ -184,185 +236,90 @@ export function loadLocalDataFromStorage(userId?: string): {
   return { habits, logs, dayNotes };
 }
 
-// Unified Single Cloud Sync Executor
 let activeSyncPromise: Promise<void> | null = null;
 
 async function executeCloudSync(isBackground = false): Promise<void> {
-  // Skip cloud sync if current tab session is locked
-  if (typeof window !== 'undefined' && sessionStorage.getItem('zenith_session_unlocked') !== 'true') {
-    return;
-  }
+  const user = globalCurrentUser;
+  if (!isUnlocked() || !user) return;
+  if (activeSyncPromise) return activeSyncPromise;
+  if (isBackground && Date.now() - lastLocalMutationTime < 3500) return;
 
-  // Deduplicate concurrent sync calls: reuse active in-flight request
-  if (activeSyncPromise) {
-    return activeSyncPromise;
-  }
-
-  // If user performed a local action (add, delete, toggle) within the last 3.5s, skip sync to avoid race conditions
-  if (isBackground && Date.now() - lastLocalMutationTime < 3500) {
-    return;
-  }
-
+  const generation = sessionGeneration;
   activeSyncPromise = (async () => {
-    const generation = sessionGeneration;
-    const requestStartTime = Date.now();
     if (!isBackground) {
       globalIsSyncing = true;
       updateStoreSnapshot();
     }
-
-  try {
-    const res = await getHabitsAndLogsAction();
-    if (generation !== sessionGeneration) return;
-    if (!res.success) {
-      if (res.error) globalSyncError = res.error;
-      return;
-    }
-
-    lastSuccessfulSyncTime = Date.now();
-    globalIsCloudReady = Boolean(res.isConfigured);
-    globalSyncError = null;
-    if (res.lastActiveAt) {
-      globalLastAccountActiveAt = res.lastActiveAt;
-    }
-
-    if (res.user) {
-      if (globalCurrentUser && globalCurrentUser.id !== res.user.id) {
+    try {
+      if (pendingWrites.size && !(await flushPendingWrites())) return;
+      if (generation !== sessionGeneration) return;
+      const revision = localRevision;
+      const res = await getHabitsAndLogsAction(user.id);
+      if (generation !== sessionGeneration || !isUnlocked() || revision !== localRevision || pendingWrites.size) return;
+      if (!res.success) {
+        globalSyncError = res.error || 'Sync failed';
+        return;
+      }
+      if (res.user?.id !== user.id) {
         globalSyncError = 'The signed-in account changed. Lock and unlock Zenith to continue.';
         return;
       }
-      if (globalCurrentUser?.id !== res.user.id) {
-        if (typeof window !== 'undefined') {
-          try {
-            localStorage.setItem(LAST_USER_KEY, res.user.id);
-          } catch {}
-        }
-        const scoped = loadLocalData(res.user.id);
-        globalHabits = scoped.habits;
-        globalLogs = scoped.logs;
-        globalDayNotes = scoped.dayNotes;
-        if (globalCurrentUser) {
-          pendingDeletedHabitIds.clear();
-          pendingAddedHabits.clear();
-        }
-      }
-      globalCurrentUser = res.user;
-    }
 
-    if (res.isConfigured) {
-      // Stale response guard: If a local action happened while this request was flying, ignore outdated response
-      if (requestStartTime < lastLocalMutationTime) {
+      globalIsCloudReady = res.isConfigured;
+      globalSyncError = null;
+      globalLastAccountActiveAt = res.lastActiveAt ?? null;
+      globalCurrentUser = res.user;
+      lastSuccessfulSyncTime = Date.now();
+      if (!res.isConfigured) return;
+
+      const serverHabits = res.habits || [];
+      const serverLogs = res.logs || {};
+      const serverNotes = pruneExpiredDayNotes(res.dayNotes || {}).dayNotes;
+      const initializedKey = `${INITIALIZED_KEY}_${user.id}`;
+
+      // Only the built-in owner may migrate older browser-only data into an empty vault.
+      if (user.id === OWNER_USER_ID && localStorage.getItem(initializedKey) !== 'true' &&
+          localStorage.getItem(INITIALIZED_KEY) !== 'true' &&
+          !serverHabits.length && !Object.keys(serverNotes).length) {
+        for (const habit of globalHabits) {
+          pendingWrites.set(`habit:${habit.id}`, () => saveHabitAction(habit, user.id));
+        }
+        for (const [key, log] of Object.entries(globalLogs)) {
+          pendingWrites.set(`log:${key}`, () => saveHabitLogAction(log, user.id));
+        }
+        for (const [date, content] of Object.entries(globalDayNotes)) {
+          pendingWrites.set(`note:${date}`, () => saveDayNoteAction(date, content, user.id));
+        }
+        if (!(await flushPendingWrites()) || generation !== sessionGeneration) return;
+        localStorage.setItem(initializedKey, 'true');
         return;
       }
 
-      const serverHabits = (res.habits || []).filter((h) => !h.archived);
-      const serverLogs = res.logs || {};
-
-      // Robust Map-based reconciliation:
-      const habitMap = new Map<string, Habit>();
-
-      // 1. Add valid habits from server (excluding pending deleted)
-      serverHabits.forEach((h) => {
-        if (!pendingDeletedHabitIds.has(h.id)) {
-          habitMap.set(h.id, h);
-        }
-      });
-
-      // 2. Retain all pending locally added habits
-      pendingAddedHabits.forEach((pendingHabit, id) => {
-        if (!pendingDeletedHabitIds.has(id)) {
-          habitMap.set(id, pendingHabit);
-        }
-      });
-
-      // 3. Preserve any local habits created recently that haven't landed on server yet
-      globalHabits.forEach((localHabit) => {
-        if (!habitMap.has(localHabit.id) && !pendingDeletedHabitIds.has(localHabit.id)) {
-          if (pendingAddedHabits.has(localHabit.id) || Date.now() - lastLocalMutationTime < 10000) {
-            habitMap.set(localHabit.id, localHabit);
-          }
-        }
-      });
-
-      const mergedHabits = Array.from(habitMap.values());
-
-      // 4. Clean logs for deleted habits
-      const cleanLogs: Record<string, HabitLog> = {};
-      Object.entries(serverLogs).forEach(([key, log]) => {
-        if (!pendingDeletedHabitIds.has(log.habit_id)) {
-          cleanLogs[key] = log;
-        }
-      });
-
-      const isOwnerAccount = !res.user || res.user.id === 'owner';
-      const hasBeenInitialized = typeof window !== 'undefined' && localStorage.getItem(INITIALIZED_KEY) === 'true';
-
-      if (isOwnerAccount && !hasBeenInitialized && mergedHabits.length === 0 && globalHabits.length > 0) {
-        for (const h of globalHabits) {
-          if (generation !== sessionGeneration) return;
-          await saveHabitAction(h);
-        }
-        if (generation !== sessionGeneration) return;
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(INITIALIZED_KEY, 'true');
-        }
-      } else {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(INITIALIZED_KEY, 'true');
-        }
+      localStorage.setItem(initializedKey, 'true');
+      const habitsChanged = JSON.stringify(serverHabits) !== JSON.stringify(globalHabits);
+      const logsChanged = JSON.stringify(serverLogs) !== JSON.stringify(globalLogs);
+      const notesChanged = JSON.stringify(serverNotes) !== JSON.stringify(globalDayNotes);
+      if (notesChanged) globalDayNotes = persistDayNotes(serverNotes, user.id);
+      if (habitsChanged || logsChanged) {
+        globalHabits = serverHabits;
+        globalLogs = serverLogs;
+        persistLocalData(globalHabits, globalLogs, user.id);
       }
-
-      const habitsChanged = JSON.stringify(mergedHabits) !== JSON.stringify(globalHabits);
-      const logsChanged = JSON.stringify(cleanLogs) !== JSON.stringify(globalLogs);
-
-      // Reconcile server Day Notes (3-month retention enforced on both server and client)
-      const serverDayNotes = pruneExpiredDayNotes(res.dayNotes || {}).dayNotes;
-      const localPruned = pruneExpiredDayNotes(globalDayNotes).dayNotes;
-      const mergedDayNotes: Record<string, string> = { ...serverDayNotes };
-
-      // Backfill any local notes that do not exist on the server yet (scoped to 3 months)
-      Object.entries(localPruned).forEach(([dateStr, content]) => {
-        if (
-          content &&
-          !serverDayNotes[dateStr] &&
-          !isPlannerNoteExpired(dateStr) &&
-          (!hasBeenInitialized || Date.now() - lastLocalMutationTime < 10000)
-        ) {
-          mergedDayNotes[dateStr] = content;
-          saveDayNoteAction(dateStr, content).catch(() => {});
-        }
-      });
-
-      const userId = res.user?.id || globalCurrentUser?.id;
-      const dayNotesChanged = JSON.stringify(mergedDayNotes) !== JSON.stringify(globalDayNotes);
-      if (dayNotesChanged) {
-        globalDayNotes = persistDayNotes(mergedDayNotes, userId);
-      }
-
-      if (habitsChanged || logsChanged || dayNotesChanged) {
-        globalHabits = mergedHabits;
-        globalLogs = cleanLogs;
-        persistLocalData(globalHabits, globalLogs, userId);
+      if (habitsChanged || logsChanged || notesChanged) broadcastLocalUpdate();
+    } catch (err: unknown) {
+      if (generation !== sessionGeneration) return;
+      globalSyncError = err instanceof Error ? err.message : 'Sync failed';
+    } finally {
+      if (generation === sessionGeneration) {
+        isStorageLoaded = true;
+        isInitialSyncDone = true;
+        if (!isBackground) globalIsSyncing = false;
         updateStoreSnapshot();
-        broadcastLocalUpdate();
       }
     }
-  } catch (err: unknown) {
-    if (generation !== sessionGeneration) return;
-    const message = err instanceof Error ? err.message : String(err);
-    console.warn('Server sync notice:', message);
-    globalSyncError = message || 'Sync failed';
-  } finally {
-    if (generation === sessionGeneration) {
-      activeSyncPromise = null;
-      isStorageLoaded = true;
-      isInitialSyncDone = true;
-      if (!isBackground) globalIsSyncing = false;
-      updateStoreSnapshot();
-    }
-  }
-  })();
-
+  })().finally(() => {
+    if (generation === sessionGeneration) activeSyncPromise = null;
+  });
   return activeSyncPromise;
 }
 
@@ -413,7 +370,6 @@ function initGlobalSyncCoordinator() {
 
   window.addEventListener('focus', handleFocusOrVisibility);
   document.addEventListener('visibilitychange', handleFocusOrVisibility);
-
 }
 
 function subscribe(listener: () => void) {
@@ -442,178 +398,98 @@ export function useHabitStore() {
     return executeCloudSync(isBackground);
   }, []);
 
-  // 1. Instant Optimistic Toggle Habit Log (0ms UI latency) + Async Server Action
+  const sessionId = store.currentUser?.id;
+  const generation = sessionGeneration;
+  const hasSession = () => generation === sessionGeneration && sessionId && isUnlocked();
+
+  function persistHabitsAndLogs() {
+    persistLocalData(globalHabits, globalLogs, sessionId);
+    updateStoreSnapshot();
+    broadcastLocalUpdate();
+  }
+
   const toggleHabit = async (habitId: string, dateStr: string, completed?: boolean, value?: number) => {
-    lastLocalMutationTime = Date.now();
+    const habit = globalHabits.find((h) => h.id === habitId);
+    if (!hasSession() || !habit) return;
     const key = `${habitId}_${dateStr}`;
     const currentLog = globalLogs[key];
-
-    const newCompleted = completed !== undefined ? completed : !currentLog?.completed;
-    const habit = globalHabits.find((h) => h.id === habitId);
-    
-    const newValue = value !== undefined 
-      ? value 
-      : (newCompleted ? (habit?.target_value || 1) : 0);
-
+    const newCompleted = completed ?? !currentLog?.completed;
+    const now = new Date().toISOString();
     const updatedLog: HabitLog = {
       id: currentLog?.id || generateId(),
       habit_id: habitId,
       date: dateStr,
       completed: newCompleted,
-      value: newValue,
-      created_at: currentLog?.created_at || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      value: value ?? (newCompleted ? habit.target_value || 1 : 0),
+      created_at: currentLog?.created_at || now,
+      updated_at: now,
     };
 
-    // Update memory & local storage immediately
-    globalLogs = {
-      ...globalLogs,
-      [key]: updatedLog,
-    };
-    persistLocalData(globalHabits, globalLogs, globalCurrentUser?.id);
-    updateStoreSnapshot();
-    broadcastLocalUpdate();
-
-    // Background Server Action
-    saveHabitLogAction(updatedLog).catch((e) => {
-      console.error('Background server log error:', e);
-    });
+    globalLogs = { ...globalLogs, [key]: updatedLog };
+    queueCloudWrite(`log:${key}`, () => saveHabitLogAction(updatedLog, sessionId));
+    persistHabitsAndLogs();
   };
 
-  // 2. Add New Habit (Optimistic 0ms + Protected In-flight Tracking)
   const addHabit = async (habitData: Omit<Habit, 'id' | 'created_at' | 'order' | 'archived'>) => {
-    lastLocalMutationTime = Date.now();
+    if (!hasSession()) return;
     const newHabit: Habit = {
       ...habitData,
       id: generateId(),
       archived: false,
-      order: globalHabits.length,
+      order: globalHabits.reduce((max, habit) => Math.max(max, habit.order), -1) + 1,
       created_at: new Date().toISOString(),
     };
-
-    pendingAddedHabits.set(newHabit.id, newHabit);
-
     globalHabits = [...globalHabits, newHabit];
-    persistLocalData(globalHabits, globalLogs, globalCurrentUser?.id);
-    updateStoreSnapshot();
-    broadcastLocalUpdate();
-
-    saveHabitAction(newHabit)
-      .then((res) => {
-        if (!res.success && res.error) {
-          console.error('Server habit add error:', res.error);
-          globalSyncError = res.error;
-        }
-      })
-      .catch((e) => {
-        console.error('Background server habit add error:', e);
-      })
-      .finally(() => {
-        // Keep in tracking map for 4s so any in-flight GET query doesn't remove it prematurely
-        setTimeout(() => {
-          pendingAddedHabits.delete(newHabit.id);
-        }, 4000);
-      });
-
+    queueCloudWrite(`habit:${newHabit.id}`, () => saveHabitAction(newHabit, sessionId));
+    persistHabitsAndLogs();
     return newHabit;
   };
 
-  // 3. Update Existing Habit
   const updateHabit = async (habitId: string, updates: Partial<Habit>) => {
-    lastLocalMutationTime = Date.now();
-    let updatedHabitObj: Habit | undefined;
-    globalHabits = globalHabits.map((h) => {
-      if (h.id === habitId) {
-        updatedHabitObj = { ...h, ...updates, updated_at: new Date().toISOString() };
-        return updatedHabitObj;
-      }
-      return h;
-    });
-
-    persistLocalData(globalHabits, globalLogs, globalCurrentUser?.id);
-    updateStoreSnapshot();
-    broadcastLocalUpdate();
-
-    if (updatedHabitObj) {
-      saveHabitAction(updatedHabitObj).catch((e) => {
-        console.error('Background server habit update error:', e);
-      });
-    }
+    if (!hasSession()) return;
+    const original = globalHabits.find((habit) => habit.id === habitId);
+    if (!original) return;
+    const updated = { ...original, ...updates, updated_at: new Date().toISOString() };
+    globalHabits = globalHabits.map((habit) => habit.id === habitId ? updated : habit);
+    queueCloudWrite(`habit:${habitId}`, () => saveHabitAction(updated, sessionId));
+    persistHabitsAndLogs();
   };
 
-  // 4. Delete Habit (0ms Optimistic + Guaranteed Anti-Reappearance Protection)
   const deleteHabit = async (habitId: string) => {
-    lastLocalMutationTime = Date.now();
-    pendingDeletedHabitIds.add(habitId);
-    pendingAddedHabits.delete(habitId);
-
-    // 1. Remove habit from memory immediately
-    globalHabits = globalHabits.filter((h) => h.id !== habitId);
-    
-    // 2. Remove associated logs
-    const newLogs: Record<string, HabitLog> = {};
-    Object.entries(globalLogs).forEach(([key, log]) => {
-      if (log.habit_id !== habitId) {
-        newLogs[key] = log;
-      }
-    });
-    globalLogs = newLogs;
-
-    // 3. Persist and notify other open tabs
-    persistLocalData(globalHabits, globalLogs, globalCurrentUser?.id);
-    updateStoreSnapshot();
-    broadcastLocalUpdate();
-
-    // 4. Delete on the server cloud database
-    try {
-      const res = await deleteHabitAction(habitId);
-      if (!res.success && res.error) {
-        console.error('Server habit delete error:', res.error);
-        globalSyncError = res.error;
-      }
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
-      console.error('Background server habit delete error:', message);
-      globalSyncError = message || 'Failed to delete on server';
-    } finally {
-      // Keep in protection set for 5s so any in-flight response arriving shortly can NEVER revive it
-      setTimeout(() => {
-        pendingDeletedHabitIds.delete(habitId);
-      }, 5000);
+    if (!hasSession()) return;
+    globalHabits = globalHabits.filter((habit) => habit.id !== habitId);
+    globalLogs = Object.fromEntries(Object.entries(globalLogs).filter(([, log]) => log.habit_id !== habitId));
+    for (const key of pendingWrites.keys()) {
+      if (key.startsWith(`log:${habitId}_`)) pendingWrites.delete(key);
     }
+    queueCloudWrite(`habit:${habitId}`, () => deleteHabitAction(habitId, sessionId));
+    persistHabitsAndLogs();
   };
 
-  // 5. Reorder Habits
   const reorderHabits = async (orderedHabits: Habit[]) => {
-    lastLocalMutationTime = Date.now();
-    const updated = orderedHabits.map((h, index) => ({ ...h, order: index }));
-    globalHabits = updated;
-    persistLocalData(globalHabits, globalLogs, globalCurrentUser?.id);
-    updateStoreSnapshot();
-    broadcastLocalUpdate();
-
-    reorderHabitsAction(updated).catch((e) => {
-      console.error('Background server reorder error:', e);
+    if (!hasSession()) return;
+    const order = new Map(orderedHabits.map((habit, index) => [habit.id, index]));
+    globalHabits = globalHabits.map((habit) => {
+      const index = order.get(habit.id);
+      return index === undefined ? habit : { ...habit, order: index };
     });
+    const changed = globalHabits.filter((habit) => order.has(habit.id));
+    queueCloudWrite('order', () => reorderHabitsAction(changed, sessionId));
+    persistHabitsAndLogs();
   };
 
-  // 6. Save Day Note / Tasks (Instant autosave + Broadcast sync + Cloud sync + 3-month retention)
   const saveDayNote = (dateStr: string, content: string) => {
-    lastLocalMutationTime = Date.now();
+    if (!hasSession()) return;
     const nextNotes = { ...globalDayNotes };
-    if (!content || !content.trim() || isPlannerNoteExpired(dateStr)) {
+    if (!content.trim() || isPlannerNoteExpired(dateStr)) {
       delete nextNotes[dateStr];
     } else {
       nextNotes[dateStr] = content;
     }
-    globalDayNotes = persistDayNotes(nextNotes, globalCurrentUser?.id);
+    globalDayNotes = persistDayNotes(nextNotes, sessionId);
+    queueCloudWrite(`note:${dateStr}`, () => saveDayNoteAction(dateStr, nextNotes[dateStr] || '', sessionId));
     updateStoreSnapshot();
     broadcastLocalUpdate();
-
-    // Persist to server in background
-    saveDayNoteAction(dateStr, content).catch((e) => {
-      console.warn('Background saveDayNoteAction error:', e);
-    });
   };
 
   return {

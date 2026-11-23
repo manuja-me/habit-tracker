@@ -280,13 +280,14 @@ export async function verifyPinAction(enteredPin: string): Promise<{
       const remainingMs = SEVEN_DAYS_MS - (now - deactivatedTime);
 
       if (remainingMs <= 0) {
-        if (supabaseClient) {
-          await purgeUserData(supabaseClient, matchedUser.userId);
-        }
+        const purged = supabaseClient
+          && await purgeUserData(supabaseClient, matchedUser.userId, new Date(now - SEVEN_DAYS_MS).toISOString());
         const fail = await recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore, rateCheck.currentCount);
         return {
           success: false,
-          error: 'ACCOUNT EXPIRED // This account was permanently deleted after 7 days of inactivity.',
+          error: purged
+            ? 'ACCOUNT EXPIRED // This account was permanently deleted after the 7-day grace period.'
+            : 'Could not confirm the account status. Please sign in again.',
           waitSeconds: fail.waitSeconds > 0 ? fail.waitSeconds : undefined,
         };
       }
@@ -324,10 +325,15 @@ export async function verifyPinAction(enteredPin: string): Promise<{
             if (cleanPin.length === 6 && matchedPinHash && !isScryptHash(matchedPinHash)) {
               updateFields.pin_hash = await hashPinScrypt(cleanPin);
             }
-            await supabaseClient
+            const update = supabaseClient
               .from('app_users')
               .update(updateFields)
               .eq('id', matchedUser.userId);
+            if (updateFields.pin_hash) {
+              await update.eq('pin_hash', matchedPinHash);
+            } else {
+              await update;
+            }
           } catch (logErr) {
             console.warn('Could not record last_login_at:', logErr);
           }
@@ -387,23 +393,27 @@ export async function getCurrentUserAction(): Promise<SessionUser | null> {
   if (!supabase) return null;
   // A member can be deactivated or deleted from another device.
   const { data, error } = await supabase.from('app_users')
-    .select('id, deactivated_at')
+    .select('id, username, role, deactivated_at')
     .eq('id', user.userId)
     .maybeSingle();
   if (error?.code === '42703' && error.message.includes('deactivated_at')) {
-    const legacy = await supabase.from('app_users').select('id').eq('id', user.userId).maybeSingle();
-    return legacy.data && !legacy.error && !user.isDeactivated ? user : null;
+    const legacy = await supabase.from('app_users').select('id, username, role').eq('id', user.userId).maybeSingle();
+    if (legacy.error || !legacy.data || user.isDeactivated) return null;
+    return { ...user, username: legacy.data.username, role: legacy.data.role === 'owner' ? 'owner' : 'member' };
   }
   if (error || !data || Boolean(data.deactivated_at) !== Boolean(user.isDeactivated)) return null;
-  return user;
+  return { ...user, username: data.username, role: data.role === 'owner' ? 'owner' : 'member' };
 }
 
 /**
  * Server Action: Lock device / Sign out
  */
-export async function lockSessionAction(): Promise<void> {
+export async function lockSessionAction(expectedUserId: string): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.delete(COOKIE_NAME);
+  const session = cookieStore.get(COOKIE_NAME)?.value;
+  if (session && isValidUuid(expectedUserId) && getSessionUserFromToken(session)?.userId === expectedUserId) {
+    cookieStore.delete(COOKIE_NAME);
+  }
 }
 
 /**
@@ -469,7 +479,7 @@ export async function validateInviteTokenAction(fullToken: string): Promise<{
   valid: boolean;
   error?: string;
 }> {
-  if (!fullToken || !fullToken.includes('.')) {
+  if (typeof fullToken !== 'string' || !/^[0-9a-f]{32}\.[0-9a-f]{64}$/.test(fullToken)) {
     return { valid: false, error: 'Invalid invitation link format.' };
   }
 
@@ -535,9 +545,9 @@ export async function completeInviteSetupAction(
     return { success: false, error: tokenValidation.error };
   }
 
-  const cleanUsername = username.trim();
-  if (!cleanUsername || cleanUsername.length < 2) {
-    return { success: false, error: 'Please enter a name of at least 2 characters.' };
+  const cleanUsername = typeof username === 'string' ? username.trim() : '';
+  if (cleanUsername.length < 2 || cleanUsername.length > 80) {
+    return { success: false, error: 'Please enter a display name between 2 and 80 characters.' };
   }
 
   if (!isValidPinFormat(pin, false)) {
@@ -728,6 +738,7 @@ export async function changePinAction(
       }
     }
     if (pinTakenByOther || (!isOwner && verifyMasterPin(newPin))) {
+      await recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore, rateCheck.currentCount);
       return {
         success: false,
         error: 'Please choose a different 6-digit PIN.',
@@ -738,20 +749,24 @@ export async function changePinAction(
     const nowIso = new Date().toISOString();
 
     if (currentRow) {
-      const { error: updateErr } = await supabase
+      const { data: updated, error: updateErr } = await supabase
         .from('app_users')
         .update({ pin_hash: newScryptHash, updated_at: nowIso })
-        .eq('id', user.userId);
+        .eq('id', user.userId)
+        .eq('pin_hash', currentRow.pin_hash)
+        .select('id')
+        .maybeSingle();
       if (updateErr) return { success: false, error: updateErr.message };
+      if (!updated) return { success: false, error: 'Account credentials changed. Please try again.' };
     } else if (isOwner) {
-      const { error: upsertErr } = await supabase.from('app_users').upsert({
+      const { error: insertErr } = await supabase.from('app_users').insert({
         id: OWNER_USER_ID,
         username: 'owner',
         pin_hash: newScryptHash,
         role: 'owner',
         updated_at: nowIso,
       });
-      if (upsertErr) return { success: false, error: upsertErr.message };
+      if (insertErr) return { success: false, error: 'Failed to create the owner credentials. Please try again.' };
     } else {
       return { success: false, error: 'User account record not found.' };
     }
@@ -875,16 +890,18 @@ export async function deactivateAccountAction(enteredPin: string): Promise<{
       };
     }
 
-    await clearRateLimits(rateLimitKey, cookieStore);
-
     const nowIso = new Date().toISOString();
-    const { error: updateErr } = await supabase
+    const { data: updated, error: updateErr } = await supabase
       .from('app_users')
       .update({
         deactivated_at: nowIso,
         updated_at: nowIso,
       })
-      .eq('id', user.userId);
+      .eq('id', user.userId)
+      .eq('pin_hash', userRecord.pin_hash)
+      .is('deactivated_at', null)
+      .select('id')
+      .maybeSingle();
 
     if (updateErr) {
       if (updateErr.message?.includes('deactivated_at') || updateErr.code === '42703' || updateErr.code === 'PGRST100') {
@@ -895,7 +912,9 @@ export async function deactivateAccountAction(enteredPin: string): Promise<{
       }
       return { success: false, error: updateErr.message };
     }
+    if (!updated) return { success: false, error: 'Account credentials changed. Please try again.' };
 
+    await clearRateLimits(rateLimitKey, cookieStore);
     cookieStore.delete(COOKIE_NAME);
 
     return { success: true };

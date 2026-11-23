@@ -1,4 +1,5 @@
 import type { Habit, HabitLog } from '../types';
+import { OWNER_USER_ID } from '../types';
 import { isPlannerNoteExpired } from './date';
 
 export const HABITS_STORAGE_KEY = 'zenith_habits_v1';
@@ -12,11 +13,16 @@ export function generateId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 export function getHabitsStorageKey(userId?: string): string {
@@ -50,7 +56,7 @@ export function pruneExpiredDayNotes(
 
   for (const [dateStr, content] of Object.entries(dayNotes || {})) {
     const createdAtIso = meta[dateStr];
-    if (!content || !content.trim() || isPlannerNoteExpired(dateStr, createdAtIso, now)) {
+    if (typeof content !== 'string' || !content.trim() || isPlannerNoteExpired(dateStr, createdAtIso, now)) {
       pruned = true;
       continue;
     }
@@ -68,7 +74,7 @@ export function persistLocalData(
 ): void {
   if (typeof window === 'undefined') return;
   try {
-    const uid = userId || localStorage.getItem(LAST_USER_KEY) || undefined;
+    const uid = userId;
     if (userId) localStorage.setItem(LAST_USER_KEY, userId);
     localStorage.setItem(getHabitsStorageKey(uid), JSON.stringify(habits));
     localStorage.setItem(getLogsStorageKey(uid), JSON.stringify(logs));
@@ -83,7 +89,7 @@ export function persistDayNotes(
 ): Record<string, string> {
   if (typeof window === 'undefined') return dayNotes;
   try {
-    const uid = userId || localStorage.getItem(LAST_USER_KEY) || undefined;
+    const uid = userId;
     if (userId) localStorage.setItem(LAST_USER_KEY, userId);
     let existingMeta: Record<string, string> = {};
     try {
@@ -110,46 +116,54 @@ export function loadLocalData(userId?: string): {
   }
 
   try {
-    const uid = userId || localStorage.getItem(LAST_USER_KEY) || undefined;
-    const allowLegacyFallback = !uid || uid === 'owner';
+    const uid = userId;
+    const legacyOwnerId = uid === OWNER_USER_ID ? 'owner' : undefined;
+    const allowLegacyFallback = !uid || uid === OWNER_USER_ID || uid === 'owner';
     const storedHabits =
       localStorage.getItem(getHabitsStorageKey(uid)) ??
+      (legacyOwnerId ? localStorage.getItem(getHabitsStorageKey(legacyOwnerId)) : null) ??
       (allowLegacyFallback ? localStorage.getItem(HABITS_STORAGE_KEY) : null);
     const storedLogs =
       localStorage.getItem(getLogsStorageKey(uid)) ??
+      (legacyOwnerId ? localStorage.getItem(getLogsStorageKey(legacyOwnerId)) : null) ??
       (allowLegacyFallback ? localStorage.getItem(LOGS_STORAGE_KEY) : null);
     const storedDayNotes =
       localStorage.getItem(getDayNotesStorageKey(uid)) ??
+      (legacyOwnerId ? localStorage.getItem(getDayNotesStorageKey(legacyOwnerId)) : null) ??
       (allowLegacyFallback ? localStorage.getItem(DAY_NOTES_STORAGE_KEY) : null);
     const storedDayNotesMeta =
       localStorage.getItem(getDayNotesMetaStorageKey(uid)) ??
+      (legacyOwnerId ? localStorage.getItem(getDayNotesMetaStorageKey(legacyOwnerId)) : null) ??
       (allowLegacyFallback ? localStorage.getItem(DAY_NOTES_META_STORAGE_KEY) : null);
 
     let habits: Habit[] = [];
     if (storedHabits) {
       try {
-        habits = JSON.parse(storedHabits);
+        const parsed = JSON.parse(storedHabits);
+        if (Array.isArray(parsed)) habits = parsed.filter(habit => habit && typeof habit.id === 'string');
       } catch {}
     }
 
     let logs: Record<string, HabitLog> = {};
     if (storedLogs) {
       try {
-        logs = JSON.parse(storedLogs);
+        const parsed = JSON.parse(storedLogs);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) logs = parsed;
       } catch {}
     }
 
     let dayNotes: Record<string, string> = {};
     if (storedDayNotes) {
       try {
-        dayNotes = JSON.parse(storedDayNotes);
+        const parsed = JSON.parse(storedDayNotes);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) dayNotes = parsed;
       } catch {}
     }
 
     let dayNotesMeta: Record<string, string> = {};
     if (storedDayNotesMeta) {
       try {
-        dayNotesMeta = JSON.parse(storedDayNotesMeta);
+        dayNotesMeta = JSON.parse(storedDayNotesMeta) || {};
       } catch {}
     }
 

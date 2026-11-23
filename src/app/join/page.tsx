@@ -5,11 +5,16 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { validateInviteTokenAction, completeInviteSetupAction } from '../../lib/server/auth';
 import { ShieldCheck, ShieldAlert, ArrowRight, User, KeyRound, Check } from 'lucide-react';
 import { ZenithLogo } from '../../components/ui/ZenithLogo';
+import { unlockTab } from '../../lib/utils/tab-session';
 
 function JoinForm() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const token = searchParams.get('token') || '';
+  return <InviteSetup key={token} token={token} />;
+}
+
+function InviteSetup({ token }: { token: string }) {
+  const router = useRouter();
 
   const [isValidating, setIsValidating] = useState<boolean>(() => Boolean(token));
   const [isValidToken, setIsValidToken] = useState<boolean>(false);
@@ -53,11 +58,12 @@ function JoinForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isValidToken || isSubmitting || isSuccess) return;
     setErrorMsg(null);
 
     const cleanName = username.trim();
-    if (!cleanName || cleanName.length < 2) {
-      setErrorMsg('Please enter a display name (at least 2 characters).');
+    if (cleanName.length < 2 || cleanName.length > 80) {
+      setErrorMsg('Please enter a display name between 2 and 80 characters.');
       return;
     }
 
@@ -77,12 +83,8 @@ function JoinForm() {
       const res = await completeInviteSetupAction(token, cleanName, pin);
       if (res.success) {
         setIsSuccess(true);
-        if (typeof window !== 'undefined') {
-          sessionStorage.setItem('zenith_session_unlocked', 'true');
-        }
-        setTimeout(() => {
-          router.push('/');
-        }, 800);
+        if (res.user) unlockTab(res.user.userId);
+        router.replace('/');
       } else {
         setErrorMsg(res.error || 'Failed to complete registration.');
         setIsSubmitting(false);
@@ -170,6 +172,7 @@ function JoinForm() {
             <input
               type="text"
               required
+              maxLength={80}
               disabled={isSubmitting || isSuccess}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -244,10 +247,10 @@ function JoinForm() {
       <div className="p-3 bg-subtle/60 border border-main text-[11px] font-mono text-sub space-y-1">
         <div className="flex items-center gap-1.5 font-bold text-main">
           <ShieldCheck className="w-3.5 h-3.5 text-[#FF3B30]" />
-          <span>ZERO-KNOWLEDGE PRIVACY</span>
+          <span>ACCOUNT PRIVACY</span>
         </div>
         <p className="leading-tight">
-          Your PIN is securely salted and encrypted before saving. Nobody else—including the database owner—can see your PIN, habits, or streaks.
+          The server stores a salted hash of your PIN. Other tracker users cannot access your habits or streaks through the app.
         </p>
       </div>
     </div>

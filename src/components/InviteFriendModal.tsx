@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { generateInviteAction } from '../lib/server/auth';
 import { X, UserPlus, Copy, Check, ShieldCheck, RefreshCw } from 'lucide-react';
 import { ZenithLogo } from './ui/ZenithLogo';
@@ -15,6 +15,7 @@ export function InviteFriendModal({ isOpen, onClose }: InviteFriendModalProps) {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const inviteInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
@@ -41,12 +42,14 @@ export function InviteFriendModal({ isOpen, onClose }: InviteFriendModalProps) {
 
   const handleCopy = async () => {
     if (!inviteUrl) return;
+    setErrorMsg(null);
     try {
       await navigator.clipboard.writeText(inviteUrl);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2500);
-    } catch (err) {
-      console.error('Failed to copy', err);
+    } catch {
+      inviteInputRef.current?.select();
+      setErrorMsg('Copy the selected invitation link.');
     }
   };
 
@@ -84,10 +87,10 @@ export function InviteFriendModal({ isOpen, onClose }: InviteFriendModalProps) {
           <div className="p-3 bg-subtle/50 border border-main text-[11px] space-y-1.5">
             <div className="flex items-center gap-1.5 font-bold text-main">
               <ShieldCheck className="w-4 h-4 text-[#FF3B30]" />
-              <span>END-TO-END PRIVACY</span>
+              <span>SEPARATE ACCOUNTS</span>
             </div>
             <p className="text-sub leading-tight">
-              His PIN is encrypted on his device. You will never see his PIN, and neither of you can see each other&apos;s routines.
+              Your friend chooses a PIN during setup. Your routines are stored under separate accounts.
             </p>
           </div>
 
@@ -104,6 +107,7 @@ export function InviteFriendModal({ isOpen, onClose }: InviteFriendModalProps) {
               </label>
               <div className="flex items-center gap-1.5">
                 <input
+                  ref={inviteInputRef}
                   type="text"
                   readOnly
                   value={inviteUrl}

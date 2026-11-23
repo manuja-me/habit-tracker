@@ -149,9 +149,9 @@ export function recordCurrentVisit(userId?: string, forceServer = false): void {
       localStorage.setItem(LAST_VISIT_STORAGE_KEY, nowIso);
     }
     const nowMs = Date.now();
-    if (forceServer || nowMs - lastServerVisitPingMs > 5 * 60 * 1000) {
+    if (userId && (forceServer || nowMs - lastServerVisitPingMs > 5 * 60 * 1000)) {
       lastServerVisitPingMs = nowMs;
-      recordAccountVisitAction().catch(() => {});
+      recordAccountVisitAction(userId).catch(() => {});
     }
   } catch (e) {
     console.error('Failed to record visit timestamp', e);

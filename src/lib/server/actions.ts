@@ -60,6 +60,24 @@ interface DbLogRecord {
   updated_at: string;
 }
 
+type LogPage = {
+  data: DbLogRecord[] | null;
+  count: number | null;
+  error: { code: string; message: string } | null;
+};
+
+async function readLogs(readPage: (start: number, end: number) => PromiseLike<LogPage>) {
+  const rows: DbLogRecord[] = [];
+  const pageSize = 500;
+  for (;;) {
+    const page = await readPage(rows.length, rows.length + pageSize - 1);
+    if (page.error) return { data: null, error: page.error };
+    if (!page.data?.length) return { data: rows, error: null };
+    rows.push(...page.data);
+    if (page.count !== null && rows.length >= page.count) return { data: rows, error: null };
+  }
+}
+
 interface DbDayNoteRecord {
   date: string;
   content: string;
@@ -97,10 +115,18 @@ function isMissingColumn(error: { code: string; message: string } | null, column
   return (error?.code === '42703' || error?.code === 'PGRST204') && error.message.includes(column);
 }
 
+async function requireExpectedAccount(expectedUserId?: string) {
+  const user = await requireAuth();
+  if (expectedUserId !== undefined && user.userId !== expectedUserId) {
+    throw new Error('The signed-in account changed. Lock and unlock Zenith to continue.');
+  }
+  return user;
+}
+
 /**
  * Server Action: Fetch habits and logs scoped to the authenticated user
  */
-export async function getHabitsAndLogsAction(): Promise<{
+export async function getHabitsAndLogsAction(expectedUserId?: string): Promise<{
   success: boolean;
   isConfigured: boolean;
   habits?: Habit[];
@@ -111,7 +137,7 @@ export async function getHabitsAndLogsAction(): Promise<{
   user?: { id: string; username: string; role: string };
 }> {
   try {
-    const user = await requireAuth();
+    const user = await requireExpectedAccount(expectedUserId);
     if (!isValidUuid(user.userId)) {
       throw new Error('Invalid authenticated user ID.');
     }
@@ -147,12 +173,14 @@ export async function getHabitsAndLogsAction(): Promise<{
         .eq('archived', false)
         .or(isOwner ? `user_id.eq.${user.userId},user_id.is.null` : `user_id.eq.${user.userId}`)
         .order('sort_order', { ascending: true }),
-      supabase
+      readLogs((start, end) => supabase
         .from('habit_logs')
-        .select('id, habit_id, date, completed, value, created_at, updated_at')
+        .select('id, habit_id, date, completed, value, created_at, updated_at', { count: 'exact' })
         .gte('date', cutoffDateStr)
         .or(isOwner ? `user_id.eq.${user.userId},user_id.is.null` : `user_id.eq.${user.userId}`)
-        .order('date', { ascending: false }),
+        .order('date', { ascending: false })
+        .order('id')
+        .range(start, end)),
       supabase
         .from('day_notes')
         .select('date, content, created_at, updated_at')
@@ -189,17 +217,19 @@ export async function getHabitsAndLogsAction(): Promise<{
 
     if (logsRes.error) {
       // Fallback for pre-migration databases without user_id column on habit_logs
+      if (!isMissingColumn(logsRes.error, 'user_id')) throw logsRes.error;
       const userHabitIds = habitsData.map((h) => h.id);
       if (userHabitIds.length > 0) {
-        const fallbackLogsRes = await supabase
+        const fallbackLogsRes = await readLogs((start, end) => supabase
           .from('habit_logs')
-          .select('id, habit_id, date, completed, value, created_at, updated_at')
+          .select('id, habit_id, date, completed, value, created_at, updated_at', { count: 'exact' })
           .in('habit_id', userHabitIds)
           .gte('date', cutoffDateStr)
-          .order('date', { ascending: false });
-        if (!fallbackLogsRes.error && fallbackLogsRes.data) {
-          logsData = fallbackLogsRes.data as DbLogRecord[];
-        }
+          .order('date', { ascending: false })
+          .order('id')
+          .range(start, end));
+        if (fallbackLogsRes.error) throw fallbackLogsRes.error;
+        logsData = (fallbackLogsRes.data || []) as DbLogRecord[];
       }
     } else if (logsRes.data) {
       logsData = (logsRes.data as DbLogRecord[]).filter((l) => validHabitIdSet.has(l.habit_id));
@@ -224,12 +254,24 @@ export async function getHabitsAndLogsAction(): Promise<{
       trackTime(l.created_at);
     });
 
-    if (!notesRes.error && notesRes.data) {
-      (notesRes.data as DbDayNoteRecord[]).forEach((dn) => {
+    let notesData = notesRes.data;
+    if (notesRes.error) {
+      if (!isMissingColumn(notesRes.error, 'user_id')) throw notesRes.error;
+      if (isOwner) {
+        const legacyNotes = await supabase
+          .from('day_notes')
+          .select('date, content, updated_at')
+          .gt('date', plannerCutoffDateStr);
+        if (legacyNotes.error) throw legacyNotes.error;
+        notesData = legacyNotes.data?.map((note) => ({ ...note, created_at: null })) ?? [];
+      }
+    }
+    if (notesData) {
+      (notesData as DbDayNoteRecord[]).forEach((dn) => {
         trackTime(dn.updated_at);
         if (
           dn.date &&
-          dn.content !== undefined &&
+          typeof dn.content === 'string' &&
           dn.content.trim() !== '' &&
           !isPlannerNoteExpired(dn.date, dn.created_at, now)
         ) {
@@ -297,9 +339,9 @@ export async function getHabitsAndLogsAction(): Promise<{
 /**
  * Server Action: Record account-level visit timestamp across devices
  */
-export async function recordAccountVisitAction(): Promise<{ success: boolean }> {
+export async function recordAccountVisitAction(expectedUserId?: string): Promise<{ success: boolean }> {
   try {
-    const user = await requireAuth();
+    const user = await requireExpectedAccount(expectedUserId);
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
@@ -316,9 +358,9 @@ export async function recordAccountVisitAction(): Promise<{ success: boolean }> 
 /**
  * Server Action: Save / Upsert a Habit (Protected & Scoped to user)
  */
-export async function saveHabitAction(habit: Habit): Promise<{ success: boolean; error?: string }> {
+export async function saveHabitAction(habit: Habit, expectedUserId?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const user = await requireAuth();
+    const user = await requireExpectedAccount(expectedUserId);
     if (!habit || !isValidUuid(habit.id)) {
       return { success: false, error: 'Invalid habit ID.' };
     }
@@ -388,40 +430,25 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
 /**
  * Server Action: Delete a Habit (Protected & Scoped to user)
  */
-export async function deleteHabitAction(habitId: string): Promise<{ success: boolean; error?: string }> {
+export async function deleteHabitAction(habitId: string, expectedUserId?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const user = await requireAuth();
+    const user = await requireExpectedAccount(expectedUserId);
     if (!isValidUuid(habitId)) {
       return { success: false, error: 'Invalid habit ID.' };
     }
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
-    // Verify habit exists and check ownership before deleting
-    const { data: habitRecord } = await supabase
-      .from('habits')
-      .select('id, user_id')
-      .eq('id', habitId)
-      .maybeSingle();
-
-    if (!habitRecord) {
-      return { success: false, error: 'Habit not found.' };
-    }
-
-    if (!canAccessUserRecord(user, habitRecord.user_id)) {
-      return { success: false, error: 'Unauthorized: Cannot modify other users data.' };
-    }
-
-    // 1. Delete associated logs first to prevent foreign key errors
-    await supabase.from('habit_logs').delete().eq('habit_id', habitId);
-
-    // 2. Delete the habit from the database
-    const { error: deleteErr } = await supabase.from('habits').delete().eq('id', habitId);
-
-    // 3. Fallback to soft delete if restricted
-    if (deleteErr) {
-      const { error: archiveErr } = await supabase.from('habits').update({ archived: true }).eq('id', habitId);
-      if (archiveErr) throw deleteErr;
+    // The foreign key deletes logs in the same transaction as the habit.
+    const owned = supabase.from('habits').delete().eq('id', habitId);
+    const result = await (isOwnerUser(user)
+      ? owned.or(`user_id.eq.${user.userId},user_id.is.null`)
+      : owned.eq('user_id', user.userId));
+    if (isOwnerUser(user) && isMissingColumn(result.error, 'user_id')) {
+      const legacy = await supabase.from('habits').delete().eq('id', habitId);
+      if (legacy.error) throw legacy.error;
+    } else if (result.error) {
+      throw result.error;
     }
 
     return { success: true };
@@ -433,9 +460,9 @@ export async function deleteHabitAction(habitId: string): Promise<{ success: boo
 /**
  * Server Action: Save / Upsert a Habit Log (Protected & Scoped to user)
  */
-export async function saveHabitLogAction(log: HabitLog): Promise<{ success: boolean; error?: string }> {
+export async function saveHabitLogAction(log: HabitLog, expectedUserId?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const user = await requireAuth();
+    const user = await requireExpectedAccount(expectedUserId);
     if (!log || !isValidUuid(log.habit_id)) {
       return { success: false, error: 'Invalid habit ID.' };
     }
@@ -471,7 +498,7 @@ export async function saveHabitLogAction(log: HabitLog): Promise<{ success: bool
     let { error } = await supabase.from('habit_logs').upsert(logPayload, { onConflict: 'habit_id,date' });
 
     // Fallback if user_id column doesn't exist yet
-    if (error && (error.message?.includes('user_id') || error.code === '42703')) {
+    if (isOwnerUser(user) && isMissingColumn(error, 'user_id')) {
       const fallbackPayload: Record<string, unknown> = { ...logPayload };
       delete fallbackPayload.user_id;
       const retry = await supabase.from('habit_logs').upsert(fallbackPayload, { onConflict: 'habit_id,date' });
@@ -488,9 +515,9 @@ export async function saveHabitLogAction(log: HabitLog): Promise<{ success: bool
 /**
  * Server Action: Reorder Habits (Protected & Scoped to user)
  */
-export async function reorderHabitsAction(orderedHabits: Habit[]): Promise<{ success: boolean; error?: string }> {
+export async function reorderHabitsAction(orderedHabits: Habit[], expectedUserId?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const user = await requireAuth();
+    const user = await requireExpectedAccount(expectedUserId);
     if (!isValidUuid(user.userId)) {
       throw new Error('Invalid authenticated user ID.');
     }
@@ -519,9 +546,9 @@ export async function reorderHabitsAction(orderedHabits: Habit[]): Promise<{ suc
  * Server Action: Save / Upsert a Day Note (Protected & Scoped to user)
  * Directly persists to public.day_notes table in Supabase.
  */
-export async function saveDayNoteAction(date: string, content: string): Promise<{ success: boolean; error?: string }> {
+export async function saveDayNoteAction(date: string, content: string, expectedUserId?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const user = await requireAuth();
+    const user = await requireExpectedAccount(expectedUserId);
     if (!isValidUuid(user.userId)) {
       throw new Error('Invalid authenticated user ID.');
     }
@@ -556,7 +583,7 @@ export async function saveDayNoteAction(date: string, content: string): Promise<
     let { error } = await supabase.from('day_notes').upsert(notePayload, { onConflict: 'user_id,date' });
 
     // Fallback only if legacy day_notes table lacks user_id column entirely (owner only)
-    if (error && isOwnerUser(user) && (error.message?.includes('user_id') || error.code === '42703')) {
+    if (isOwnerUser(user) && isMissingColumn(error, 'user_id')) {
       const fallbackPayload: Record<string, unknown> = { ...notePayload };
       delete fallbackPayload.user_id;
       const retry = await supabase.from('day_notes').upsert(fallbackPayload, { onConflict: 'date' });
@@ -587,7 +614,7 @@ interface DbProjectRecord {
 /**
  * Server Action: Fetch projects + their owning orgs/people, scoped to the authenticated user
  */
-export async function getProjectsAction(): Promise<{
+export async function getProjectsAction(expectedUserId?: string): Promise<{
   success: boolean;
   isConfigured: boolean;
   projects?: Project[];
@@ -595,7 +622,7 @@ export async function getProjectsAction(): Promise<{
   error?: string;
 }> {
   try {
-    const user = await requireAuth();
+    const user = await requireExpectedAccount(expectedUserId);
     const supabase = getServerSupabase();
     if (!supabase) return { success: true, isConfigured: false, projects: [], groups: [] };
 
@@ -633,9 +660,9 @@ export async function getProjectsAction(): Promise<{
 /**
  * Server Action: Create / update a Project (Protected & Scoped to user)
  */
-export async function saveProjectAction(project: Project): Promise<{ success: boolean; error?: string }> {
+export async function saveProjectAction(project: Project, expectedUserId?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const user = await requireAuth();
+    const user = await requireExpectedAccount(expectedUserId);
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
@@ -695,9 +722,9 @@ export async function saveProjectAction(project: Project): Promise<{ success: bo
 /**
  * Server Action: Create / rename an Organization or Person (Protected & Scoped to user)
  */
-export async function saveProjectGroupAction(group: ProjectGroup): Promise<{ success: boolean; error?: string }> {
+export async function saveProjectGroupAction(group: ProjectGroup, expectedUserId?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const user = await requireAuth();
+    const user = await requireExpectedAccount(expectedUserId);
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
@@ -743,9 +770,9 @@ export async function saveProjectGroupAction(group: ProjectGroup): Promise<{ suc
 /**
  * Server Action: Delete an Organization or Person. Its projects become Unassigned (FK ON DELETE SET NULL).
  */
-export async function deleteProjectGroupAction(groupId: string): Promise<{ success: boolean; error?: string }> {
+export async function deleteProjectGroupAction(groupId: string, expectedUserId?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const user = await requireAuth();
+    const user = await requireExpectedAccount(expectedUserId);
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
     if (!isValidUuid(groupId)) return { success: false, error: 'Invalid id.' };
@@ -761,9 +788,9 @@ export async function deleteProjectGroupAction(groupId: string): Promise<{ succe
 /**
  * Server Action: Delete a Project (Protected & Scoped to user)
  */
-export async function deleteProjectAction(projectId: string): Promise<{ success: boolean; error?: string }> {
+export async function deleteProjectAction(projectId: string, expectedUserId?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const user = await requireAuth();
+    const user = await requireExpectedAccount(expectedUserId);
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
     if (!isValidUuid(projectId)) return { success: false, error: 'Invalid project id.' };

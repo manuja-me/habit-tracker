@@ -56,6 +56,7 @@ function SettingsModalDialog({
   const { isSyncing, isCloudReady, currentUser, syncWithCloud, syncError } = useHabitStore();
   const { theme, setTheme, accent, setAccent } = useTheme();
   const [justSynced, setJustSynced] = useState(false);
+  const showSynced = justSynced && !syncError;
   const [lastVisitDisplay] = useState(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(LAST_VISIT_STORAGE_KEY);
@@ -276,19 +277,19 @@ function SettingsModalDialog({
                 className={`flex items-center gap-1.5 h-8 px-3 border text-xs font-mono font-bold transition-all cursor-pointer select-none ${
                   isSyncing
                     ? 'border-[#FF3B30] bg-[#FF3B30]/10 text-[#FF3B30]'
-                    : justSynced
+                    : showSynced
                     ? 'border-[#FF3B30] bg-[#FF3B30]/10 text-[#FF3B30]'
                     : 'border-main bg-card hover:border-[#FF3B30] text-main'
                 }`}
               >
                 {isSyncing ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#FF3B30]" />
-                ) : justSynced ? (
+                ) : showSynced ? (
                   <Check className="w-3.5 h-3.5 text-[#FF3B30]" />
                 ) : (
                   <RefreshCw className="w-3.5 h-3.5" />
                 )}
-                <span>{isSyncing ? 'SYNCING...' : justSynced ? 'SYNCED' : 'SYNC NOW'}</span>
+                <span>{isSyncing ? 'SYNCING...' : showSynced ? 'SYNCED' : 'SYNC NOW'}</span>
               </button>
             </div>
 

@@ -7,6 +7,7 @@ import { calculateHabitStats, isDaySuccessful } from '../lib/utils/streaks';
 import { getTodayDateString, isHabitDueOnDate } from '../lib/utils/date';
 import { calculateGamificationProfile } from '../lib/utils/gamification';
 import { checkSessionUserAction, lockSessionAction, type SessionUser } from '../lib/server/auth';
+import { getUnlockedTabUserId, lockTab, unlockTab } from '../lib/utils/tab-session';
 import { useAppShortcuts } from '../lib/hooks/useAppShortcuts';
 import { useGamificationFeedback } from '../lib/hooks/useGamificationFeedback';
 
@@ -38,15 +39,7 @@ import {
 } from '../lib/utils/presence';
 
 export default function HabitTrackerPage() {
-  const [isUnlocked, setIsUnlocked] = useState<boolean | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const isSessionUnlocked = sessionStorage.getItem('zenith_session_unlocked') === 'true';
-    if (!isSessionUnlocked) {
-      clearLocalUserData();
-      return false;
-    }
-    return null;
-  });
+  const [isUnlocked, setIsUnlocked] = useState<boolean | null>(null);
   const [isVaultReady, setIsVaultReady] = useState<boolean>(false);
 
   const {
@@ -153,116 +146,60 @@ export default function HabitTrackerPage() {
     recordCurrentVisit(currentUser?.id, true);
   };
 
-  // Validate session on mount
+  const handleUnlockSuccess = useCallback((sessionUser?: SessionUser) => {
+    if (!sessionUser) return;
+    unlockTab(sessionUser.userId);
+    setCurrentUser({
+      id: sessionUser.userId,
+      username: sessionUser.username,
+      role: sessionUser.role,
+    });
+    const localData = loadLocalDataFromStorage(sessionUser.userId);
+    const hasCachedHabits = localData.habits.length > 0;
+    setIsVaultReady(hasCachedHabits);
+    setIsUnlocked(true);
+    void syncWithCloud(hasCachedHabits);
+  }, [syncWithCloud]);
+
+  // A tab only restores the account it previously unlocked.
   useEffect(() => {
-    if (isUnlocked === false) {
-      lockSessionAction().catch(() => {});
-      return;
-    }
-
-    if (isUnlocked === true) {
-      return;
-    }
-
+    if (isUnlocked !== null) return;
     let isMounted = true;
 
     const checkAuth = async () => {
       try {
-        const { authenticated, user: sessionUser } = await checkSessionUserAction();
-        if (isMounted) {
-          if (authenticated) {
-            setIsUnlocked(true);
-            if (sessionUser) {
-              setCurrentUser({
-                id: sessionUser.userId,
-                username: sessionUser.username,
-                role: sessionUser.role,
-              });
-              const localData = loadLocalDataFromStorage(sessionUser.userId);
-              if (localData && localData.habits.length > 0) {
-                setIsVaultReady(true);
-                syncWithCloud(true);
-                return;
-              }
-            } else {
-              const localData = loadLocalDataFromStorage();
-              if (localData && localData.habits.length > 0) {
-                setIsVaultReady(true);
-                syncWithCloud(true);
-                return;
-              }
-            }
-            syncWithCloud(false);
-          } else {
-            clearLocalUserData();
-            if (typeof window !== 'undefined') {
-              sessionStorage.removeItem('zenith_session_unlocked');
-            }
-            setIsUnlocked(false);
+        const tabUserId = getUnlockedTabUserId();
+        if (tabUserId) {
+          const { authenticated, user: sessionUser } = await checkSessionUserAction();
+          if (!isMounted) return;
+          if (authenticated && sessionUser?.userId === tabUserId) {
+            handleUnlockSuccess(sessionUser);
+            return;
           }
         }
       } catch {
-        if (isMounted) {
-          clearLocalUserData();
-          if (typeof window !== 'undefined') {
-            sessionStorage.removeItem('zenith_session_unlocked');
-          }
-          setIsUnlocked(false);
-        }
+        if (!isMounted) return;
       }
+      lockTab();
+      clearLocalUserData();
+      setIsUnlocked(false);
     };
 
-    checkAuth();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [isUnlocked, syncWithCloud]);
-
-  const handleUnlockSuccess = (sessionUser?: SessionUser) => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('zenith_session_unlocked', 'true');
-    }
-    setIsUnlocked(true);
-
-    if (sessionUser) {
-      setCurrentUser({
-        id: sessionUser.userId,
-        username: sessionUser.username,
-        role: sessionUser.role,
-      });
-      const localData = loadLocalDataFromStorage(sessionUser.userId);
-      if (localData && localData.habits.length > 0) {
-        setIsVaultReady(true);
-        syncWithCloud(true);
-        return;
-      }
-    } else {
-      const localData = loadLocalDataFromStorage();
-      if (localData && localData.habits.length > 0) {
-        setIsVaultReady(true);
-        syncWithCloud(true);
-        return;
-      }
-    }
-
-    setIsVaultReady(false);
-    syncWithCloud(false);
-  };
+    void checkAuth();
+    return () => { isMounted = false; };
+  }, [isUnlocked, handleUnlockSuccess]);
 
   const handleVaultReady = useCallback(() => {
     setIsVaultReady(true);
   }, []);
 
-  const handleLockApp = async () => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('zenith_session_unlocked');
-    }
+  const handleLockApp = () => {
+    lockTab();
     clearLocalUserData();
-    await lockSessionAction();
     setActiveTab('today');
     setIsUnlocked(false);
     setIsVaultReady(false);
+    if (currentUser) void lockSessionAction(currentUser.id).catch(() => {});
   };
 
   const dueHabits = useMemo(() => {
@@ -480,7 +417,7 @@ export default function HabitTrackerPage() {
           </div>
         )}
 
-        {activeTab === 'projects' && <ProjectsView />}
+        {activeTab === 'projects' && currentUser && <ProjectsView key={currentUser.id} userId={currentUser.id} />}
 
         {activeTab === 'week' && (
           <WeeklyGrid

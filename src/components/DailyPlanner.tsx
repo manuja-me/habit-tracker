@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { format, parseISO, addDays, subDays } from 'date-fns';
-import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useHabitStore } from '../lib/store';
-import { getTodayDateString } from '../lib/utils/date';
+import { getTodayDateString, isPlannerNoteExpired } from '../lib/utils/date';
+import { getUnlockedTabUserId } from '../lib/utils/tab-session';
 
 interface DayNoteRowProps {
   dateStr: string;
@@ -23,15 +24,15 @@ function DayNoteRow({
   onSave,
   onSelect,
 }: DayNoteRowProps) {
-  const [value, setValue] = useState(initialValue);
-  const [isSavedRecently, setIsSavedRecently] = useState(false);
-  const isFocusedRef = useRef(false);
+  const [draft, setDraft] = useState<string | null>(null);
+  const value = draft ?? initialValue;
+  const isExpired = isPlannerNoteExpired(dateStr);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const dateObj = parseISO(dateStr);
   const dayNum = format(dateObj, 'dd');
   const dayName = format(dateObj, 'EEEE'); // Full English name e.g. FRIDAY
   const month = format(dateObj, 'MMM');
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingRef = useRef<{ timer: ReturnType<typeof setTimeout>; save: () => void } | null>(null);
 
   const adjustHeight = () => {
     const el = textareaRef.current;
@@ -41,10 +42,23 @@ function DayNoteRow({
   };
 
   useEffect(() => {
-    if (!isFocusedRef.current) {
-      setValue(initialValue || '');
-    }
-  }, [initialValue]);
+    const savePending = () => {
+      const pending = pendingRef.current;
+      if (!pending) return;
+      clearTimeout(pending.timer);
+      pendingRef.current = null;
+      pending.save();
+    };
+    const handlePageHide = () => {
+      savePending();
+      setDraft(null);
+    };
+    window.addEventListener('pagehide', handlePageHide);
+    return () => {
+      window.removeEventListener('pagehide', handlePageHide);
+      savePending();
+    };
+  }, []);
 
   useEffect(() => {
     adjustHeight();
@@ -61,29 +75,29 @@ function DayNoteRow({
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const nextVal = e.target.value;
-    setValue(nextVal);
+    setDraft(nextVal);
 
     // Immediate auto-expand on typing without waiting for state effect
     e.target.style.height = 'auto';
     e.target.style.height = `${e.target.scrollHeight}px`;
 
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-
-    saveTimeoutRef.current = setTimeout(() => {
-      onSave(dateStr, nextVal);
-      setIsSavedRecently(true);
-      setTimeout(() => setIsSavedRecently(false), 1500);
-    }, 750);
+    if (pendingRef.current) clearTimeout(pendingRef.current.timer);
+    const userId = getUnlockedTabUserId();
+    pendingRef.current = {
+      timer: setTimeout(flushDraft, 750),
+      save: () => {
+        if (userId && getUnlockedTabUserId() === userId) onSave(dateStr, nextVal);
+      },
+    };
   };
 
-  const handleBlur = () => {
-    isFocusedRef.current = false;
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    onSave(dateStr, value);
+  const flushDraft = () => {
+    const pending = pendingRef.current;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pendingRef.current = null;
+    pending.save();
+    setDraft(null);
   };
 
   return (
@@ -139,27 +153,15 @@ function DayNoteRow({
           ref={textareaRef}
           rows={2}
           value={value}
+          disabled={isExpired}
+          aria-label={`Planner notes for ${dateStr}`}
           onChange={handleChange}
-          onFocus={() => {
-            isFocusedRef.current = true;
-          }}
-          onBlur={handleBlur}
-          placeholder={`Directives & tasks for ${dayName}...`}
+          onBlur={flushDraft}
+          placeholder={isExpired ? 'This date is outside the 3-month note retention period.' : `Directives & tasks for ${dayName}...`}
           style={{ fieldSizing: 'content', overflow: 'hidden' } as React.CSSProperties}
           className="w-full bg-transparent text-xs font-mono text-main placeholder-muted-custom focus:outline-none resize-none leading-relaxed overflow-hidden p-0 border-0 min-h-[38px] break-words"
         />
 
-        {/* Autosave status indicator */}
-        <div className="flex items-center justify-between h-3 text-[9px] font-mono text-sub mt-2">
-          <span className="text-[8px] uppercase tracking-wider text-muted-custom">
-            {isSelected ? 'ACTIVE // SYNCED' : ''}
-          </span>
-          {isSavedRecently && (
-            <span className="inline-flex items-center gap-1 text-[#FF3B30] animate-in fade-in duration-150">
-              <Check className="w-2.5 h-2.5 stroke-[3]" /> SAVED
-            </span>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -185,14 +187,10 @@ export function DailyPlanner({
   if (selectedDate !== prevSelectedDate) {
     setPrevSelectedDate(selectedDate);
     if (selectedDate) {
-      try {
-        const currentStart = parseISO(anchorDate);
-        const sel = parseISO(selectedDate);
-        const diff = Math.floor((sel.getTime() - currentStart.getTime()) / (1000 * 3600 * 24));
-        if (diff < 0 || diff >= 7) {
-          setAnchorDate(selectedDate);
-        }
-      } catch {}
+      const lastVisibleDate = format(addDays(parseISO(anchorDate), 6), 'yyyy-MM-dd');
+      if (selectedDate < anchorDate || selectedDate > lastVisibleDate) {
+        setAnchorDate(selectedDate);
+      }
     }
   }
 
@@ -274,7 +272,7 @@ export function DailyPlanner({
       </div>
 
       <div className="text-[10px] font-mono text-sub text-center uppercase tracking-widest pt-1">
-        AUTOSAVES INSTANTLY ON TYPING
+        NOTES AUTOSAVE AS YOU TYPE
       </div>
     </div>
   );

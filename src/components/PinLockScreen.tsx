@@ -175,7 +175,8 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
     pinRef.current = '';
     setPin('');
     try {
-      await lockSessionAction();
+      const previousUser = authenticatedUserRef.current;
+      if (previousUser) await lockSessionAction(previousUser.userId);
     } catch {}
     setErrorMsg('ACCOUNT REMAINS DEACTIVATED // Countdown continues.');
   };

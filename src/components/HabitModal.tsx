@@ -71,6 +71,7 @@ function HabitModalDialog({
   const defaultNat = editingHabit?.nature || initialNature || 'do';
   const [nature, setNature] = useState<HabitNature>(defaultNat);
   const [weaningProtocol, setWeaningProtocol] = useState<WeaningProtocolType>(() => {
+    if (editingHabit?.weaning && !editingHabit.weaning.enabled) return 'none';
     if (editingHabit?.weaning?.enabled && editingHabit.weaning.protocol !== 'custom') {
       return editingHabit.weaning.protocol as WeaningProtocolType;
     }
@@ -95,6 +96,7 @@ function HabitModalDialog({
   const [targetUnit, setTargetUnit] = useState(editingHabit?.target_unit || '');
   const [frequency, setFrequency] = useState<HabitFrequency>(editingHabit?.frequency || 'daily');
   const [customDays, setCustomDays] = useState<number[]>(editingHabit?.custom_days || [1, 2, 3, 4, 5]);
+  const [showCustomDaysError, setShowCustomDaysError] = useState(false);
 
   // Handle ESC key
   useEffect(() => {
@@ -110,6 +112,10 @@ function HabitModalDialog({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+    if (frequency === 'custom' && customDays.length === 0) {
+      setShowCustomDaysError(true);
+      return;
+    }
 
     onSave({
       nature,
@@ -142,10 +148,10 @@ function HabitModalDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-100 font-mono">
-      <div className="w-full max-w-lg rounded-none bg-card border border-main p-4 sm:p-6 shadow-2xl overflow-y-auto max-h-[88vh] sm:max-h-[90vh]">
+      <div role="dialog" aria-modal="true" aria-labelledby="habit-modal-title" className="w-full max-w-lg rounded-none bg-card border border-main p-4 sm:p-6 shadow-2xl overflow-y-auto max-h-[88vh] sm:max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-subtle">
-          <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-main">
+          <h2 id="habit-modal-title" className="text-xs sm:text-sm font-bold uppercase tracking-wider text-main">
             {editingHabit ? 'EDIT HABIT' : 'CREATE NEW HABIT'}
           </h2>
           <button
@@ -215,6 +221,7 @@ function HabitModalDialog({
             <input
               type="text"
               required
+              pattern={'.*\\S.*'}
               autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -421,6 +428,7 @@ function HabitModalDialog({
                   </label>
                   <input
                     type="number"
+                    required
                     min="1"
                     value={targetValue}
                     onChange={(e) => setTargetValue(Number(e.target.value))}
@@ -489,6 +497,9 @@ function HabitModalDialog({
                   );
                 })}
               </div>
+            )}
+            {frequency === 'custom' && showCustomDaysError && customDays.length === 0 && (
+              <p role="alert" className="mt-1.5 text-xs text-[#FF3B30]">Select at least one day.</p>
             )}
           </div>
 
