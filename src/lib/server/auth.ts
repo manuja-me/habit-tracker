@@ -381,7 +381,21 @@ export async function getCurrentUserAction(): Promise<SessionUser | null> {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get(COOKIE_NAME);
   if (!sessionCookie?.value) return null;
-  return getSessionUserFromToken(sessionCookie.value);
+  const user = getSessionUserFromToken(sessionCookie.value);
+  if (!user || user.userId === OWNER_USER_ID) return user;
+  const supabase = getServerSupabase();
+  if (!supabase) return null;
+  // A member can be deactivated or deleted from another device.
+  const { data, error } = await supabase.from('app_users')
+    .select('id, deactivated_at')
+    .eq('id', user.userId)
+    .maybeSingle();
+  if (error?.code === '42703' && error.message.includes('deactivated_at')) {
+    const legacy = await supabase.from('app_users').select('id').eq('id', user.userId).maybeSingle();
+    return legacy.data && !legacy.error && !user.isDeactivated ? user : null;
+  }
+  if (error || !data || Boolean(data.deactivated_at) !== Boolean(user.isDeactivated)) return null;
+  return user;
 }
 
 /**
@@ -462,7 +476,7 @@ export async function validateInviteTokenAction(fullToken: string): Promise<{
   const [rawToken, signature] = fullToken.split('.');
   const expectedSig = crypto.createHmac('sha256', SECRET_HMAC_KEY).update(rawToken).digest('hex');
   if (
-    signature.length !== expectedSig.length ||
+    Buffer.byteLength(signature) !== expectedSig.length ||
     !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))
   ) {
     return { valid: false, error: 'Corrupted or tampered invitation link.' };
@@ -546,10 +560,11 @@ export async function completeInviteSetupAction(
 
   try {
     // Check if username or PIN already exists across app_users
-    const { data: existingUsers } = await supabase
+    const { data: existingUsers, error: lookupError } = await supabase
       .from('app_users')
       .select('id, username, pin_hash');
 
+    if (lookupError) return { success: false, error: 'Could not verify registration details. Please try again.' };
     const normalizedName = cleanUsername.toLowerCase();
     let hasCollision = false;
     for (const u of existingUsers || []) {
@@ -760,7 +775,7 @@ export async function reactivateAccountAction(): Promise<{
 }> {
   try {
     const currentUser = await getCurrentUserAction();
-    if (!currentUser?.userId) {
+    if (!currentUser?.isDeactivated) {
       return { success: false, error: 'Unauthorized: Valid session required.' };
     }
     const targetId = currentUser.userId;
@@ -779,25 +794,16 @@ export async function reactivateAccountAction(): Promise<{
         updated_at: nowIso,
       })
       .eq('id', targetId)
+      .gt('deactivated_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
       .select('id, username, role')
       .maybeSingle();
 
-    if (error && (error.message?.includes('deactivated_at') || error.code === '42703' || error.code === 'PGRST100')) {
-      await supabase
-        .from('app_users')
-        .update({
-          last_login_at: nowIso,
-          updated_at: nowIso,
-        })
-        .eq('id', targetId);
-    } else if (error) {
-      return { success: false, error: error.message };
-    }
-
+    if (error) return { success: false, error: error.message };
+    if (!updatedUser) return { success: false, error: 'Account is no longer eligible for reactivation.' };
     const sessionUser: SessionUser = {
-      userId: updatedUser?.id || currentUser.userId,
-      username: updatedUser?.username || currentUser.username,
-      role: (updatedUser?.role as 'owner' | 'member') || currentUser.role,
+      userId: updatedUser.id,
+      username: updatedUser.username,
+      role: updatedUser.role,
       isDeactivated: false,
     };
 

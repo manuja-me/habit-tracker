@@ -98,7 +98,7 @@ export function parseRateLimitToken(token?: string): { count: number; lockedUnti
   if (!payload || !sig) return null;
   const expectedSig = crypto.createHmac('sha256', SECRET_HMAC_KEY).update(payload).digest('hex');
   if (
-    sig.length !== expectedSig.length ||
+    Buffer.byteLength(sig) !== expectedSig.length ||
     !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))
   ) {
     return null;
@@ -323,7 +323,7 @@ export function getSessionUserFromToken(token: string): SessionUser | null {
 
   const expectedSignature = crypto.createHmac('sha256', SECRET_HMAC_KEY).update(payload).digest('hex');
   if (
-    signature.length !== expectedSignature.length ||
+    Buffer.byteLength(signature) !== expectedSignature.length ||
     !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))
   ) {
     return null;

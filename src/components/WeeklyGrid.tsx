@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { Habit, HabitLog } from '../lib/types';
 import { getWeekDays, formatDayName, formatShortDate, getTodayDateString, isHabitDueOnDate, parseDate, formatDate } from '../lib/utils/date';
+import { getToggledLog, isHabitChecked } from '../lib/utils/habit-input';
 import { getHabitIcon, COLOR_PALETTES } from '../lib/utils/icons';
 import { Check, ChevronLeft, ChevronRight, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { addDays, subDays } from 'date-fns';
@@ -83,12 +84,17 @@ export function WeeklyGrid({
             );
           }
 
+          const isCompleted = isHabitChecked(habit, log);
+          const toggleDay = () => {
+            const next = getToggledLog(habit, log);
+            onToggle(habit.id, dStr, next.completed, next.value);
+          };
           if (isDont) {
-            const isSlippedUp = log !== undefined && log.completed === false;
+            const isSlippedUp = !isCompleted;
             return (
               <td key={dStr} className="py-3 sm:py-3 text-center px-1">
                 <button
-                  onClick={() => onToggle(habit.id, dStr, isSlippedUp, isSlippedUp ? 0 : 1)}
+                  onClick={toggleDay}
                   className={`w-10 h-10 sm:w-8 sm:h-8 rounded-none inline-flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation border ${
                     isSlippedUp
                       ? 'bg-[#FF3B30] text-white border-[#FF3B30]'
@@ -107,11 +113,10 @@ export function WeeklyGrid({
             );
           }
 
-          const isCompleted = Boolean(log?.completed);
           return (
             <td key={dStr} className="py-3 sm:py-3 text-center px-1">
               <button
-                onClick={() => onToggle(habit.id, dStr, !isCompleted, !isCompleted ? habit.target_value : 0)}
+                onClick={toggleDay}
                 className={`w-10 h-10 sm:w-8 sm:h-8 rounded-none inline-flex items-center justify-center transition-all duration-100 active:scale-90 cursor-pointer touch-manipulation border ${
                   isCompleted
                     ? 'bg-[#FF3B30] text-white border-[#FF3B30]'

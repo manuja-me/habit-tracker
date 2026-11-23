@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import { registerHooks } from 'node:module';
 
@@ -69,78 +68,33 @@ test('Finding 1: RLS policies in schema.sql restrict habits, habit_logs, and day
   );
 });
 
-test('Finding 2: Insecure default secrets throw fatal error on startup in production', () => {
-  // 1. Should throw in production when secrets are unset/default
-  assert.throws(
-    () => {
-      execSync('node --experimental-strip-types -e "import(\'./src/lib/server/auth-utils.ts\')"', {
-        env: { ...process.env, NODE_ENV: 'production' },
-        stdio: 'pipe',
-      });
-    },
-    (err) => {
-      const output = err.stderr ? err.stderr.toString() : '';
-      return output.includes('FATAL SECURITY ERROR');
-    },
-    'Expected fatal startup error when default secrets are used in production'
-  );
+test('Finding 2: Insecure default secrets throw fatal error on startup in production', async () => {
+  const originalEnv = process.env;
+  const production = { NODE_ENV: 'production' };
+  const secure = {
+    ...production,
+    SESSION_SECRET: 'test-only-production-session-secret',
+    PIN_SALT: 'test-only-production-pin-salt',
+    APP_SECRET_PIN: '987654',
+  };
 
-  // 2. Should throw in production when secrets are whitespace
-  assert.throws(
-    () => {
-      execSync('node --experimental-strip-types -e "import(\'./src/lib/server/auth-utils.ts\')"', {
-        env: {
-          ...process.env,
-          NODE_ENV: 'production',
-          SESSION_SECRET: '   ',
-          PIN_SALT: '   ',
-        },
-        stdio: 'pipe',
-      });
-    },
-    (err) => {
-      const output = err.stderr ? err.stderr.toString() : '';
-      return output.includes('FATAL SECURITY ERROR');
-    },
-    'Expected fatal startup error when whitespace secrets are provided in production'
-  );
+  // Each import must run the startup checks with a fresh module and known configuration.
+  try {
+    process.env = production;
+    await assert.rejects(import('../src/lib/server/auth-utils.ts?missing'), /FATAL SECURITY ERROR/);
 
-  // 3. Should succeed in production when secure secrets are provided
-  const successOutput = execSync(
-    'node --experimental-strip-types -e "import(\'./src/lib/server/auth-utils.ts\').then(() => console.log(\'OK\'))"',
-    {
-      env: {
-        ...process.env,
-        NODE_ENV: 'production',
-        SESSION_SECRET: 'my_production_super_secret_session_key_32bytes_long',
-        PIN_SALT: 'my_production_super_secret_salt_32bytes_long',
-        APP_SECRET_PIN: '987654',
-      },
-      stdio: 'pipe',
-    }
-  ).toString();
-  assert.ok(successOutput.includes('OK'), 'Should start up cleanly when custom secrets are provided');
+    process.env = { ...secure, SESSION_SECRET: '   ', PIN_SALT: '   ' };
+    await assert.rejects(import('../src/lib/server/auth-utils.ts?whitespace'), /FATAL SECURITY ERROR/);
 
-  // 4. Should throw in production when master PIN is default 1001
-  assert.throws(
-    () => {
-      execSync('node --experimental-strip-types -e "import(\'./src/lib/server/auth-utils.ts\')"', {
-        env: {
-          ...process.env,
-          NODE_ENV: 'production',
-          SESSION_SECRET: 'my_production_super_secret_session_key_32bytes_long',
-          PIN_SALT: 'my_production_super_secret_salt_32bytes_long',
-          APP_SECRET_PIN: '1001',
-        },
-        stdio: 'pipe',
-      });
-    },
-    (err) => {
-      const output = err.stderr ? err.stderr.toString() : '';
-      return output.includes('FATAL SECURITY ERROR');
-    },
-    'Expected fatal startup error when default 1001 master PIN is used in production'
-  );
+    process.env = { ...secure, APP_SECRET_PIN: '1001' };
+    await assert.rejects(import('../src/lib/server/auth-utils.ts?default-pin'), /FATAL SECURITY ERROR/);
+
+    process.env = secure;
+    const auth = await import('../src/lib/server/auth-utils.ts?configured');
+    assert.equal(auth.SECRET_HMAC_KEY, secure.SESSION_SECRET);
+  } finally {
+    process.env = originalEnv;
+  }
 });
 
 test('Finding 3: Session token expiration enforcement and structural validation', () => {

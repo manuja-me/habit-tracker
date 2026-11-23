@@ -1,69 +1,48 @@
-const CACHE_NAME = 'zenith-cache-v1';
-const STATIC_ASSETS = [
-  '/',
-  '/manifest.webmanifest',
-  '/icon',
-  '/apple-icon'
-];
+const CACHE_NAME = 'zenith-cache-v2';
+const PUBLIC_ASSETS = new Set(['/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/apple-icon.png']);
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch(() => {});
-    })
-  );
-  self.skipWaiting();
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    // Keep an anonymous app shell for offline navigation.
+    await cache.addAll(['/', ...PUBLIC_ASSETS].map((path) =>
+      new Request(new URL(path, self.location.origin), { credentials: 'omit', cache: 'reload' })
+    ));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
-        })
-      );
-    })
-  );
-  self.clients.claim();
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((key) => key.startsWith('zenith-cache-') && key !== CACHE_NAME)
+      .map((key) => caches.delete(key)));
+    await self.clients.claim();
+  })());
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-  const url = new URL(event.request.url);
+  const { request } = event;
+  const url = new URL(request.url);
+  if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
-  // Skip supabase and external cloud requests from offline cache
-  if (url.origin !== self.location.origin) return;
+  if (request.mode === 'navigate' && url.pathname === '/') {
+    event.respondWith(fetch(request).catch(async () =>
+      (await caches.match('/', { cacheName: CACHE_NAME })) || Response.error()
+    ));
+    return;
+  }
 
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Return cache and update in background
-        fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, networkResponse);
-            });
-          }
-        }).catch(() => {});
-        return cachedResponse;
-      }
+  if (!url.pathname.startsWith('/_next/static/') && !PUBLIC_ASSETS.has(url.pathname)) return;
+  event.respondWith((async () => {
+    const cached = await caches.match(request, { cacheName: CACHE_NAME });
+    if (cached) return cached;
 
-      return fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
-        }
-        return networkResponse;
-      }).catch(() => {
-        if (event.request.headers.get('accept')?.includes('text/html')) {
-          return caches.match('/');
-        }
-      });
-    })
-  );
+    const response = await fetch(request);
+    if (response.ok && !response.redirected) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, response.clone()).catch(() => {});
+    }
+    return response;
+  })());
 });

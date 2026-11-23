@@ -328,7 +328,7 @@ export default function HabitTrackerPage() {
   });
 
   const displayedDailyHabits = useMemo(() => {
-    return dueHabits.filter((h) => {
+    const filtered = dueHabits.filter((h) => {
       if (filterCategory === 'all') return true;
       if (filterCategory === 'completed') {
         return isDaySuccessful(h, selectedDate, logs);
@@ -338,6 +338,7 @@ export default function HabitTrackerPage() {
       }
       return h.category === filterCategory;
     });
+    return filtered.sort((a, b) => Number(a.nature === 'dont') - Number(b.nature === 'dont'));
   }, [dueHabits, filterCategory, logs, selectedDate]);
 
   const doHabits = useMemo(() => {
@@ -380,7 +381,8 @@ export default function HabitTrackerPage() {
 
   // Global Keyboard Shortcuts
   useAppShortcuts({
-    isUnlocked,
+    activeTab,
+    isUnlocked: isUnlocked && isVaultReady,
     hasOpenModal,
     displayedDailyHabits,
     safeFocusedIndex,

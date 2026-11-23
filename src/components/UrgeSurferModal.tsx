@@ -122,7 +122,7 @@ export function UrgeSurferModal({
   const timeFormatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150 font-mono">
+    <div role="dialog" aria-modal="true" aria-label="Urge surfer" className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150 font-mono">
       <div className="w-full max-w-md bg-card border border-main p-5 sm:p-6 shadow-2xl relative flex flex-col items-center text-center">
         {/* Header */}
         <div className="w-full flex items-center justify-between pb-3 border-b border-subtle mb-4">

@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Habit, HabitLog } from '../types';
-import { ActiveTab } from '../../components/ViewTabs';
+import type { Habit, HabitLog } from '../types';
+import type { ActiveTab } from '../../components/ViewTabs';
 import { getTodayDateString } from '../utils/date';
+import { getHabitStep, getSteppedLog, getToggledLog } from '../utils/habit-input';
 
 interface UseAppShortcutsOptions {
+  activeTab: ActiveTab;
   isUnlocked: boolean | null;
   hasOpenModal: boolean;
   displayedDailyHabits: Habit[];
@@ -23,6 +25,7 @@ interface UseAppShortcutsOptions {
 }
 
 export function useAppShortcuts({
+  activeTab,
   isUnlocked,
   hasOpenModal,
   displayedDailyHabits,
@@ -42,53 +45,30 @@ export function useAppShortcuts({
     if (!isUnlocked) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-        return;
-      }
-
-      if (hasOpenModal) return;
+      if (hasOpenModal || e.defaultPrevented || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target;
+      if (target instanceof Element && (
+        target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])') ||
+        (e.key === ' ' && target.closest('button, a[href], [role="button"]'))
+      )) return;
+      if (document.querySelector('[aria-modal="true"]')) return;
 
       const key = e.key.toLowerCase();
-
-      // Navigation: j / Down, k / Up
-      if (key === 'j' || e.key === 'ArrowDown') {
+      const habit = activeTab === 'today' ? displayedDailyHabits[safeFocusedIndex] : undefined;
+      if (habit && (key === 'j' || key === 'arrowdown' || key === 'k' || key === 'arrowup')) {
         e.preventDefault();
-        setFocusedIndex((prev) => Math.min(displayedDailyHabits.length - 1, prev + 1));
-      } else if (key === 'k' || e.key === 'ArrowUp') {
+        const delta = key === 'j' || key === 'arrowdown' ? 1 : -1;
+        setFocusedIndex(Math.max(0, Math.min(displayedDailyHabits.length - 1, safeFocusedIndex + delta)));
+      } else if (habit && (key === ' ' || key === 'x')) {
         e.preventDefault();
-        setFocusedIndex((prev) => Math.max(0, prev - 1));
-      } 
-      // Toggle: Space or x
-      else if (e.key === ' ' || key === 'x') {
+        const next = getToggledLog(habit, logs[`${habit.id}_${selectedDate}`]);
+        toggleHabit(habit.id, selectedDate, next.completed, next.value);
+      } else if (habit?.type === 'number' && ['+', '=', '-', '_'].includes(key)) {
         e.preventDefault();
-        const focusedHabit = displayedDailyHabits[safeFocusedIndex];
-        if (focusedHabit) {
-          const isDone = Boolean(logs[`${focusedHabit.id}_${selectedDate}`]?.completed);
-          toggleHabit(focusedHabit.id, selectedDate, !isDone, !isDone ? focusedHabit.target_value : 0);
-        }
-      }
-      // Stepper: + / =
-      else if (e.key === '+' || e.key === '=') {
-        e.preventDefault();
-        const focusedHabit = displayedDailyHabits[safeFocusedIndex];
-        if (focusedHabit && focusedHabit.type === 'number') {
-          const curVal = logs[`${focusedHabit.id}_${selectedDate}`]?.value ?? 0;
-          const step = focusedHabit.target_value >= 1000 ? 250 : focusedHabit.target_value >= 50 ? 10 : 5;
-          const nextVal = curVal + step;
-          const nextCompleted = nextVal >= focusedHabit.target_value;
-          toggleHabit(focusedHabit.id, selectedDate, nextCompleted, nextVal);
-        }
-      } else if (e.key === '-' || e.key === '_') {
-        e.preventDefault();
-        const focusedHabit = displayedDailyHabits[safeFocusedIndex];
-        if (focusedHabit && focusedHabit.type === 'number') {
-          const curVal = logs[`${focusedHabit.id}_${selectedDate}`]?.value ?? 0;
-          const step = focusedHabit.target_value >= 1000 ? 250 : focusedHabit.target_value >= 50 ? 10 : 5;
-          const nextVal = Math.max(0, curVal - step);
-          const nextCompleted = nextVal >= focusedHabit.target_value;
-          toggleHabit(focusedHabit.id, selectedDate, nextCompleted, nextVal);
-        }
+        const step = getHabitStep(habit);
+        const amount = key === '+' || key === '=' ? step : -step;
+        const next = getSteppedLog(habit, logs[`${habit.id}_${selectedDate}`], amount);
+        toggleHabit(habit.id, selectedDate, next.completed, next.value);
       }
       // New Habit: n
       else if (key === 'n') {
@@ -138,6 +118,7 @@ export function useAppShortcuts({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
+    activeTab,
     isUnlocked,
     hasOpenModal,
     displayedDailyHabits,

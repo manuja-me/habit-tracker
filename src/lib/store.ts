@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useCallback, useSyncExternalStore } from 'react';
-import { Habit, HabitLog } from './types';
+import type { Habit, HabitLog } from './types';
 import { 
   getHabitsAndLogsAction, 
   saveHabitAction, 
@@ -48,6 +48,7 @@ let globalIsSyncing = false;
 let globalSyncError: string | null = null;
 let isStorageLoaded = false;
 let isInitialSyncDone = false;
+let sessionGeneration = 0;
 let listeners: Array<() => void> = [];
 
 const INITIAL_STATE: HabitStoreState = {
@@ -96,7 +97,12 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
   try {
     broadcastChannel = new BroadcastChannel('zenith_cross_tab_sync');
     broadcastChannel.onmessage = (event) => {
-      if (event.data?.type === 'SYNC_STATE') {
+      if (
+        event.data?.type === 'SYNC_STATE' &&
+        globalCurrentUser &&
+        event.data.userId === globalCurrentUser.id &&
+        sessionStorage.getItem('zenith_session_unlocked') === 'true'
+      ) {
         if (Array.isArray(event.data.habits)) {
           globalHabits = event.data.habits;
         }
@@ -113,10 +119,11 @@ if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
 }
 
 function broadcastLocalUpdate() {
-  if (broadcastChannel) {
+  if (broadcastChannel && globalCurrentUser) {
     try {
       broadcastChannel.postMessage({
         type: 'SYNC_STATE',
+        userId: globalCurrentUser.id,
         habits: globalHabits,
         logs: globalLogs,
         dayNotes: globalDayNotes,
@@ -126,6 +133,10 @@ function broadcastLocalUpdate() {
 }
 
 export function clearLocalUserData() {
+  sessionGeneration++;
+  activeSyncPromise = null;
+  globalIsSyncing = false;
+  globalSyncError = null;
   globalHabits = [];
   globalLogs = {};
   globalDayNotes = {};
@@ -145,6 +156,7 @@ export function clearLocalUserData() {
 }
 
 export function setCurrentUser(user: { id: string; username: string; role: string } | null) {
+  if (globalCurrentUser?.id !== user?.id) clearLocalUserData();
   globalCurrentUser = user;
   if (user && typeof window !== 'undefined') {
     try {
@@ -192,6 +204,7 @@ async function executeCloudSync(isBackground = false): Promise<void> {
   }
 
   activeSyncPromise = (async () => {
+    const generation = sessionGeneration;
     const requestStartTime = Date.now();
     if (!isBackground) {
       globalIsSyncing = true;
@@ -200,6 +213,7 @@ async function executeCloudSync(isBackground = false): Promise<void> {
 
   try {
     const res = await getHabitsAndLogsAction();
+    if (generation !== sessionGeneration) return;
     if (!res.success) {
       if (res.error) globalSyncError = res.error;
       return;
@@ -213,6 +227,10 @@ async function executeCloudSync(isBackground = false): Promise<void> {
     }
 
     if (res.user) {
+      if (globalCurrentUser && globalCurrentUser.id !== res.user.id) {
+        globalSyncError = 'The signed-in account changed. Lock and unlock Zenith to continue.';
+        return;
+      }
       if (globalCurrentUser?.id !== res.user.id) {
         if (typeof window !== 'undefined') {
           try {
@@ -281,8 +299,10 @@ async function executeCloudSync(isBackground = false): Promise<void> {
 
       if (isOwnerAccount && !hasBeenInitialized && mergedHabits.length === 0 && globalHabits.length > 0) {
         for (const h of globalHabits) {
+          if (generation !== sessionGeneration) return;
           await saveHabitAction(h);
         }
+        if (generation !== sessionGeneration) return;
         if (typeof window !== 'undefined') {
           localStorage.setItem(INITIALIZED_KEY, 'true');
         }
@@ -328,20 +348,20 @@ async function executeCloudSync(isBackground = false): Promise<void> {
       }
     }
   } catch (err: unknown) {
+    if (generation !== sessionGeneration) return;
     const message = err instanceof Error ? err.message : String(err);
     console.warn('Server sync notice:', message);
     globalSyncError = message || 'Sync failed';
   } finally {
-    isStorageLoaded = true;
-    isInitialSyncDone = true;
-    if (!isBackground) {
-      globalIsSyncing = false;
+    if (generation === sessionGeneration) {
+      activeSyncPromise = null;
+      isStorageLoaded = true;
+      isInitialSyncDone = true;
+      if (!isBackground) globalIsSyncing = false;
+      updateStoreSnapshot();
     }
-    updateStoreSnapshot();
   }
-  })().finally(() => {
-    activeSyncPromise = null;
-  });
+  })();
 
   return activeSyncPromise;
 }
@@ -354,9 +374,6 @@ let lastUserInteractionTime = Date.now();
 function initGlobalSyncCoordinator() {
   if (typeof window === 'undefined' || hasStartedSyncLoop) return;
   hasStartedSyncLoop = true;
-
-  loadLocalDataFromStorage();
-  executeCloudSync();
 
   // Track user presence to pause syncing when the user is away or tab left open overnight
   const recordInteraction = () => {
@@ -397,9 +414,6 @@ function initGlobalSyncCoordinator() {
   window.addEventListener('focus', handleFocusOrVisibility);
   document.addEventListener('visibilitychange', handleFocusOrVisibility);
 
-  window.addEventListener('storage', () => {
-    loadLocalDataFromStorage();
-  });
 }
 
 function subscribe(listener: () => void) {

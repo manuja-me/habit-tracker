@@ -15,6 +15,7 @@ import {
   Pencil,
 } from 'lucide-react';
 import { Project, ProjectGroup, ProjectGroupKind, ProjectStatus, ProjectTask } from '../lib/types';
+import { generateId } from '../lib/utils/storage';
 import { COLOR_PALETTES } from '../lib/utils/icons';
 import {
   getProjectsAction,
@@ -27,6 +28,46 @@ import {
 const LOCAL_KEY = 'zenith_projects_v1';
 
 type Result = { success: boolean; error?: string };
+
+function AddForm({
+  onAdd,
+  children,
+  className,
+}: {
+  onAdd: (name: string) => Promise<Result>;
+  children: React.ReactNode;
+  className: string;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (pending) return;
+    const input = event.currentTarget.elements.namedItem('name') as HTMLInputElement;
+    setPending(true);
+    setError('');
+    try {
+      const result = await onAdd(input.value.trim());
+      if (result.success) input.value = '';
+      else setError(result.error || 'Could not save. Try again.');
+    } catch {
+      setError('Could not save. Try again.');
+    } finally {
+      setPending(false);
+      input.focus();
+    }
+  };
+
+  return (
+    <form onSubmit={submit}>
+      <fieldset disabled={pending} aria-busy={pending} className={className}>
+        {children}
+      </fieldset>
+      {error && <p role="alert" className="mt-1 text-xs text-[#FF3B30]">{error}</p>}
+    </form>
+  );
+}
 
 function GroupIcon({
   kind,
@@ -152,10 +193,9 @@ function ProjectSettingsModal({
   groups: ProjectGroup[];
   isOpen: boolean;
   onClose: () => void;
-  onChange: (p: Project) => void;
+  onChange: (p: Project) => Promise<Result>;
   onDelete: () => void;
 }) {
-  const [subtaskInput, setSubtaskInput] = useState('');
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -171,16 +211,11 @@ function ProjectSettingsModal({
     })),
   ];
 
-  const handleAddSubtask = (e: React.FormEvent) => {
-    e.preventDefault();
-    const title = subtaskInput.trim();
-    if (!title) return;
+  const handleAddSubtask = (title: string) =>
     onChange({
       ...project,
-      tasks: [...project.tasks, { id: crypto.randomUUID(), title, done: false }],
+      tasks: [...project.tasks, { id: generateId(), title, done: false }],
     });
-    setSubtaskInput('');
-  };
 
   const handleRemoveSubtask = (taskId: string) => {
     if (editingTaskId === taskId) setEditingTaskId(null);
@@ -207,6 +242,9 @@ function ProjectSettingsModal({
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Project settings"
         className="w-full max-w-lg bg-card border border-main p-4 sm:p-6 shadow-2xl space-y-5 overflow-y-auto max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
@@ -399,13 +437,16 @@ function ProjectSettingsModal({
             </ul>
           )}
 
-          <form onSubmit={handleAddSubtask} className="flex items-center gap-1.5">
+          <AddForm onAdd={handleAddSubtask} className="flex items-center gap-1.5">
             <input
-              value={subtaskInput}
-              onChange={(e) => setSubtaskInput(e.target.value)}
+              name="name"
+              required
+              pattern={'.*\\S.*'}
+              title="Enter a subtask title"
+              aria-label="Subtask title"
               placeholder="Add new subtask..."
               maxLength={200}
-              className="flex-1 h-8 px-2.5 bg-input border border-main text-xs font-mono text-main placeholder-muted-custom focus:outline-none focus:border-[#FF3B30]"
+              className="flex-1 min-w-0 h-8 px-2.5 bg-input border border-main text-xs font-mono text-main placeholder-muted-custom focus:outline-none focus:border-[#FF3B30]"
             />
             <button
               type="submit"
@@ -414,7 +455,7 @@ function ProjectSettingsModal({
             >
               <Plus className="w-3.5 h-3.5" /> ADD
             </button>
-          </form>
+          </AddForm>
         </div>
 
         {/* 5. Danger Zone: Delete Project */}
@@ -448,21 +489,15 @@ function GlobalProjectSettingsModal({
   isOpen: boolean;
   onClose: () => void;
   groups: ProjectGroup[];
-  onSaveGroup: (g: ProjectGroup) => void;
+  onSaveGroup: (g: ProjectGroup) => Promise<Result>;
   onDeleteGroup: (g: ProjectGroup) => void;
 }) {
-  const [name, setName] = useState('');
   const [kind, setKind] = useState<ProjectGroupKind>('org');
   const [color, setColor] = useState('#FE8019');
   if (!isOpen) return null;
 
-  const handleAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    onSaveGroup({ id: crypto.randomUUID(), name: trimmed, kind, color });
-    setName('');
-  };
+  const handleAdd = (name: string) =>
+    onSaveGroup({ id: generateId(), name, kind, color });
 
   const sortedGroups = [...groups].sort(
     (a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name)
@@ -474,6 +509,9 @@ function GlobalProjectSettingsModal({
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Organizations and people"
         className="w-full max-w-lg bg-card border border-main p-4 sm:p-6 shadow-2xl space-y-5 overflow-y-auto max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
@@ -499,17 +537,20 @@ function GlobalProjectSettingsModal({
         </div>
 
         {/* Add Org / Person */}
-        <form onSubmit={handleAdd} className="space-y-3">
+        <AddForm onAdd={handleAdd} className="space-y-3">
           <label className="text-xs font-bold uppercase tracking-wider text-sub block">
             Add Organization / Person
           </label>
           <div className="flex items-center gap-1.5">
             <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              name="name"
+              required
+              pattern={'.*\\S.*'}
+              title="Enter an organization or person name"
+              aria-label="Organization or person name"
               placeholder="e.g. IEEE UWU, Client X, John Doe"
               maxLength={100}
-              className="flex-1 h-8 px-2.5 bg-input border border-main text-xs font-mono text-main placeholder-muted-custom focus:outline-none focus:border-[#FF3B30]"
+              className="flex-1 min-w-0 h-8 px-2.5 bg-input border border-main text-xs font-mono text-main placeholder-muted-custom focus:outline-none focus:border-[#FF3B30]"
             />
             <CustomSelect
               value={kind}
@@ -523,7 +564,7 @@ function GlobalProjectSettingsModal({
             />
             <button
               type="submit"
-              aria-label="Add"
+              aria-label="Add organization or person"
               className="w-8 h-8 shrink-0 flex items-center justify-center border border-main text-sub hover:text-main hover:bg-subtle cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -556,7 +597,7 @@ function GlobalProjectSettingsModal({
               ))}
             </div>
           </div>
-        </form>
+        </AddForm>
 
         {/* Current list */}
         <div className="space-y-2 pt-2 border-t border-subtle">
@@ -641,7 +682,7 @@ function ProjectCard({
 }: {
   project: Project;
   groups: ProjectGroup[];
-  onChange: (p: Project) => void;
+  onChange: (p: Project) => Promise<Result>;
   onDelete: () => void;
 }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -800,18 +841,9 @@ function CreateProjectRow({
 }: {
   groups: ProjectGroup[];
   placeholder: string;
-  onAdd: (title: string, groupId: string | null) => void;
+  onAdd: (title: string, groupId: string | null) => Promise<Result>;
 }) {
-  const [value, setValue] = useState('');
   const [owner, setOwner] = useState<string | null>(null);
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const title = value.trim();
-    if (!title) return;
-    onAdd(title, owner);
-    setValue('');
-  };
 
   const ownerOptions = [
     { value: '', label: 'Unassigned' },
@@ -824,12 +856,14 @@ function CreateProjectRow({
   ];
 
   return (
-    <form onSubmit={submit} className="flex items-center gap-1.5">
+    <AddForm onAdd={(title) => onAdd(title, owner)} className="flex items-center gap-1.5">
       <input
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
+        name="name"
+        required
+        pattern={'.*\\S.*'}
+        title="Enter a project title"
         placeholder={placeholder}
-        aria-label={placeholder}
+        aria-label="Project title"
         maxLength={200}
         className="flex-1 min-w-0 h-8 px-2.5 bg-input border border-main text-xs font-mono text-main placeholder-muted-custom focus:outline-none focus:border-[#FF3B30]"
       />
@@ -844,76 +878,98 @@ function CreateProjectRow({
       <button
         type="submit"
         aria-label={placeholder}
+        title={placeholder}
         className="w-8 h-8 shrink-0 flex items-center justify-center border border-main text-sub hover:text-main hover:bg-subtle cursor-pointer"
       >
         <Plus className="w-4 h-4" />
       </button>
-    </form>
+    </AddForm>
   );
 }
 
+type ProjectBoard = { projects: Project[]; groups: ProjectGroup[] };
+type BoardEdit = (board: ProjectBoard) => ProjectBoard;
+
 export function ProjectsView() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [groups, setGroups] = useState<ProjectGroup[]>([]);
+  const [board, setBoard] = useState<ProjectBoard>({ projects: [], groups: [] });
+  const { projects, groups } = board;
+  const saved = useRef(board);
+  const pending = useRef<BoardEdit[]>([]);
+  const writes = useRef(Promise.resolve());
   const [isCloud, setIsCloud] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isGlobalSettingsOpen, setIsGlobalSettingsOpen] = useState(false);
 
   useEffect(() => {
-    getProjectsAction().then((res) => {
-      if (!res.success) setError(res.error || 'Failed to load projects');
-      else if (!res.isConfigured) {
-        setIsCloud(false);
-        try {
+    let active = true;
+    const load = async () => {
+      try {
+        const res = await getProjectsAction();
+        if (!active) return;
+        if (!res.success) throw new Error(res.error || 'Failed to load projects');
+        let initial = { projects: res.projects || [], groups: res.groups || [] };
+        if (!res.isConfigured) {
           const raw = JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}');
           const local = Array.isArray(raw) ? { projects: raw, groups: [] } : raw;
-          setProjects(
-            (local.projects || []).map((p: Project) => ({ ...p, group_id: p.group_id ?? null }))
-          );
-          setGroups(local.groups || []);
-        } catch {}
-      } else {
-        setProjects(res.projects || []);
-        setGroups(res.groups || []);
+          initial = {
+            projects: (local.projects || []).map((p: Project) => ({ ...p, group_id: p.group_id ?? null })),
+            groups: local.groups || [],
+          };
+        }
+        saved.current = initial;
+        setBoard(initial);
+        setIsCloud(res.isConfigured);
+        setLoading(false);
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : 'Failed to load projects');
       }
-      setLoading(false);
-    });
+    };
+    void load();
+    return () => { active = false; };
   }, []);
 
-  const apply = async (
-    op: () => Promise<Result>,
-    nextProjects = projects,
-    nextGroups = groups
-  ) => {
-    setProjects(nextProjects);
-    setGroups(nextGroups);
+  // Replay pending edits over confirmed data so one failed save only rolls back its own change.
+  const apply = (op: () => Promise<Result>, edit: BoardEdit): Promise<Result> => {
+    pending.current.push(edit);
+    setBoard(edit);
     setError('');
-    if (!isCloud) {
-      localStorage.setItem(
-        LOCAL_KEY,
-        JSON.stringify({ projects: nextProjects, groups: nextGroups })
-      );
-      return;
-    }
-    const res = await op();
-    if (!res.success) setError(res.error || 'Save failed');
+    const write = writes.current.then(async () => {
+      let result: Result;
+      try {
+        const next = edit(saved.current);
+        if (!isCloud) localStorage.setItem(LOCAL_KEY, JSON.stringify(next));
+        result = isCloud ? await op() : { success: true };
+        if (result.success) saved.current = next;
+      } catch {
+        result = { success: false, error: 'Could not save changes. Try again.' };
+      }
+      pending.current.shift();
+      setBoard(pending.current.reduce((state, change) => change(state), saved.current));
+      if (!result.success) setError(result.error || 'Save failed');
+      return result;
+    });
+    writes.current = write.then(() => {});
+    return write;
   };
 
   const saveProject = (p: Project) =>
-    apply(
-      () => saveProjectAction(p),
-      projects.some((x) => x.id === p.id)
-        ? projects.map((x) => (x.id === p.id ? p : x))
-        : [...projects, p]
-    );
+    apply(() => saveProjectAction(p), (state) => ({
+      ...state,
+      projects: state.projects.some((x) => x.id === p.id)
+        ? state.projects.map((x) => (x.id === p.id ? p : x))
+        : [...state.projects, p],
+    }));
 
   const removeProject = (id: string) =>
-    apply(() => deleteProjectAction(id), projects.filter((x) => x.id !== id));
+    apply(() => deleteProjectAction(id), (state) => ({
+      ...state,
+      projects: state.projects.filter((x) => x.id !== id),
+    }));
 
   const createProject = (title: string, status: ProjectStatus, group_id: string | null) =>
     saveProject({
-      id: crypto.randomUUID(),
+      id: generateId(),
       title,
       notes: '',
       status,
@@ -924,13 +980,12 @@ export function ProjectsView() {
     });
 
   const saveGroup = (g: ProjectGroup) =>
-    apply(
-      () => saveProjectGroupAction(g),
-      projects,
-      groups.some((x) => x.id === g.id)
-        ? groups.map((x) => (x.id === g.id ? g : x))
-        : [...groups, g]
-    );
+    apply(() => saveProjectGroupAction(g), (state) => ({
+      ...state,
+      groups: state.groups.some((x) => x.id === g.id)
+        ? state.groups.map((x) => (x.id === g.id ? g : x))
+        : [...state.groups, g],
+    }));
 
   const removeGroup = (g: ProjectGroup) => {
     const count = projects.filter((p) => p.group_id === g.id).length;
@@ -944,8 +999,10 @@ export function ProjectsView() {
       return;
     apply(
       () => deleteProjectGroupAction(g.id),
-      projects.map((p) => (p.group_id === g.id ? { ...p, group_id: null } : p)),
-      groups.filter((x) => x.id !== g.id)
+      (state) => ({
+        projects: state.projects.map((p) => (p.group_id === g.id ? { ...p, group_id: null } : p)),
+        groups: state.groups.filter((x) => x.id !== g.id),
+      })
     );
   };
 
@@ -1043,6 +1100,7 @@ export function ProjectsView() {
           </div>
 
           <button
+            disabled={loading}
             onClick={() => setIsGlobalSettingsOpen(true)}
             className="flex items-center gap-1.5 h-8 px-3 border border-main bg-input hover:bg-subtle text-xs font-mono font-bold text-sub hover:text-main cursor-pointer transition-colors"
             title="Configure Organizations and People"
@@ -1053,7 +1111,7 @@ export function ProjectsView() {
         </div>
 
         {loading ? (
-          <p className="text-xs font-mono text-sub uppercase tracking-wider">Loading projects...</p>
+          <p className="text-xs font-mono text-sub uppercase tracking-wider">{error ? 'Reopen the Projects tab to retry.' : 'Loading projects...'}</p>
         ) : (
           <>
             {renderSection('active', 'Ongoing Projects', 'In progress right now', 'Add ongoing project')}

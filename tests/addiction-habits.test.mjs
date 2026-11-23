@@ -24,6 +24,7 @@ registerHooks({
 
 const { getTodayDateString } = await import('../src/lib/utils/date.ts');
 const { isDaySuccessful, calculateHabitStats } = await import('../src/lib/utils/streaks.ts');
+const { getHabitStep, getSteppedLog, getToggledLog } = await import('../src/lib/utils/habit-input.ts');
 const { calculateWeaningStatus } = await import('../src/lib/utils/tapering.ts');
 const { calculateGamificationProfile } = await import('../src/lib/utils/gamification.ts');
 const { parseHabitDescription, serializeHabitDescription } = await import('../src/lib/utils/habit-serialization.ts');
@@ -280,4 +281,18 @@ test('Abstinence Violation Effect: rolling 30d clean rate remains high when stre
   // 20 clean days out of 21 total days = 95%
   assert.equal(stats.completionRate30Days, 95, 'Rolling 30d adherence preserves 20/21 (95%) to mitigate AVE');
   assert.equal(stats.isCompletedToday, false);
+});
+
+test('Counter and toggle actions respect small targets and quit-habit ceilings', () => {
+  const habit = makeHabit({ type: 'number', target_value: 3 });
+  const step = getHabitStep(habit);
+  assert.equal(step, 1);
+  const atCeiling = { completed: true, value: 3 };
+  const slipped = { completed: false, value: 4 };
+  assert.deepEqual(getSteppedLog(habit, atCeiling, step), slipped);
+  assert.deepEqual(getSteppedLog(habit, slipped, -step), atCeiling);
+  assert.deepEqual(getToggledLog(habit, undefined), slipped);
+  assert.deepEqual(getToggledLog(habit, slipped), atCeiling);
+  assert.deepEqual(getToggledLog(makeHabit(), undefined), { completed: false, value: 1 });
+  assert.deepEqual(getToggledLog({ ...habit, nature: 'do' }, undefined), atCeiling);
 });

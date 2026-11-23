@@ -353,7 +353,7 @@ export function PinLockScreen({ onUnlock }: PinLockScreenProps) {
           {legacyPinToUpgrade && !isVerifying && (
             <button
               type="button"
-              onClick={() => onUnlock()}
+              onClick={() => onUnlock(authenticatedUserRef.current)}
               className="w-full py-1.5 px-2.5 bg-subtle hover:bg-input border border-subtle text-[10px] font-mono font-bold uppercase tracking-wider text-sub hover:text-main transition-colors cursor-pointer"
             >
               SKIP FOR NOW // UPGRADE LATER IN SETTINGS →

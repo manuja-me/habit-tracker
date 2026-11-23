@@ -8,12 +8,10 @@ import type { Habit, HabitCategory, HabitFrequency, HabitLog, HabitType, Project
 import { getPlannerCutoffDate, getPlannerCutoffDateString, isPlannerNoteExpired } from '../utils/date';
 import { parseHabitDescription, serializeHabitDescription } from '../utils/habit-serialization';
 
-export { purgeExpiredDeactivatedUsers };
-
 /**
  * Permanently delete planner day_notes older than 3 months after creation date
  */
-export async function purgeExpiredDayNotes(
+async function purgeExpiredDayNotes(
   supabaseClient?: ReturnType<typeof getServerSupabase>,
   now: Date = new Date()
 ): Promise<void> {
@@ -91,7 +89,12 @@ interface DbAdminUserRow {
 function getErrorMessage(err: unknown, defaultMessage = 'An unexpected error occurred'): string {
   if (err instanceof Error) return err.message;
   if (typeof err === 'string') return err;
+  if (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') return err.message;
   return defaultMessage;
+}
+
+function isMissingColumn(error: { code: string; message: string } | null, column: string) {
+  return (error?.code === '42703' || error?.code === 'PGRST204') && error.message.includes(column);
 }
 
 /**
@@ -165,6 +168,7 @@ export async function getHabitsAndLogsAction(): Promise<{
     let habitsData: DbHabitRecord[] = [];
     if (habitsRes.error) {
       // Fallback for pre-migration databases: owner gets all, new member gets empty
+      if (!isMissingColumn(habitsRes.error, 'user_id')) throw habitsRes.error;
       if (isOwner) {
         const fallbackRes = await supabase
           .from('habits')
@@ -299,11 +303,11 @@ export async function recordAccountVisitAction(): Promise<{ success: boolean }> 
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
-    await supabase
+    const { error } = await supabase
       .from('app_users')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', user.userId);
-    return { success: true };
+    return { success: !error };
   } catch {
     return { success: false };
   }
@@ -322,12 +326,14 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
     if (!supabase) return { success: true };
 
     // Verify ownership if habit already exists (Prevents IDOR overwrite)
-    const { data: existingHabit } = await supabase
+    const { data: existingHabit, error: lookupError } = await supabase
       .from('habits')
       .select('id, user_id')
       .eq('id', habit.id)
       .maybeSingle();
 
+    const legacyOwner = isOwnerUser(user) && isMissingColumn(lookupError, 'user_id');
+    if (lookupError && !legacyOwner) throw lookupError;
     if (existingHabit && !canAccessUserRecord(user, existingHabit.user_id)) {
       return { success: false, error: 'Unauthorized: Cannot modify habit belonging to another user.' };
     }
@@ -356,21 +362,20 @@ export async function saveHabitAction(habit: Habit): Promise<{ success: boolean;
       habitPayload.replacement_habit_id = habit.replacement_habit_id || null;
     }
 
-    let { error } = await supabase.from('habits').upsert(habitPayload);
-
-    // Resilient fallback if optional columns (replacement_habit_id, user_id) don't exist yet
-    if (error && (error.code === '42703' || error.message?.includes('replacement_habit_id') || error.message?.includes('user_id'))) {
-      const fallbackPayload: Record<string, unknown> = { ...habitPayload };
-      delete fallbackPayload.replacement_habit_id;
-      if (error.message?.includes('user_id')) {
-        delete fallbackPayload.user_id;
-      }
-      let retry = await supabase.from('habits').upsert(fallbackPayload);
-      if (retry.error && (retry.error.code === '42703' || retry.error.message?.includes('user_id'))) {
-        delete fallbackPayload.user_id;
-        retry = await supabase.from('habits').upsert(fallbackPayload);
-      }
-      error = retry.error;
+    if (legacyOwner) delete habitPayload.user_id;
+    const persist = () => {
+      const table = supabase.from('habits');
+      if (legacyOwner) return table.upsert(habitPayload);
+      if (!existingHabit) return table.insert(habitPayload);
+      const update = table.update(habitPayload).eq('id', habit.id);
+      return existingHabit.user_id === null
+        ? update.is('user_id', null)
+        : update.eq('user_id', user.userId);
+    };
+    let { error } = await persist();
+    if (isMissingColumn(error, 'replacement_habit_id')) {
+      delete habitPayload.replacement_habit_id;
+      ({ error } = await persist());
     }
 
     if (error) throw error;
@@ -438,13 +443,19 @@ export async function saveHabitLogAction(log: HabitLog): Promise<{ success: bool
     if (!supabase) return { success: true };
 
     // Verify parent habit exists and belongs to the authenticated user
-    const { data: parentHabit } = await supabase
+    const { data: parentHabit, error: parentError } = await supabase
       .from('habits')
       .select('id, user_id')
       .eq('id', log.habit_id)
       .maybeSingle();
 
-    if (parentHabit && !canAccessUserRecord(user, parentHabit.user_id)) {
+    if (parentError) {
+      if (!isOwnerUser(user) || !isMissingColumn(parentError, 'user_id')) throw parentError;
+      const legacy = await supabase.from('habits').select('id').eq('id', log.habit_id).single();
+      if (legacy.error) throw legacy.error;
+    } else if (!parentHabit) {
+      return { success: false, error: 'Habit not found.' };
+    } else if (!canAccessUserRecord(user, parentHabit.user_id)) {
       return { success: false, error: 'Unauthorized: Cannot log progress for another user\'s habit.' };
     }
 
@@ -488,7 +499,7 @@ export async function reorderHabitsAction(orderedHabits: Habit[]): Promise<{ suc
 
     const isOwner = isOwnerUser(user);
 
-    await Promise.all(
+    const results = await Promise.all(
       orderedHabits.map((h) => {
         const query = supabase.from('habits').update({ sort_order: h.order }).eq('id', h.id);
         return isOwner
@@ -496,6 +507,8 @@ export async function reorderHabitsAction(orderedHabits: Habit[]): Promise<{ suc
           : query.eq('user_id', user.userId);
       })
     );
+    const failed = results.find((result) => result.error);
+    if (failed?.error) throw failed.error;
     return { success: true };
   } catch (err: unknown) {
     return { success: false, error: getErrorMessage(err, 'Failed to reorder habits') };
@@ -524,8 +537,11 @@ export async function saveDayNoteAction(date: string, content: string): Promise<
         .delete()
         .eq('user_id', user.userId)
         .eq('date', date);
-      if (delRes.error && isOwnerUser(user) && (delRes.error.message?.includes('user_id') || delRes.error.code === '42703')) {
-        await supabase.from('day_notes').delete().eq('date', date);
+      if (isOwnerUser(user) && isMissingColumn(delRes.error, 'user_id')) {
+        const retry = await supabase.from('day_notes').delete().eq('date', date);
+        if (retry.error) throw retry.error;
+      } else if (delRes.error) {
+        throw delRes.error;
       }
       return { success: true };
     }
@@ -591,7 +607,7 @@ export async function getProjectsAction(): Promise<{
         .order('sort_order', { ascending: true }),
       supabase
         .from('project_groups')
-        .select('id, name, kind, color')
+        .select('*')
         .eq('user_id', user.userId)
         .order('name', { ascending: true }),
     ]);
@@ -608,7 +624,7 @@ export async function getProjectsAction(): Promise<{
       order: p.sort_order,
       created_at: p.created_at,
     }));
-    return { success: true, isConfigured: true, projects, groups: (groupsRes.data || []) as ProjectGroup[] };
+    return { success: true, isConfigured: true, projects, groups: (groupsRes.data || []).map(({ id, name, kind, color }) => ({ id, name, kind, color })) };
   } catch (err: unknown) {
     return { success: false, isConfigured: true, error: getErrorMessage(err, 'Failed to load projects') };
   }
@@ -649,12 +665,13 @@ export async function saveProjectAction(project: Project): Promise<{ success: bo
     }));
 
     // Block overwriting another user's project via a known id
-    const { data: existing } = await supabase.from('projects').select('user_id').eq('id', project.id).maybeSingle();
+    const { data: existing, error: lookupError } = await supabase.from('projects').select('user_id').eq('id', project.id).maybeSingle();
+    if (lookupError) throw lookupError;
     if (existing && existing.user_id !== user.userId) {
       return { success: false, error: 'Unauthorized: Cannot modify other users data.' };
     }
 
-    const { error } = await supabase.from('projects').upsert({
+    const projectPayload = {
       id: project.id,
       user_id: user.userId,
       title,
@@ -663,7 +680,11 @@ export async function saveProjectAction(project: Project): Promise<{ success: bo
       group_id: groupId,
       tasks,
       sort_order: Number.isFinite(project.order) ? Math.trunc(project.order) : 0,
-    });
+    };
+    const table = supabase.from('projects');
+    const { error } = existing
+      ? await table.update(projectPayload).eq('id', project.id).eq('user_id', user.userId)
+      : await table.insert(projectPayload);
     if (error) throw error;
     return { success: true };
   } catch (err: unknown) {
@@ -685,7 +706,8 @@ export async function saveProjectGroupAction(group: ProjectGroup): Promise<{ suc
     if (!name) return { success: false, error: 'Name is required.' };
     if (group.kind !== 'org' && group.kind !== 'person') return { success: false, error: 'Invalid type.' };
 
-    const { data: existing } = await supabase.from('project_groups').select('user_id').eq('id', group.id).maybeSingle();
+    const { data: existing, error: lookupError } = await supabase.from('project_groups').select('user_id').eq('id', group.id).maybeSingle();
+    if (lookupError) throw lookupError;
     if (existing && existing.user_id !== user.userId) {
       return { success: false, error: 'Unauthorized: Cannot modify other users data.' };
     }
@@ -698,11 +720,17 @@ export async function saveProjectGroupAction(group: ProjectGroup): Promise<{ suc
       color: group.color || '#FE8019',
     };
 
-    let { error } = await supabase.from('project_groups').upsert(groupPayload);
+    const persist = () => {
+      const table = supabase.from('project_groups');
+      return existing
+        ? table.update(groupPayload).eq('id', group.id).eq('user_id', user.userId)
+        : table.insert(groupPayload);
+    };
+    let { error } = await persist();
     // Graceful fallback if color column isn't migrated in DB yet
-    if (error && (error.message?.includes('color') || error.code === '42703')) {
+    if (isMissingColumn(error, 'color')) {
       delete groupPayload.color;
-      const retry = await supabase.from('project_groups').upsert(groupPayload);
+      const retry = await persist();
       error = retry.error;
     }
     if (error) throw error;

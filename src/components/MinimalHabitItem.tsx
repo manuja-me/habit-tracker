@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Habit, HabitLog, HabitStats } from '../lib/types';
 import { AVAILABLE_ICONS, COLOR_PALETTES } from '../lib/utils/icons';
+import { getHabitStep, getSteppedLog, getToggledLog, isHabitChecked } from '../lib/utils/habit-input';
 import { calculateWeaningStatus } from '../lib/utils/tapering';
 import { Progress } from './ui/progress';
 import { UrgeSurferModal } from './UrgeSurferModal';
@@ -49,6 +50,7 @@ export function MinimalHabitItem({
   allLogs = {},
   allHabits = [],
   dateStr,
+  isFocused,
   isDraggable = true,
   onToggle,
   onEdit,
@@ -62,12 +64,8 @@ export function MinimalHabitItem({
   const [isUrgeSurferOpen, setIsUrgeSurferOpen] = useState(false);
 
   const isDont = habit.nature === 'dont';
-  const isSlippedUp = isDont
-    ? habit.type === 'number'
-      ? (log !== undefined && (log.completed === false || (log.value ?? 0) > habit.target_value))
-      : (log !== undefined && log.completed === false)
-    : false;
-  const isCompleted = isDont ? !isSlippedUp : Boolean(log?.completed);
+  const isCompleted = isHabitChecked(habit, log);
+  const isSlippedUp = isDont && !isCompleted;
 
   const replacementHabit = isDont && habit.replacement_habit_id
     ? allHabits.find((h) => h.id === habit.replacement_habit_id)
@@ -83,31 +81,17 @@ export function MinimalHabitItem({
 
   const handleCheckboxClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isDont) {
-      if (habit.type === 'number') {
-        const nextCompleted = isSlippedUp;
-        const nextVal = nextCompleted
-          ? (currentValue > habit.target_value ? habit.target_value : currentValue)
-          : Math.max(currentValue, habit.target_value + 1);
-        onToggle(habit.id, dateStr, nextCompleted, nextVal);
-      } else {
-        const nextCompleted = isSlippedUp;
-        onToggle(habit.id, dateStr, nextCompleted, nextCompleted ? 0 : 1);
-      }
-    } else {
-      const nextCompleted = !isCompleted;
-      onToggle(habit.id, dateStr, nextCompleted, nextCompleted ? habit.target_value : 0);
-    }
+    const { completed, value } = getToggledLog(habit, log);
+    onToggle(habit.id, dateStr, completed, value);
   };
 
   const handleIncrement = (e: React.MouseEvent, amount: number) => {
     e.stopPropagation();
-    const nextVal = Math.max(0, currentValue + amount);
-    const nextCompleted = isDont ? nextVal <= habit.target_value : nextVal >= habit.target_value;
-    onToggle(habit.id, dateStr, nextCompleted, nextVal);
+    const { completed, value } = getSteppedLog(habit, log, amount);
+    onToggle(habit.id, dateStr, completed, value);
   };
 
-  const stepAmount = habit.target_value >= 1000 ? 250 : habit.target_value >= 50 ? 10 : habit.target_value >= 20 ? 5 : 1;
+  const stepAmount = getHabitStep(habit);
   const progressPercent = habit.type === 'number' 
     ? Math.min(100, Math.round((currentValue / habit.target_value) * 100))
     : (isCompleted ? 100 : 0);
@@ -119,7 +103,7 @@ export function MinimalHabitItem({
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      className={`group relative flex flex-col p-3.5 sm:p-4 rounded-none transition-all duration-150 border ${
+      className={`group relative flex flex-col p-3.5 sm:p-4 rounded-none transition-all duration-150 border ${isFocused ? 'outline outline-1 outline-offset-1 outline-[var(--border-main)]' : ''} ${
         isDont
           ? isSlippedUp
             ? 'bg-[#FF3B30]/10 border-[#FF3B30]/30'

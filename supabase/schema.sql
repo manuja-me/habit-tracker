@@ -98,25 +98,29 @@ CREATE TABLE IF NOT EXISTS public.day_notes (
 ALTER TABLE public.day_notes ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES public.app_users(id) ON DELETE CASCADE;
 
 -- Safe constraint check for day_notes (ensures unique (user_id, date) is present)
-DO 
+DO $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'unique_user_day_note'
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.day_notes'::regclass AND conname = 'unique_user_day_note'
     ) THEN
-        ALTER TABLE public.day_notes DROP CONSTRAINT IF EXISTS day_notes_pkey CASCADE;
-        ALTER TABLE public.day_notes ADD PRIMARY KEY (id);
+        IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.day_notes'::regclass
+                   AND contype = 'p' AND pg_get_constraintdef(oid) = 'PRIMARY KEY (date)') THEN
+            ALTER TABLE public.day_notes ADD COLUMN IF NOT EXISTS id UUID NOT NULL DEFAULT gen_random_uuid();
+            ALTER TABLE public.day_notes DROP CONSTRAINT day_notes_pkey;
+            ALTER TABLE public.day_notes ADD PRIMARY KEY (id);
+        END IF;
         ALTER TABLE public.day_notes ADD CONSTRAINT unique_user_day_note UNIQUE (user_id, date);
     END IF;
-EXCEPTION WHEN OTHERS THEN
-    NULL;
-END ;
+END;
+$$;
 
 -- ================================================================
 -- DATA REPLACEMENT MIGRATION:
 -- Move notes from habit_logs into day_notes, clean up shadow habit,
 -- and drop notes column from habit_logs with ZERO DATA LOSS.
 -- ================================================================
-DO 
+DO $$
 BEGIN
     IF EXISTS (
         SELECT 1 
@@ -129,19 +133,24 @@ BEGIN
         SELECT 
             COALESCE(hl.user_id, '00000000-0000-0000-0000-000000000001') AS user_id,
             hl.date,
-            hl.notes AS content,
-            hl.updated_at
+            string_agg(hl.notes, E'\n' ORDER BY hl.updated_at, hl.id) AS content,
+            max(hl.updated_at)
         FROM public.habit_logs hl
         WHERE hl.notes IS NOT NULL AND hl.notes != ''
+        GROUP BY COALESCE(hl.user_id, '00000000-0000-0000-0000-000000000001'), hl.date
         ON CONFLICT (user_id, date) 
         DO UPDATE SET 
-            content = EXCLUDED.content,
-            updated_at = EXCLUDED.updated_at;
+            content = CASE
+                WHEN day_notes.content = EXCLUDED.content THEN day_notes.content
+                ELSE concat_ws(E'\n', NULLIF(day_notes.content, ''), EXCLUDED.content)
+            END,
+            updated_at = GREATEST(day_notes.updated_at, EXCLUDED.updated_at);
 
         -- Remove notes column from habit_logs
         ALTER TABLE public.habit_logs DROP COLUMN notes;
     END IF;
-END ;
+END;
+$$;
 
 -- Clean up any shadow habits created during transition
 DELETE FROM public.habits WHERE category IN ('__system_planner__', '__planner_system__');
@@ -203,12 +212,12 @@ CREATE POLICY "Allow service role only day_notes" ON public.day_notes FOR ALL TO
 
 -- 9. Updated At Trigger
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
-RETURNS TRIGGER AS 
+RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
- LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS set_habits_updated_at ON public.habits;
 CREATE TRIGGER set_habits_updated_at
