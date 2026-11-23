@@ -15,6 +15,7 @@ import {
   recordFailedAttempt,
   resetFailedAttempts,
   signRateLimitToken,
+  hashPin,
   hashPinScrypt,
   isScryptHash,
   verifyPinHash,
@@ -191,14 +192,15 @@ export async function verifyPinAction(enteredPin: string): Promise<{
           username: string;
           role?: string;
           pin_hash: string;
+          pin_lookup_hash?: string | null;
           deactivated_at?: string | null;
         }> = [];
 
         const { data, error } = await supabase
           .from('app_users')
-          .select('id, username, role, pin_hash, deactivated_at');
+          .select('id, username, role, pin_hash, pin_lookup_hash, deactivated_at');
 
-        if (error && (error.message?.includes('deactivated_at') || error.code === '42703')) {
+        if (error && (error.message?.includes('deactivated_at') || error.message?.includes('pin_lookup_hash') || error.code === '42703')) {
           const fallback = await supabase
             .from('app_users')
             .select('id, username, role, pin_hash');
@@ -212,7 +214,7 @@ export async function verifyPinAction(enteredPin: string): Promise<{
           console.error('Supabase app_users query error:', error.message);
           return { success: false, error: 'Database connection error. Please try again.' };
         } else {
-          rows = data || [];
+          rows = (data as typeof rows) || [];
         }
 
         const ownerRow = rows.find((r) => r.id === OWNER_USER_ID || r.role === 'owner');
@@ -220,8 +222,9 @@ export async function verifyPinAction(enteredPin: string): Promise<{
           ownerHasCustomDbPin = true;
         }
 
+        const lookupHash = hashPin(cleanPin);
         for (const row of rows) {
-          if (await verifyPinHash(cleanPin, row.pin_hash)) {
+          if (row.pin_lookup_hash === lookupHash || (await verifyPinHash(cleanPin, row.pin_hash))) {
             matchedUser = {
               userId: row.id,
               username: row.username,
@@ -388,20 +391,38 @@ export async function getCurrentUserAction(): Promise<SessionUser | null> {
   const sessionCookie = cookieStore.get(COOKIE_NAME);
   if (!sessionCookie?.value) return null;
   const user = getSessionUserFromToken(sessionCookie.value);
-  if (!user || user.userId === OWNER_USER_ID) return user;
+  if (!user) return null;
   const supabase = getServerSupabase();
-  if (!supabase) return null;
-  // A member can be deactivated or deleted from another device.
+  if (!supabase) return user;
+
   const { data, error } = await supabase.from('app_users')
-    .select('id, username, role, deactivated_at')
+    .select('id, username, role, deactivated_at, updated_at')
     .eq('id', user.userId)
     .maybeSingle();
+
   if (error?.code === '42703' && error.message.includes('deactivated_at')) {
-    const legacy = await supabase.from('app_users').select('id, username, role').eq('id', user.userId).maybeSingle();
-    if (legacy.error || !legacy.data || user.isDeactivated) return null;
+    const legacy = await supabase.from('app_users').select('id, username, role, updated_at').eq('id', user.userId).maybeSingle();
+    if (legacy.error || !legacy.data || user.isDeactivated) {
+      if (user.userId === OWNER_USER_ID && !legacy.data) return user;
+      return null;
+    }
+    if (user.issuedAt && legacy.data.updated_at) {
+      const updatedMs = new Date(legacy.data.updated_at).getTime();
+      if (user.issuedAt < updatedMs - 2000) return null;
+    }
     return { ...user, username: legacy.data.username, role: legacy.data.role === 'owner' ? 'owner' : 'member' };
   }
-  if (error || !data || Boolean(data.deactivated_at) !== Boolean(user.isDeactivated)) return null;
+
+  if (error || !data || Boolean(data.deactivated_at) !== Boolean(user.isDeactivated)) {
+    if (user.userId === OWNER_USER_ID && !data) return user;
+    return null;
+  }
+
+  if (user.issuedAt && data.updated_at) {
+    const updatedMs = new Date(data.updated_at).getTime();
+    if (user.issuedAt < updatedMs - 2000) return null;
+  }
+
   return { ...user, username: data.username, role: data.role === 'owner' ? 'owner' : 'member' };
 }
 
@@ -613,10 +634,11 @@ export async function completeInviteSetupAction(
       return { success: false, error: 'This invitation has already been used or has expired.' };
     }
 
-    // Insert new user with per-user salted Scrypt hash
-    const newUserPayload = {
+    // Insert new user with per-user salted Scrypt hash and deterministic lookup hash
+    const newUserPayload: Record<string, unknown> = {
       username: cleanUsername,
       pin_hash: hashedPin,
+      pin_lookup_hash: hashPin(pin),
       role: 'member' as const,
       last_login_at: nowIso,
     };
@@ -627,9 +649,10 @@ export async function completeInviteSetupAction(
       .select()
       .single();
 
-    if (insertErr && (insertErr.message?.includes('last_login_at') || insertErr.code === '42703')) {
+    if (insertErr && (insertErr.code === '42703' || insertErr.message?.includes('last_login_at') || insertErr.message?.includes('pin_lookup_hash'))) {
       const fallbackPayload: Record<string, unknown> = { ...newUserPayload };
       delete fallbackPayload.last_login_at;
+      delete fallbackPayload.pin_lookup_hash;
       const retry = await supabase.from('app_users').insert(fallbackPayload).select().single();
       newUser = retry.data;
       insertErr = retry.error;
@@ -641,6 +664,12 @@ export async function completeInviteSetupAction(
         .from('invitations')
         .update({ used_at: null })
         .eq('id', claimedInvite.id);
+      if (insertErr?.code === '23505') {
+        return {
+          success: false,
+          error: 'Unable to complete registration with the provided details. Please choose a different PIN or display name.',
+        };
+      }
       throw insertErr || new Error('Failed to create user');
     }
 
@@ -746,32 +775,68 @@ export async function changePinAction(
     }
 
     const newScryptHash = await hashPinScrypt(newPin);
+    const newLookupHash = hashPin(newPin);
     const nowIso = new Date().toISOString();
 
     if (currentRow) {
-      const { data: updated, error: updateErr } = await supabase
+      let { data: updated, error: updateErr } = await supabase
         .from('app_users')
-        .update({ pin_hash: newScryptHash, updated_at: nowIso })
+        .update({ pin_hash: newScryptHash, pin_lookup_hash: newLookupHash, updated_at: nowIso })
         .eq('id', user.userId)
         .eq('pin_hash', currentRow.pin_hash)
         .select('id')
         .maybeSingle();
-      if (updateErr) return { success: false, error: updateErr.message };
+
+      if (updateErr && (updateErr.code === '42703' || updateErr.message?.includes('pin_lookup_hash'))) {
+        const retry = await supabase
+          .from('app_users')
+          .update({ pin_hash: newScryptHash, updated_at: nowIso })
+          .eq('id', user.userId)
+          .eq('pin_hash', currentRow.pin_hash)
+          .select('id')
+          .maybeSingle();
+        updated = retry.data;
+        updateErr = retry.error;
+      }
+
+      if (updateErr) {
+        if (updateErr.code === '23505') {
+          return { success: false, error: 'Please choose a different 6-digit PIN.' };
+        }
+        return { success: false, error: updateErr.message };
+      }
       if (!updated) return { success: false, error: 'Account credentials changed. Please try again.' };
     } else if (isOwner) {
-      const { error: insertErr } = await supabase.from('app_users').insert({
+      let { error: insertErr } = await supabase.from('app_users').insert({
         id: OWNER_USER_ID,
         username: 'owner',
         pin_hash: newScryptHash,
+        pin_lookup_hash: newLookupHash,
         role: 'owner',
         updated_at: nowIso,
       });
-      if (insertErr) return { success: false, error: 'Failed to create the owner credentials. Please try again.' };
+      if (insertErr && (insertErr.code === '42703' || insertErr.message?.includes('pin_lookup_hash'))) {
+        const retry = await supabase.from('app_users').insert({
+          id: OWNER_USER_ID,
+          username: 'owner',
+          pin_hash: newScryptHash,
+          role: 'owner',
+          updated_at: nowIso,
+        });
+        insertErr = retry.error;
+      }
+      if (insertErr) {
+        if (insertErr.code === '23505') {
+          return { success: false, error: 'Please choose a different 6-digit PIN.' };
+        }
+        return { success: false, error: 'Failed to create the owner credentials. Please try again.' };
+      }
     } else {
       return { success: false, error: 'User account record not found.' };
     }
 
     await clearRateLimits(rateLimitKey, cookieStore);
+    cookieStore.set(COOKIE_NAME, createSessionToken({ ...user, issuedAt: Date.now() }), COOKIE_OPTS);
     return { success: true };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

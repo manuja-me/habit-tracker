@@ -64,6 +64,7 @@ export interface SessionUser {
   username: string;
   role: 'owner' | 'member';
   isDeactivated?: boolean;
+  issuedAt?: number;
 }
 
 export const RL_COOKIE_NAME = 'zenith_rl_v1';
@@ -309,7 +310,7 @@ export function createSessionToken(user: SessionUser): string {
       username: user.username,
       role: user.role,
       isDeactivated: Boolean(user.isDeactivated),
-      ts: Date.now(),
+      ts: user.issuedAt || Date.now(),
     })
   ).toString('base64url');
 
@@ -353,6 +354,7 @@ export function getSessionUserFromToken(token: string): SessionUser | null {
         username: typeof data.username === 'string' ? data.username : 'user',
         role: data.role === 'owner' ? 'owner' : 'member',
         isDeactivated: Boolean(data.isDeactivated),
+        issuedAt: data.ts,
       };
     }
   } catch {

@@ -17,16 +17,18 @@ CREATE TABLE IF NOT EXISTS public.app_users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Safe migration for existing installations (Add last_login_at and deactivated_at columns if not exists)
+-- Safe migration for existing installations (Add last_login_at, deactivated_at, pin_lookup_hash if not exists)
 ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
 ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS deactivated_at TIMESTAMPTZ DEFAULT NULL;
+ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS pin_lookup_hash TEXT UNIQUE;
 
 -- Ensure fixed Owner user exists (Default PIN 1001 with salt)
-INSERT INTO public.app_users (id, username, pin_hash, role)
+INSERT INTO public.app_users (id, username, pin_hash, pin_lookup_hash, role)
 VALUES (
     '00000000-0000-0000-0000-000000000001',
     'owner',
     'd4b1fb9e198b108cb929315ebfc003d15db47be352d126639c09d57a942ce293', -- Salted SHA-256 of 1001
+    'd4b1fb9e198b108cb929315ebfc003d15db47be352d126639c09d57a942ce293',
     'owner'
 )
 ON CONFLICT (username) DO NOTHING;
@@ -111,6 +113,24 @@ BEGIN
             ALTER TABLE public.day_notes ADD PRIMARY KEY (id);
         END IF;
         ALTER TABLE public.day_notes ADD CONSTRAINT unique_user_day_note UNIQUE (user_id, date);
+    END IF;
+END;
+$$;
+
+-- Ensure foreign keys on user_id cascade deletions
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'habits' AND column_name = 'user_id') THEN
+        ALTER TABLE public.habits DROP CONSTRAINT IF EXISTS habits_user_id_fkey;
+        ALTER TABLE public.habits ADD CONSTRAINT habits_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id) ON DELETE CASCADE;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'habit_logs' AND column_name = 'user_id') THEN
+        ALTER TABLE public.habit_logs DROP CONSTRAINT IF EXISTS habit_logs_user_id_fkey;
+        ALTER TABLE public.habit_logs ADD CONSTRAINT habit_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id) ON DELETE CASCADE;
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'day_notes' AND column_name = 'user_id') THEN
+        ALTER TABLE public.day_notes DROP CONSTRAINT IF EXISTS day_notes_user_id_fkey;
+        ALTER TABLE public.day_notes ADD CONSTRAINT day_notes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.app_users(id) ON DELETE CASCADE;
     END IF;
 END;
 $$;

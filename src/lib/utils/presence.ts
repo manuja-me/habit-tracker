@@ -1,6 +1,6 @@
 import { differenceInHours, differenceInCalendarDays, format, parseISO, subDays } from 'date-fns';
 import { getTodayDateString } from './date';
-import { LAST_USER_KEY } from './storage';
+import { getUnlockedTabUserId } from './tab-session';
 import { recordAccountVisitAction } from '../server/actions';
 
 export const LAST_VISIT_STORAGE_KEY = 'zenith_last_visit_at';
@@ -10,10 +10,10 @@ let lastServerVisitPingMs = 0;
 
 function resolveUid(userId?: string): string | undefined {
   if (typeof window === 'undefined') return userId;
-  return userId || localStorage.getItem(LAST_USER_KEY) || undefined;
+  return userId || getUnlockedTabUserId() || undefined;
 }
 
-function getLastVisitKey(userId?: string): string {
+export function getLastVisitKey(userId?: string): string {
   const uid = resolveUid(userId);
   return uid ? `${LAST_VISIT_STORAGE_KEY}_${uid}` : LAST_VISIT_STORAGE_KEY;
 }

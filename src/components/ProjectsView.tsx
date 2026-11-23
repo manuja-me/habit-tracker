@@ -26,6 +26,7 @@ import {
 } from '../lib/server/actions';
 
 const LOCAL_KEY = 'zenith_projects_v1';
+const getProjectsStorageKey = (uid?: string) => uid ? `zenith_projects_v1_${uid}` : LOCAL_KEY;
 
 type Result = { success: boolean; error?: string };
 type ProjectEdit = (project: Project) => Project;
@@ -442,6 +443,19 @@ function ProjectSettingsModal({
                       />
                     ) : (
                       <>
+                        <button
+                          type="button"
+                          onClick={() => onChange((current) => ({
+                            ...current,
+                            tasks: current.tasks.map((item) => item.id === t.id ? { ...item, done: !item.done } : item),
+                          }))}
+                          aria-label={`Toggle "${t.title}"`}
+                          className={`w-4 h-4 shrink-0 flex items-center justify-center transition-all cursor-pointer border ${
+                            t.done ? 'bg-[#FF3B30] text-white border-[#FF3B30]' : 'border-main bg-input hover:border-neutral-400'
+                          }`}
+                        >
+                          <Check className={`w-3 h-3 stroke-[3] ${t.done ? 'opacity-100' : 'opacity-0'}`} />
+                        </button>
                         <span
                           onClick={() => setEditingTaskId(t.id)}
                           title="Click to edit subtask"
@@ -871,7 +885,14 @@ function CreateProjectRow({
   ];
 
   return (
-    <AddForm onAdd={(title) => onAdd(title, selectedOwner)} className="flex items-center gap-1.5">
+    <AddForm
+      onAdd={async (title) => {
+        const res = await onAdd(title, selectedOwner);
+        if (res.success) setOwner(null);
+        return res;
+      }}
+      className="flex items-center gap-1.5"
+    >
       <input
         name="name"
         required
@@ -928,19 +949,39 @@ export function ProjectsView({ userId }: { userId: string }) {
         if (!res.success) throw new Error(res.error || 'Failed to load projects');
         let initial = { projects: res.projects || [], groups: res.groups || [] };
         if (!res.isConfigured) {
-          const raw = JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}');
+          const raw = JSON.parse(
+            localStorage.getItem(getProjectsStorageKey(userId)) ||
+            localStorage.getItem(LOCAL_KEY) ||
+            '{}'
+          );
           const local = Array.isArray(raw) ? { projects: raw, groups: [] } : raw;
           initial = {
             projects: (local.projects || []).map((p: Project) => ({ ...p, group_id: p.group_id ?? null })),
             groups: local.groups || [],
           };
+        } else {
+          localStorage.setItem(getProjectsStorageKey(userId), JSON.stringify(initial));
         }
         saved.current = initial;
         setBoard(initial);
         setIsCloud(res.isConfigured);
         setLoading(false);
       } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : 'Failed to load projects');
+        if (active) {
+          try {
+            const raw = JSON.parse(
+              localStorage.getItem(getProjectsStorageKey(userId)) ||
+              localStorage.getItem(LOCAL_KEY) ||
+              '{}'
+            );
+            if (raw.projects && raw.projects.length) {
+              saved.current = raw;
+              setBoard(raw);
+              setLoading(false);
+            }
+          } catch {}
+          setError(err instanceof Error ? err.message : 'Failed to load projects');
+        }
       }
     };
     void load();
@@ -957,6 +998,7 @@ export function ProjectsView({ userId }: { userId: string }) {
       try {
         const next = edit(saved.current);
         if (!isCloud) localStorage.setItem(LOCAL_KEY, JSON.stringify(next));
+        localStorage.setItem(getProjectsStorageKey(userId), JSON.stringify(next));
         result = isCloud ? await op(next) : { success: true };
         if (result.success) saved.current = next;
       } catch {

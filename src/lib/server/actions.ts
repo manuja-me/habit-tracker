@@ -364,6 +364,11 @@ export async function saveHabitAction(habit: Habit, expectedUserId?: string): Pr
     if (!habit || !isValidUuid(habit.id)) {
       return { success: false, error: 'Invalid habit ID.' };
     }
+    if (!habit.title || typeof habit.title !== 'string' || !habit.title.trim()) {
+      return { success: false, error: 'Habit title is required.' };
+    }
+    const cleanTitle = habit.title.trim().slice(0, 200);
+    const cleanTargetValue = Number.isFinite(Number(habit.target_value)) ? Math.max(0, Number(habit.target_value)) : 1;
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
@@ -385,24 +390,21 @@ export async function saveHabitAction(habit: Habit, expectedUserId?: string): Pr
     const habitPayload: Record<string, unknown> = {
       id: habit.id,
       user_id: user.userId,
-      title: habit.title,
+      title: cleanTitle,
       description: storedDesc,
       category: habit.category,
       color: habit.color,
       icon: habit.icon,
       type: habit.type,
-      target_value: habit.target_value,
-      target_unit: habit.target_unit || '',
+      target_value: cleanTargetValue,
+      target_unit: habit.target_unit ? String(habit.target_unit).slice(0, 50) : '',
       frequency: habit.frequency,
       custom_days: habit.custom_days || [],
       archived: Boolean(habit.archived),
       sort_order: habit.order,
       updated_at: new Date().toISOString(),
+      replacement_habit_id: habit.nature === 'dont' ? (habit.replacement_habit_id || null) : null,
     };
-
-    if (habit.nature === 'dont') {
-      habitPayload.replacement_habit_id = habit.replacement_habit_id || null;
-    }
 
     if (legacyOwner) delete habitPayload.user_id;
     const persist = () => {
@@ -465,6 +467,9 @@ export async function saveHabitLogAction(log: HabitLog, expectedUserId?: string)
     const user = await requireExpectedAccount(expectedUserId);
     if (!log || !isValidUuid(log.habit_id)) {
       return { success: false, error: 'Invalid habit ID.' };
+    }
+    if (!log.date || typeof log.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(log.date)) {
+      return { success: false, error: 'Invalid date format.' };
     }
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
@@ -552,12 +557,15 @@ export async function saveDayNoteAction(date: string, content: string, expectedU
     if (!isValidUuid(user.userId)) {
       throw new Error('Invalid authenticated user ID.');
     }
+    if (!date || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return { success: false, error: 'Invalid date format.' };
+    }
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
     await purgeExpiredDayNotes(supabase);
 
-    const cleanContent = content ?? '';
+    const cleanContent = typeof content === 'string' ? content.slice(0, 50000) : '';
     if (!cleanContent.trim() || isPlannerNoteExpired(date)) {
       const delRes = await supabase
         .from('day_notes')
@@ -814,7 +822,7 @@ export async function adminDeleteUserAction(targetUserId: string): Promise<{
   try {
     const caller = await requireAuth();
 
-    if (caller.role !== 'owner' && caller.userId !== OWNER_USER_ID) {
+    if (!isOwnerUser(caller)) {
       return { success: false, error: 'Unauthorized: Only the system owner can delete users.' };
     }
 
@@ -872,7 +880,7 @@ export async function getAdminUsersAction(): Promise<{
 }> {
   try {
     const user = await requireAuth();
-    if (user.role !== 'owner') {
+    if (!isOwnerUser(user)) {
       return { success: false, error: 'Unauthorized: Only the system owner can view user directory.' };
     }
 

@@ -213,6 +213,7 @@ export function DailyPlanner({
 
   const handleResetToday = () => {
     setAnchorDate(todayStr);
+    onSelectDate?.(todayStr);
   };
 
   return (

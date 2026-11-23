@@ -98,6 +98,64 @@ function isUnlocked() {
     getUnlockedTabUserId() === globalCurrentUser.id;
 }
 
+function recordPendingKey(userId: string, key: string) {
+  if (typeof window === 'undefined' || !userId) return;
+  try {
+    const raw = localStorage.getItem(`zenith_pending_keys_${userId}`);
+    const set = new Set(raw ? JSON.parse(raw) : []);
+    set.add(key);
+    localStorage.setItem(`zenith_pending_keys_${userId}`, JSON.stringify([...set]));
+  } catch {}
+}
+
+function removePendingKey(userId: string, key: string) {
+  if (typeof window === 'undefined' || !userId) return;
+  try {
+    const raw = localStorage.getItem(`zenith_pending_keys_${userId}`);
+    if (!raw) return;
+    const set = new Set(JSON.parse(raw));
+    set.delete(key);
+    if (set.size > 0) {
+      localStorage.setItem(`zenith_pending_keys_${userId}`, JSON.stringify([...set]));
+    } else {
+      localStorage.removeItem(`zenith_pending_keys_${userId}`);
+    }
+  } catch {}
+}
+
+function rehydratePendingWrites(userId: string) {
+  if (typeof window === 'undefined' || !userId) return;
+  try {
+    const raw = localStorage.getItem(`zenith_pending_keys_${userId}`);
+    if (!raw) return;
+    const keys: string[] = JSON.parse(raw);
+    for (const key of keys) {
+      if (pendingWrites.has(key)) continue;
+      if (key.startsWith('log:')) {
+        const logKey = key.slice(4);
+        const log = globalLogs[logKey];
+        if (log) {
+          pendingWrites.set(key, () => saveHabitLogAction(log, userId));
+        }
+      } else if (key.startsWith('habit:')) {
+        const habitId = key.slice(6);
+        const habit = globalHabits.find((h) => h.id === habitId);
+        if (habit) {
+          pendingWrites.set(key, () => saveHabitAction(habit, userId));
+        } else {
+          pendingWrites.set(key, () => deleteHabitAction(habitId, userId));
+        }
+      } else if (key.startsWith('note:')) {
+        const dateStr = key.slice(5);
+        const content = globalDayNotes[dateStr] || '';
+        pendingWrites.set(key, () => saveDayNoteAction(dateStr, content, userId));
+      } else if (key === 'order') {
+        pendingWrites.set('order', () => reorderHabitsAction(globalHabits, userId));
+      }
+    }
+  } catch {}
+}
+
 function flushPendingWrites() {
   if (activeWritePromise) return activeWritePromise;
   if (!pendingWrites.size) return Promise.resolve(true);
@@ -120,8 +178,12 @@ function flushPendingWrites() {
       }
       if (generation !== sessionGeneration) return false;
       if (pendingWrites.get(key) !== write) continue;
-      if (result.success) pendingWrites.delete(key);
-      else failure = result.error || 'Could not save changes. Sync to retry.';
+      if (result.success) {
+        pendingWrites.delete(key);
+        if (globalCurrentUser) removePendingKey(globalCurrentUser.id, key);
+      } else {
+        failure = result.error || 'Could not save changes. Sync to retry.';
+      }
     }
     if (generation !== sessionGeneration) return false;
     globalSyncError = failure || null;
@@ -137,6 +199,7 @@ function queueCloudWrite(key: string, write: CloudWrite) {
   lastLocalMutationTime = Date.now();
   localRevision++;
   pendingWrites.set(key, write);
+  if (globalCurrentUser) recordPendingKey(globalCurrentUser.id, key);
   queueMicrotask(() => { void flushPendingWrites(); });
 }
 
@@ -232,6 +295,7 @@ export function loadLocalDataFromStorage(userId?: string): {
   globalLogs = logs;
   globalDayNotes = dayNotes;
   isStorageLoaded = true;
+  rehydratePendingWrites(uid);
   updateStoreSnapshot();
   return { habits, logs, dayNotes };
 }
@@ -251,6 +315,7 @@ async function executeCloudSync(isBackground = false): Promise<void> {
       updateStoreSnapshot();
     }
     try {
+      rehydratePendingWrites(user.id);
       if (pendingWrites.size && !(await flushPendingWrites())) return;
       if (generation !== sessionGeneration) return;
       const revision = localRevision;
@@ -460,7 +525,10 @@ export function useHabitStore() {
     globalHabits = globalHabits.filter((habit) => habit.id !== habitId);
     globalLogs = Object.fromEntries(Object.entries(globalLogs).filter(([, log]) => log.habit_id !== habitId));
     for (const key of pendingWrites.keys()) {
-      if (key.startsWith(`log:${habitId}_`)) pendingWrites.delete(key);
+      if (key.startsWith(`log:${habitId}_`)) {
+        pendingWrites.delete(key);
+        if (sessionId) removePendingKey(sessionId, key);
+      }
     }
     queueCloudWrite(`habit:${habitId}`, () => deleteHabitAction(habitId, sessionId));
     persistHabitsAndLogs();

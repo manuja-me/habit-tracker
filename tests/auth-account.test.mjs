@@ -107,3 +107,19 @@ test('auto-purge only cascades when a member still meets the expiry cutoff', asy
   };
   assert.equal(await purgeUserData(globalThis.authTestSupabase, member.userId, cutoff), false);
 });
+
+test('sessions issued before credential update are revoked', async () => {
+  const oldToken = createSessionToken({ ...member, issuedAt: Date.now() - 10000 });
+  cookieValues.set(COOKIE_NAME, oldToken);
+  query = () => ({
+    data: {
+      id: member.userId,
+      role: 'member',
+      username: 'Member',
+      deactivated_at: null,
+      updated_at: new Date(Date.now() - 1000).toISOString(),
+    },
+  });
+  const user = await getCurrentUserAction();
+  assert.equal(user, null);
+});

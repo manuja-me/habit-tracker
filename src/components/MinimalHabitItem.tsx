@@ -93,7 +93,7 @@ export function MinimalHabitItem({
 
   const stepAmount = getHabitStep(habit);
   const progressPercent = habit.type === 'number' 
-    ? Math.min(100, Math.round((currentValue / habit.target_value) * 100))
+    ? Math.min(100, Math.round((currentValue / Math.max(1, habit.target_value || 1)) * 100))
     : (isCompleted ? 100 : 0);
 
   return (

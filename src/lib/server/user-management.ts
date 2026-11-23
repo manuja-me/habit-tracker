@@ -53,12 +53,9 @@ export async function purgeExpiredDeactivatedUsers(
 
     let purgedCount = 0;
     if (expiredUsers && expiredUsers.length > 0) {
-      for (const u of expiredUsers) {
-        if (u.id !== OWNER_USER_ID && u.role !== 'owner') {
-          const success = await purgeUserData(supabase, u.id, cutoffDate);
-          if (success) purgedCount++;
-        }
-      }
+      const candidates = expiredUsers.filter((u) => u.id !== OWNER_USER_ID && u.role !== 'owner');
+      const results = await Promise.all(candidates.map((u) => purgeUserData(supabase, u.id, cutoffDate)));
+      purgedCount = results.filter(Boolean).length;
     }
     return purgedCount;
   } catch (err) {
