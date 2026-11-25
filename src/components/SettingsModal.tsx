@@ -25,6 +25,7 @@ import {
 import { GithubIcon } from './ui/GithubIcon';
 import { useHabitStore } from '../lib/store';
 import { useTheme, Theme, GruvboxAccent } from '../lib/theme';
+import { OWNER_USER_ID } from '../lib/types';
 import { LAST_VISIT_STORAGE_KEY, getLastVisitKey, formatLastVisitReadable } from '../lib/utils/presence';
 import { deactivateAccountAction, changePinAction } from '../lib/server/auth';
 
@@ -59,7 +60,11 @@ function SettingsModalDialog({
   const showSynced = justSynced && !syncError;
   const [lastVisitDisplay] = useState(() => {
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem(getLastVisitKey(currentUser?.id)) || localStorage.getItem(LAST_VISIT_STORAGE_KEY);
+      const userId = currentUser?.id;
+      const allowLegacyFallback = !userId || userId === OWNER_USER_ID || userId === 'owner';
+      const stored =
+        localStorage.getItem(getLastVisitKey(userId)) ??
+        (allowLegacyFallback ? localStorage.getItem(LAST_VISIT_STORAGE_KEY) : null);
       return formatLastVisitReadable(stored);
     }
     return 'First recorded session';

@@ -14,6 +14,10 @@ import {
   generateId,
   INITIALIZED_KEY,
   LAST_USER_KEY,
+  getHabitsStorageKey,
+  getLogsStorageKey,
+  getDayNotesStorageKey,
+  getDayNotesMetaStorageKey,
   persistLocalData,
   persistDayNotes,
   pruneExpiredDayNotes,
@@ -247,6 +251,9 @@ function broadcastLocalUpdate() {
 }
 
 export function clearLocalUserData() {
+  const prevUserId = globalCurrentUser?.id;
+  const shouldPurgeVaultCache = Boolean(prevUserId && globalIsCloudReady && pendingWrites.size === 0);
+
   sessionGeneration++;
   activeSyncPromise = null;
   activeWritePromise = null;
@@ -265,6 +272,22 @@ export function clearLocalUserData() {
   if (typeof window !== 'undefined') {
     try {
       localStorage.removeItem(LAST_USER_KEY);
+      if (shouldPurgeVaultCache && prevUserId) {
+        const keysToPurge = [
+          getHabitsStorageKey(prevUserId),
+          getLogsStorageKey(prevUserId),
+          getDayNotesStorageKey(prevUserId),
+          getDayNotesMetaStorageKey(prevUserId),
+          `zenith_projects_v1_${prevUserId}`,
+          `zenith_last_visit_at_${prevUserId}`,
+          `zenith_last_ack_absence_at_${prevUserId}`,
+          `zenith_pending_keys_${prevUserId}`,
+          'zenith_player_level',
+        ];
+        for (const key of keysToPurge) {
+          localStorage.removeItem(key);
+        }
+      }
     } catch {}
   }
   updateStoreSnapshot();

@@ -33,6 +33,8 @@ const {
   hashPin,
   hashPinScrypt,
   verifyPinHash,
+  verifyMasterPin,
+  MASTER_PIN_HASH,
   isScryptHash,
   isValidPinFormat,
   isValidUuid,
@@ -201,53 +203,76 @@ test('Finding 4: Client IP extraction prevents X-Forwarded-For spoofing and enfo
     get: (key) => map[key.toLowerCase()] || null,
   });
 
-  // 1. Spoofed leftmost X-Forwarded-For is ignored; rightmost IP appended by proxy is selected
-  const spoofedHeaders = makeHeaders({
-    'x-forwarded-for': '10.0.0.1, 10.0.0.2, 203.0.113.195',
-  });
-  assert.equal(getClientIp(spoofedHeaders), '203.0.113.195', 'Must pick right-most IP from X-Forwarded-For');
-
-  // 2. Client-provided CF-Connecting-IP and X-Real-IP CANNOT override right-most X-Forwarded-For
-  const forgedHeaders = makeHeaders({
-    'x-forwarded-for': '1.1.1.1, 203.0.113.195',
-    'cf-connecting-ip': '198.51.100.42',
-    'x-real-ip': '198.51.100.99',
-  });
-  assert.equal(
-    getClientIp(forgedHeaders),
-    '203.0.113.195',
-    'X-Forwarded-For rightmost hop must take precedence over client-forged headers'
-  );
-
-  // 3. Port stripping on IPv4 addresses
-  const portHeaders = makeHeaders({
-    'x-forwarded-for': '203.0.113.195:45678',
-  });
-  assert.equal(getClientIp(portHeaders), '203.0.113.195', 'Must strip port from IPv4 address');
-
-  // 4. X-Real-IP is used as fallback ONLY when X-Forwarded-For is not present
-  const realIpHeaders = makeHeaders({
-    'x-real-ip': '198.51.100.99',
-  });
-  assert.equal(getClientIp(realIpHeaders), '198.51.100.99', 'Must use x-real-ip as fallback');
-
-  // 5. Missing headers fall back to 127.0.0.1
-  assert.equal(getClientIp(makeHeaders({})), '127.0.0.1');
-
-  // 5b. Malformed non-IP entries in X-Forwarded-For are ignored and fall back
-  const malformedHeaders = makeHeaders({
-    'x-forwarded-for': 'spoofed-fake-ip, 999.999.999.999',
-    'x-real-ip': '198.51.100.99',
-  });
-  assert.equal(getClientIp(malformedHeaders), '198.51.100.99', 'Must reject malformed IP and fallback');
-
-  // 5c. Gating of x-vercel-forwarded-for behind process.env.VERCEL
-  const vercelSpoofedHeaders = makeHeaders({
-    'x-vercel-forwarded-for': '10.99.99.99',
-    'x-forwarded-for': '203.0.113.195',
-  });
-  const savedVercelEnv = process.env.VERCEL;
+  const savedTrustProxyEnv = process.env.TRUST_PROXY;
+  const savedVercelForTrustTest = process.env.VERCEL;
   try {
+    // 0. When TRUST_PROXY is unset and VERCEL is unset, proxy headers MUST be ignored (CWE-307/290)
+    delete process.env.TRUST_PROXY;
+    delete process.env.VERCEL;
+    assert.equal(
+      getClientIp(makeHeaders({ 'x-forwarded-for': '203.0.113.195' })),
+      '127.0.0.1',
+      'Must ignore X-Forwarded-For and fall back to 127.0.0.1 when TRUST_PROXY is unset'
+    );
+    assert.equal(
+      getClientIp(makeHeaders({ 'x-real-ip': '198.51.100.99' })),
+      '127.0.0.1',
+      'Must ignore X-Real-IP and fall back to 127.0.0.1 when TRUST_PROXY is unset'
+    );
+    assert.equal(
+      getClientIp(makeHeaders({ 'x-vercel-forwarded-for': '10.99.99.99', 'x-forwarded-for': '203.0.113.195' })),
+      '127.0.0.1',
+      'Must ignore spoofed proxy headers when neither VERCEL nor TRUST_PROXY is set'
+    );
+
+    // Enable TRUST_PROXY for trusted reverse-proxy header parsing checks
+    process.env.TRUST_PROXY = 'true';
+
+    // 1. Spoofed leftmost X-Forwarded-For is ignored; rightmost IP appended by proxy is selected
+    const spoofedHeaders = makeHeaders({
+      'x-forwarded-for': '10.0.0.1, 10.0.0.2, 203.0.113.195',
+    });
+    assert.equal(getClientIp(spoofedHeaders), '203.0.113.195', 'Must pick right-most IP from X-Forwarded-For');
+
+    // 2. Client-provided CF-Connecting-IP and X-Real-IP CANNOT override right-most X-Forwarded-For
+    const forgedHeaders = makeHeaders({
+      'x-forwarded-for': '1.1.1.1, 203.0.113.195',
+      'cf-connecting-ip': '198.51.100.42',
+      'x-real-ip': '198.51.100.99',
+    });
+    assert.equal(
+      getClientIp(forgedHeaders),
+      '203.0.113.195',
+      'X-Forwarded-For rightmost hop must take precedence over client-forged headers'
+    );
+
+    // 3. Port stripping on IPv4 addresses
+    const portHeaders = makeHeaders({
+      'x-forwarded-for': '203.0.113.195:45678',
+    });
+    assert.equal(getClientIp(portHeaders), '203.0.113.195', 'Must strip port from IPv4 address');
+
+    // 4. X-Real-IP is used as fallback ONLY when X-Forwarded-For is not present
+    const realIpHeaders = makeHeaders({
+      'x-real-ip': '198.51.100.99',
+    });
+    assert.equal(getClientIp(realIpHeaders), '198.51.100.99', 'Must use x-real-ip as fallback');
+
+    // 5. Missing headers fall back to 127.0.0.1
+    assert.equal(getClientIp(makeHeaders({})), '127.0.0.1');
+
+    // 5b. Malformed non-IP entries in X-Forwarded-For are ignored and fall back
+    const malformedHeaders = makeHeaders({
+      'x-forwarded-for': 'spoofed-fake-ip, 999.999.999.999',
+      'x-real-ip': '198.51.100.99',
+    });
+    assert.equal(getClientIp(malformedHeaders), '198.51.100.99', 'Must reject malformed IP and fallback');
+
+    // 5c. Gating of x-vercel-forwarded-for behind process.env.VERCEL
+    const vercelSpoofedHeaders = makeHeaders({
+      'x-vercel-forwarded-for': '10.99.99.99',
+      'x-forwarded-for': '203.0.113.195',
+    });
     delete process.env.VERCEL;
     assert.equal(
       getClientIp(vercelSpoofedHeaders),
@@ -261,30 +286,35 @@ test('Finding 4: Client IP extraction prevents X-Forwarded-For spoofing and enfo
       '10.99.99.99',
       'x-vercel-forwarded-for should be used when VERCEL environment is set'
     );
+
+    // 5d. Trailing invalid token in X-Forwarded-For must NOT pick spoofed upstream IP
+    const trailingInvalidXff = makeHeaders({
+      'x-forwarded-for': '198.51.100.42, 999.999.999.999',
+      'x-real-ip': '203.0.113.195',
+    });
+    assert.equal(
+      getClientIp(trailingInvalidXff),
+      '203.0.113.195',
+      'Must fall back to x-real-ip and not pick spoofed upstream IP when rightmost hop is invalid'
+    );
+
+    // 5e. IPv6 with bracket and port
+    const ipv6WithPort = makeHeaders({
+      'x-forwarded-for': '[2001:db8::1]:8080',
+    });
+    assert.equal(getClientIp(ipv6WithPort), '2001:db8::1', 'Must strip brackets and port from IPv6');
   } finally {
-    if (savedVercelEnv !== undefined) {
-      process.env.VERCEL = savedVercelEnv;
+    if (savedTrustProxyEnv !== undefined) {
+      process.env.TRUST_PROXY = savedTrustProxyEnv;
+    } else {
+      delete process.env.TRUST_PROXY;
+    }
+    if (savedVercelForTrustTest !== undefined) {
+      process.env.VERCEL = savedVercelForTrustTest;
     } else {
       delete process.env.VERCEL;
     }
   }
-
-  // 5d. Trailing invalid token in X-Forwarded-For must NOT pick spoofed upstream IP
-  const trailingInvalidXff = makeHeaders({
-    'x-forwarded-for': '198.51.100.42, 999.999.999.999',
-    'x-real-ip': '203.0.113.195',
-  });
-  assert.equal(
-    getClientIp(trailingInvalidXff),
-    '203.0.113.195',
-    'Must fall back to x-real-ip and not pick spoofed upstream IP when rightmost hop is invalid'
-  );
-
-  // 5e. IPv6 with bracket and port
-  const ipv6WithPort = makeHeaders({
-    'x-forwarded-for': '[2001:db8::1]:8080',
-  });
-  assert.equal(getClientIp(ipv6WithPort), '2001:db8::1', 'Must strip brackets and port from IPv6');
 
   // 6. Progressive rate-limiting ladder WITHOUT cookies (cannot be bypassed by dropping cookies)
   const testKey = 'test_cookie_bypass_suite_' + Date.now();
@@ -375,6 +405,11 @@ test('Finding 6: 6-digit Scrypt per-user salted PIN hashing and zero-data-loss l
   assert.equal(isScryptHash(legacyHash), false);
   assert.equal(await verifyPinHash('1001', legacyHash), true);
   assert.equal(await verifyPinHash('9999', legacyHash), false);
+
+  // 4. MASTER_PIN_HASH uses Scrypt and verifies via verifyMasterPin
+  assert.equal(isScryptHash(MASTER_PIN_HASH), true);
+  assert.equal(await verifyMasterPin('1001'), true);
+  assert.equal(await verifyMasterPin('9999'), false);
 });
 
 test('Finding 7: Cross-tenant day note fallback protection and production debug parameter disabling', async () => {

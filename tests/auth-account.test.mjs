@@ -13,16 +13,20 @@ globalThis.authTestSupabase = {
   from: (table) => {
     const filters = [];
     let operation = 'select';
+    let payload;
     const builder = {
       select: () => builder,
-      update: () => { operation = 'update'; return builder; },
+      update: (data) => { operation = 'update'; payload = data; return builder; },
+      insert: (data) => { operation = 'insert'; payload = data; return builder; },
       delete: () => { operation = 'delete'; return builder; },
-      upsert: () => { operation = 'upsert'; return builder; },
+      upsert: (data) => { operation = 'upsert'; payload = data; return builder; },
       eq: (key, value) => { filters.push(['eq', key, value]); return builder; },
+      gt: (key, value) => { filters.push(['gt', key, value]); return builder; },
       lte: (key, value) => { filters.push(['lte', key, value]); return builder; },
       is: (key, value) => { filters.push(['is', key, value]); return builder; },
-      maybeSingle: () => query({ table, operation, filters, single: true }),
-      then: (resolve) => resolve(query({ table, operation, filters, single: false })),
+      single: () => query({ table, operation, payload, filters, single: true }),
+      maybeSingle: () => query({ table, operation, payload, filters, single: true }),
+      then: (resolve) => resolve(query({ table, operation, payload, filters, single: false })),
     };
     return builder;
   },
@@ -51,8 +55,8 @@ registerHooks({
   },
 });
 
-const { COOKIE_NAME, createSessionToken, hashPin } = await import('../src/lib/server/auth-utils.ts');
-const { changePinAction, getCurrentUserAction, lockSessionAction, validateInviteTokenAction } = await import('../src/lib/server/auth.ts');
+const { COOKIE_NAME, OWNER_USER_ID, createSessionToken, hashPin, hashPinScrypt } = await import('../src/lib/server/auth-utils.ts');
+const { changePinAction, deactivateAccountAction, getCurrentUserAction, lockSessionAction, reactivateAccountAction, validateInviteTokenAction, verifyPinAction } = await import('../src/lib/server/auth.ts');
 const { recordAccountVisitAction } = await import('../src/lib/server/actions.ts');
 const { purgeUserData } = await import('../src/lib/server/user-management.ts');
 const member = { userId: '11111111-1111-1111-1111-111111111111', username: 'Member', role: 'member' };
@@ -140,6 +144,140 @@ test('active sessions are NOT revoked when updated_at is newer but PIN was never
   });
   const user = await getCurrentUserAction();
   assert.equal(user?.userId, member.userId);
+});
+
+test('VULN-01: verifyPinAction uses verifyPinHash without pin_lookup_hash bypass and changePinAction does not store pin_lookup_hash', async () => {
+  const realHash = await hashPinScrypt('482910');
+  const fakeLookupHash = hashPin('999999');
+  let capturedUpdatePayload = null;
+  cookieValues.clear();
+  query = ({ table, operation, payload, single }) => {
+    if (table === 'auth_rate_limits') return { data: null };
+    if (operation === 'update') {
+      capturedUpdatePayload = payload;
+      return { data: single ? { id: member.userId } : [{ id: member.userId }] };
+    }
+    const row = {
+      id: member.userId,
+      username: 'Member',
+      role: 'member',
+      pin_hash: realHash,
+      pin_lookup_hash: fakeLookupHash,
+      deactivated_at: null,
+    };
+    return { data: single ? row : [row] };
+  };
+
+  // Pin matching only pin_lookup_hash must NOT authenticate
+  const spoofedRes = await verifyPinAction('999999');
+  assert.equal(spoofedRes.success, false);
+
+  // Real PIN authenticates via verifyPinHash and clears rate limits
+  const validRes = await verifyPinAction('482910');
+  assert.equal(validRes.success, true);
+
+  // Changing PIN must not store pin_lookup_hash
+  cookieValues.set(COOKIE_NAME, createSessionToken(member));
+  const changeRes = await changePinAction('482910', '739182');
+  assert.equal(changeRes.success, true);
+  assert.equal('pin_lookup_hash' in capturedUpdatePayload, false);
+});
+
+test('VULN-02: getCurrentUserAction fails closed on DB error or deactivated owner session', async () => {
+  const activeOwner = { userId: OWNER_USER_ID, username: 'owner', role: 'owner' };
+  const deactivatedOwner = { ...activeOwner, isDeactivated: true };
+
+  // 1. Primary query DB error must return null even for OWNER_USER_ID
+  cookieValues.set(COOKIE_NAME, createSessionToken(activeOwner));
+  query = () => ({ data: null, error: { message: 'connection refused' } });
+  assert.equal(await getCurrentUserAction(), null);
+
+  // 2. Legacy 42703 fallback DB error must return null even for OWNER_USER_ID
+  let callCount = 0;
+  query = () => {
+    callCount += 1;
+    if (callCount === 1) {
+      return { data: null, error: { code: '42703', message: 'column deactivated_at does not exist' } };
+    }
+    return { data: null, error: { message: 'legacy query failed' } };
+  };
+  assert.equal(await getCurrentUserAction(), null);
+
+  // 3. Deactivated owner session without DB row must fail closed
+  cookieValues.set(COOKIE_NAME, createSessionToken(deactivatedOwner));
+  query = () => ({ data: null, error: null });
+  assert.equal(await getCurrentUserAction(), null);
+
+  // 4. Env-only active owner without DB row and without error still succeeds
+  cookieValues.set(COOKIE_NAME, createSessionToken(activeOwner));
+  query = () => ({ data: null, error: null });
+  assert.equal((await getCurrentUserAction())?.userId, OWNER_USER_ID);
+});
+
+test('VULN-06: auth actions hide raw DB error strings and return generic safe errors', async () => {
+  const currentHash = hashPin('123456');
+  cookieValues.set(COOKIE_NAME, createSessionToken(member));
+
+  let deactivatedAt = null;
+  query = ({ table, operation, single }) => {
+    if (table === 'auth_rate_limits') return { data: null };
+    if (operation === 'update') {
+      return { data: null, error: { message: 'PG_INTERNAL_SECRET_SCHEMA_DETAIL: constraint foo_bar' } };
+    }
+    const row = { id: member.userId, username: 'Member', role: 'member', pin_hash: currentHash, deactivated_at: deactivatedAt };
+    return { data: single ? row : [row] };
+  };
+
+  const changeRes = await changePinAction('123456', '246802');
+  assert.equal(changeRes.success, false);
+  assert.doesNotMatch(changeRes.error, /PG_INTERNAL_SECRET_SCHEMA_DETAIL/);
+
+  const deactivateRes = await deactivateAccountAction('123456');
+  assert.equal(deactivateRes.success, false);
+  assert.doesNotMatch(deactivateRes.error, /PG_INTERNAL_SECRET_SCHEMA_DETAIL/);
+
+  deactivatedAt = new Date().toISOString();
+  cookieValues.set(COOKIE_NAME, createSessionToken({ ...member, isDeactivated: true }));
+  const reactivateRes = await reactivateAccountAction();
+  assert.equal(reactivateRes.success, false);
+  assert.equal(reactivateRes.error, 'Failed to reactivate account.');
+});
+
+test('VULN-08: lockSessionAction revokes tokens issued at/before lock while allowing immediate re-login', async () => {
+  const issuedAt = Date.now();
+  const lockedToken = createSessionToken({ ...member, issuedAt });
+  cookieValues.set(COOKIE_NAME, lockedToken);
+
+  let storedPinChangedAt = null;
+  query = ({ table, operation, payload, filters }) => {
+    if (table === 'app_users' && operation === 'update') {
+      assert.deepEqual(filters, [['eq', 'id', member.userId]]);
+      storedPinChangedAt = payload.pin_changed_at;
+      return { data: null, error: null };
+    }
+    return {
+      data: {
+        id: member.userId,
+        role: 'member',
+        username: 'Member',
+        deactivated_at: null,
+        pin_changed_at: storedPinChangedAt,
+      },
+    };
+  };
+
+  await lockSessionAction(member.userId);
+  assert.equal(cookieValues.has(COOKIE_NAME), false);
+  assert.ok(storedPinChangedAt, 'pin_changed_at must be updated on lock');
+
+  // Replaying the pre-lock token (even in a copied cookie jar) must be rejected
+  cookieValues.set(COOKIE_NAME, lockedToken);
+  assert.equal(await getCurrentUserAction(), null);
+
+  // A new token issued immediately after lock succeeds
+  const freshToken = createSessionToken({ ...member, issuedAt: Date.now() + 5 });
+  cookieValues.set(COOKIE_NAME, freshToken);
+  assert.equal((await getCurrentUserAction())?.userId, member.userId);
 });
 
 test('recordAccountVisitAction updates last_login_at without touching updated_at', async () => {

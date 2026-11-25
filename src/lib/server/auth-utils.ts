@@ -26,13 +26,18 @@ export function isValidUuid(id?: string | null): boolean {
 
 const DEFAULT_SALT = 'zenith_server_salt_88f2_secret';
 const DEFAULT_HMAC_SECRET = 'zenith_session_hmac_secret_key_44b1c8';
+const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1 };
+const SCRYPT_KEYLEN = 64;
 
 export const PIN_SALT = process.env.PIN_SALT || DEFAULT_SALT;
 export const SECRET_HMAC_KEY = process.env.SESSION_SECRET || process.env.SECRET_HMAC_KEY || DEFAULT_HMAC_SECRET;
 
 const rawMasterPin = process.env.APP_SECRET_PIN || process.env.MASTER_PIN;
 const configuredMasterPin = (rawMasterPin || '1001').trim().replace(/^["']|["']$/g, '');
-export const MASTER_PIN_HASH = crypto.createHash('sha256').update(configuredMasterPin + PIN_SALT).digest('hex');
+const masterPinSaltHex = crypto.randomBytes(16).toString('hex');
+export const MASTER_PIN_HASH = `scrypt$${masterPinSaltHex}$${crypto
+  .scryptSync(configuredMasterPin + PIN_SALT, masterPinSaltHex, SCRYPT_KEYLEN, SCRYPT_PARAMS)
+  .toString('hex')}`;
 
 const sessionSecretEnv = process.env.SESSION_SECRET || process.env.SECRET_HMAC_KEY;
 if (process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE !== 'phase-production-build') {
@@ -172,21 +177,23 @@ export function getClientIp(headerList: { get(name: string): string | null }): s
     }
   }
 
-  // Right-most entry in x-forwarded-for represents the most trusted upstream hop appended by reverse proxies
-  const forwarded = headerList.get('x-forwarded-for');
-  if (forwarded?.trim()) {
-    const parts = forwarded.split(',').map((p) => p.trim()).filter(Boolean);
-    if (parts.length > 0) {
-      const rightmost = normalizeIp(parts[parts.length - 1]);
-      if (rightmost) return rightmost;
+  if (process.env.TRUST_PROXY === 'true') {
+    // Right-most entry in x-forwarded-for represents the most trusted upstream hop appended by reverse proxies
+    const forwarded = headerList.get('x-forwarded-for');
+    if (forwarded?.trim()) {
+      const parts = forwarded.split(',').map((p) => p.trim()).filter(Boolean);
+      if (parts.length > 0) {
+        const rightmost = normalizeIp(parts[parts.length - 1]);
+        if (rightmost) return rightmost;
+      }
     }
-  }
 
-  // Fallback to direct reverse proxy real IP if x-forwarded-for was not provided or rightmost hop was invalid
-  const realIp = headerList.get('x-real-ip');
-  if (realIp?.trim()) {
-    const normalized = normalizeIp(realIp.trim());
-    if (normalized) return normalized;
+    // Fallback to direct reverse proxy real IP if x-forwarded-for was not provided or rightmost hop was invalid
+    const realIp = headerList.get('x-real-ip');
+    if (realIp?.trim()) {
+      const normalized = normalizeIp(realIp.trim());
+      if (normalized) return normalized;
+    }
   }
 
   return '127.0.0.1';
@@ -239,9 +246,6 @@ export function resetFailedAttempts(key: string) {
 export function hashPin(pin: string): string {
   return crypto.createHash('sha256').update(pin.trim() + PIN_SALT).digest('hex');
 }
-
-const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1 };
-const SCRYPT_KEYLEN = 64;
 
 /**
  * Hash a PIN using memory-hard Scrypt with a unique 16-byte per-user random salt
@@ -297,10 +301,8 @@ export function isValidPinFormat(pin: string, allowLegacy4Digit = false): boolea
   return false;
 }
 
-export function verifyMasterPin(enteredPin: string): boolean {
-  const computedBuf = Buffer.from(hashPin(enteredPin.trim()));
-  const masterBuf = Buffer.from(MASTER_PIN_HASH);
-  return computedBuf.length === masterBuf.length && crypto.timingSafeEqual(computedBuf, masterBuf);
+export function verifyMasterPin(enteredPin: string): Promise<boolean> {
+  return verifyPinHash(enteredPin, MASTER_PIN_HASH);
 }
 
 export function createSessionToken(user: SessionUser): string {

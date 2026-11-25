@@ -15,7 +15,6 @@ import {
   recordFailedAttempt,
   resetFailedAttempts,
   signRateLimitToken,
-  hashPin,
   hashPinScrypt,
   isScryptHash,
   verifyPinHash,
@@ -36,6 +35,22 @@ const COOKIE_OPTS = {
 };
 
 const RATE_LIMIT_TTL_MS = 24 * 60 * 60 * 1000;
+
+const INTENTIONAL_AUTH_ERRORS = new Set([
+  'Unauthorized: Valid session required.',
+  'ACCOUNT DEACTIVATED // Reactivation required to access application.',
+]);
+
+function getSafeAuthError(err: unknown, context: string, defaultMessage: string): string {
+  const rawMessage = err instanceof Error
+    ? err.message
+    : (err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : String(err));
+  if (err instanceof Error && INTENTIONAL_AUTH_ERRORS.has(err.message)) {
+    return err.message;
+  }
+  console.error(`${context}:`, rawMessage);
+  return defaultMessage;
+}
 
 async function getRateLimitContext() {
   const headerList = await headers();
@@ -192,15 +207,14 @@ export async function verifyPinAction(enteredPin: string): Promise<{
           username: string;
           role?: string;
           pin_hash: string;
-          pin_lookup_hash?: string | null;
           deactivated_at?: string | null;
         }> = [];
 
         const { data, error } = await supabase
           .from('app_users')
-          .select('id, username, role, pin_hash, pin_lookup_hash, deactivated_at');
+          .select('id, username, role, pin_hash, deactivated_at');
 
-        if (error && (error.message?.includes('deactivated_at') || error.message?.includes('pin_lookup_hash') || error.code === '42703')) {
+        if (error && (error.message?.includes('deactivated_at') || error.code === '42703')) {
           const fallback = await supabase
             .from('app_users')
             .select('id, username, role, pin_hash');
@@ -222,9 +236,8 @@ export async function verifyPinAction(enteredPin: string): Promise<{
           ownerHasCustomDbPin = true;
         }
 
-        const lookupHash = hashPin(cleanPin);
         for (const row of rows) {
-          if (row.pin_lookup_hash === lookupHash || (await verifyPinHash(cleanPin, row.pin_hash))) {
+          if (await verifyPinHash(cleanPin, row.pin_hash)) {
             matchedUser = {
               userId: row.id,
               username: row.username,
@@ -243,7 +256,7 @@ export async function verifyPinAction(enteredPin: string): Promise<{
     }
 
     // 2. Fallback to Master Owner PIN from environment if not overridden by a custom Scrypt DB PIN
-    if (!matchedUser && !ownerHasCustomDbPin && verifyMasterPin(cleanPin)) {
+    if (!matchedUser && !ownerHasCustomDbPin && (await verifyMasterPin(cleanPin))) {
       matchedUser = {
         userId: OWNER_USER_ID,
         username: 'owner',
@@ -356,7 +369,7 @@ export async function verifyPinAction(enteredPin: string): Promise<{
     console.error('Unhandled verifyPinAction error:', message);
     return {
       success: false,
-      error: message || 'Internal authentication error. Please try again.',
+      error: 'Internal authentication error. Please try again.',
     };
   }
 }
@@ -403,7 +416,7 @@ export async function getCurrentUserAction(): Promise<SessionUser | null> {
   if (error?.code === '42703' && (error.message.includes('deactivated_at') || error.message.includes('pin_changed_at'))) {
     const legacy = await supabase.from('app_users').select('id, username, role, updated_at').eq('id', user.userId).maybeSingle();
     if (legacy.error || !legacy.data || user.isDeactivated) {
-      if (user.userId === OWNER_USER_ID && !legacy.data) return user;
+      if (user.userId === OWNER_USER_ID && !legacy.error && !legacy.data && !user.isDeactivated) return user;
       return null;
     }
     if (user.issuedAt && legacy.data.updated_at) {
@@ -414,7 +427,7 @@ export async function getCurrentUserAction(): Promise<SessionUser | null> {
   }
 
   if (error || !data || Boolean(data.deactivated_at) !== Boolean(user.isDeactivated)) {
-    if (user.userId === OWNER_USER_ID && !data) return user;
+    if (user.userId === OWNER_USER_ID && !error && !data && !user.isDeactivated) return user;
     return null;
   }
 
@@ -439,6 +452,20 @@ export async function lockSessionAction(expectedUserId: string): Promise<void> {
   const session = cookieStore.get(COOKIE_NAME)?.value;
   if (session && isValidUuid(expectedUserId) && getSessionUserFromToken(session)?.userId === expectedUserId) {
     cookieStore.delete(COOKIE_NAME);
+    const supabase = getServerSupabase();
+    if (supabase) {
+      try {
+        // Offset past the 5000ms clock-skew window in getCurrentUserAction so tokens
+        // issued at or before lock are immediately rejected while subsequent logins work.
+        const revokedAt = new Date(Date.now() + 5001).toISOString();
+        await supabase
+          .from('app_users')
+          .update({ pin_changed_at: revokedAt })
+          .eq('id', expectedUserId);
+      } catch {
+        // Cookie is already cleared; ignore best-effort DB revocation failure
+      }
+    }
   }
 }
 
@@ -484,7 +511,8 @@ export async function generateInviteAction(): Promise<{
       expires_at: expiresAt,
     });
     if (insertErr) {
-      return { success: false, error: insertErr.message || 'Failed to save invitation.' };
+      console.error('generateInviteAction insertErr:', insertErr.message);
+      return { success: false, error: 'Failed to save invitation.' };
     }
 
     // Sign the token cryptographically
@@ -493,8 +521,7 @@ export async function generateInviteAction(): Promise<{
 
     return { success: true, token: fullToken };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { success: false, error: message || 'Failed to generate invite' };
+    return { success: false, error: getSafeAuthError(err, 'generateInviteAction error', 'Failed to generate invite.') };
   }
 }
 
@@ -581,7 +608,7 @@ export async function completeInviteSetupAction(
   }
 
   // Prevent duplicate PIN with Master Owner
-  if (verifyMasterPin(pin)) {
+  if (await verifyMasterPin(pin)) {
     await recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore, rateCheck.currentCount);
     return {
       success: false,
@@ -600,7 +627,10 @@ export async function completeInviteSetupAction(
       .from('app_users')
       .select('id, username, pin_hash');
 
-    if (lookupError) return { success: false, error: 'Could not verify registration details. Please try again.' };
+    if (lookupError) {
+      console.error('completeInviteSetupAction lookupError:', lookupError.message);
+      return { success: false, error: 'Could not verify registration details. Please try again.' };
+    }
     const normalizedName = cleanUsername.toLowerCase();
     let hasCollision = false;
     for (const u of existingUsers || []) {
@@ -639,11 +669,10 @@ export async function completeInviteSetupAction(
       return { success: false, error: 'This invitation has already been used or has expired.' };
     }
 
-    // Insert new user with per-user salted Scrypt hash and deterministic lookup hash
+    // Insert new user with per-user salted Scrypt hash
     const newUserPayload: Record<string, unknown> = {
       username: cleanUsername,
       pin_hash: hashedPin,
-      pin_lookup_hash: hashPin(pin),
       role: 'member' as const,
       last_login_at: nowIso,
     };
@@ -654,10 +683,9 @@ export async function completeInviteSetupAction(
       .select()
       .single();
 
-    if (insertErr && (insertErr.code === '42703' || insertErr.message?.includes('last_login_at') || insertErr.message?.includes('pin_lookup_hash'))) {
+    if (insertErr && (insertErr.code === '42703' || insertErr.message?.includes('last_login_at'))) {
       const fallbackPayload: Record<string, unknown> = { ...newUserPayload };
       delete fallbackPayload.last_login_at;
-      delete fallbackPayload.pin_lookup_hash;
       const retry = await supabase.from('app_users').insert(fallbackPayload).select().single();
       newUser = retry.data;
       insertErr = retry.error;
@@ -696,8 +724,7 @@ export async function completeInviteSetupAction(
 
     return { success: true, user: sessionUser };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { success: false, error: message || 'Failed to complete registration' };
+    return { success: false, error: getSafeAuthError(err, 'completeInviteSetupAction error', 'Failed to complete registration.') };
   }
 }
 
@@ -739,6 +766,7 @@ export async function changePinAction(
       .select('id, username, role, pin_hash');
 
     if (fetchErr) {
+      console.error('changePinAction fetchErr:', fetchErr.message);
       return { success: false, error: 'Failed to verify current credentials.' };
     }
 
@@ -749,7 +777,7 @@ export async function changePinAction(
     let currentPinValid = false;
     if (currentRow && (await verifyPinHash(currentPin, currentRow.pin_hash))) {
       currentPinValid = true;
-    } else if (isOwner && (!currentRow || !isScryptHash(currentRow.pin_hash)) && verifyMasterPin(currentPin)) {
+    } else if (isOwner && (!currentRow || !isScryptHash(currentRow.pin_hash)) && (await verifyMasterPin(currentPin))) {
       currentPinValid = true;
     }
 
@@ -771,7 +799,7 @@ export async function changePinAction(
         break;
       }
     }
-    if (pinTakenByOther || (!isOwner && verifyMasterPin(newPin))) {
+    if (pinTakenByOther || (!isOwner && (await verifyMasterPin(newPin)))) {
       await recordAndPersistFailure(rateLimitKey, rlCookie, cookieStore, rateCheck.currentCount);
       return {
         success: false,
@@ -780,19 +808,18 @@ export async function changePinAction(
     }
 
     const newScryptHash = await hashPinScrypt(newPin);
-    const newLookupHash = hashPin(newPin);
     const nowIso = new Date().toISOString();
 
     if (currentRow) {
       let { data: updated, error: updateErr } = await supabase
         .from('app_users')
-        .update({ pin_hash: newScryptHash, pin_lookup_hash: newLookupHash, updated_at: nowIso, pin_changed_at: nowIso })
+        .update({ pin_hash: newScryptHash, updated_at: nowIso, pin_changed_at: nowIso })
         .eq('id', user.userId)
         .eq('pin_hash', currentRow.pin_hash)
         .select('id')
         .maybeSingle();
 
-      if (updateErr && (updateErr.code === '42703' || updateErr.message?.includes('pin_changed_at') || updateErr.message?.includes('pin_lookup_hash'))) {
+      if (updateErr && (updateErr.code === '42703' || updateErr.message?.includes('pin_changed_at'))) {
         const retry = await supabase
           .from('app_users')
           .update({ pin_hash: newScryptHash, updated_at: nowIso })
@@ -808,7 +835,8 @@ export async function changePinAction(
         if (updateErr.code === '23505') {
           return { success: false, error: 'Please choose a different 6-digit PIN.' };
         }
-        return { success: false, error: updateErr.message };
+        console.error('changePinAction updateErr:', updateErr.message);
+        return { success: false, error: 'Failed to update PIN. Please try again.' };
       }
       if (!updated) return { success: false, error: 'Account credentials changed. Please try again.' };
     } else if (isOwner) {
@@ -816,12 +844,11 @@ export async function changePinAction(
         id: OWNER_USER_ID,
         username: 'owner',
         pin_hash: newScryptHash,
-        pin_lookup_hash: newLookupHash,
         role: 'owner',
         updated_at: nowIso,
         pin_changed_at: nowIso,
       });
-      if (insertErr && (insertErr.code === '42703' || insertErr.message?.includes('pin_changed_at') || insertErr.message?.includes('pin_lookup_hash'))) {
+      if (insertErr && (insertErr.code === '42703' || insertErr.message?.includes('pin_changed_at'))) {
         const retry = await supabase.from('app_users').insert({
           id: OWNER_USER_ID,
           username: 'owner',
@@ -835,6 +862,7 @@ export async function changePinAction(
         if (insertErr.code === '23505') {
           return { success: false, error: 'Please choose a different 6-digit PIN.' };
         }
+        console.error('changePinAction insertErr:', insertErr.message);
         return { success: false, error: 'Failed to create the owner credentials. Please try again.' };
       }
     } else {
@@ -845,8 +873,7 @@ export async function changePinAction(
     cookieStore.set(COOKIE_NAME, createSessionToken({ ...user, issuedAt: Date.now() }), COOKIE_OPTS);
     return { success: true };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { success: false, error: message || 'Failed to update PIN.' };
+    return { success: false, error: getSafeAuthError(err, 'changePinAction error', 'Failed to update PIN.') };
   }
 }
 
@@ -884,7 +911,10 @@ export async function reactivateAccountAction(): Promise<{
       .select('id, username, role')
       .maybeSingle();
 
-    if (error) return { success: false, error: error.message };
+    if (error) {
+      console.error('reactivateAccountAction error:', error.message);
+      return { success: false, error: 'Failed to reactivate account.' };
+    }
     if (!updatedUser) return { success: false, error: 'Account is no longer eligible for reactivation.' };
     const sessionUser: SessionUser = {
       userId: updatedUser.id,
@@ -898,8 +928,7 @@ export async function reactivateAccountAction(): Promise<{
 
     return { success: true, user: sessionUser };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { success: false, error: message || 'Failed to reactivate account.' };
+    return { success: false, error: getSafeAuthError(err, 'reactivateAccountAction error', 'Failed to reactivate account.') };
   }
 }
 
@@ -981,7 +1010,8 @@ export async function deactivateAccountAction(enteredPin: string): Promise<{
           error: 'Database schema migration pending. Column "deactivated_at" is missing in Supabase.',
         };
       }
-      return { success: false, error: updateErr.message };
+      console.error('deactivateAccountAction updateErr:', updateErr.message);
+      return { success: false, error: 'Failed to deactivate account.' };
     }
     if (!updated) return { success: false, error: 'Account credentials changed. Please try again.' };
 
@@ -990,8 +1020,7 @@ export async function deactivateAccountAction(enteredPin: string): Promise<{
 
     return { success: true };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { success: false, error: message || 'Failed to deactivate account.' };
+    return { success: false, error: getSafeAuthError(err, 'deactivateAccountAction error', 'Failed to deactivate account.') };
   }
 }
 

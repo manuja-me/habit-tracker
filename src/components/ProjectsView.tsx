@@ -14,7 +14,7 @@ import {
   Settings,
   Pencil,
 } from 'lucide-react';
-import { Project, ProjectGroup, ProjectGroupKind, ProjectStatus, ProjectTask } from '../lib/types';
+import { OWNER_USER_ID, Project, ProjectGroup, ProjectGroupKind, ProjectStatus, ProjectTask } from '../lib/types';
 import { generateId } from '../lib/utils/storage';
 import { COLOR_PALETTES } from '../lib/utils/icons';
 import {
@@ -969,6 +969,8 @@ export function ProjectsView({
   const [error, setError] = useState('');
   const [isGlobalSettingsOpen, setIsGlobalSettingsOpen] = useState(false);
 
+  const allowLegacyFallback = !userId || userId === OWNER_USER_ID || userId === 'owner';
+
   useEffect(() => {
     let active = true;
     const load = async () => {
@@ -983,7 +985,7 @@ export function ProjectsView({
         if (!res.isConfigured) {
           const raw = JSON.parse(
             localStorage.getItem(getProjectsStorageKey(userId)) ||
-            localStorage.getItem(LOCAL_KEY) ||
+            (allowLegacyFallback ? localStorage.getItem(LOCAL_KEY) : null) ||
             '{}'
           );
           const local = Array.isArray(raw) ? { projects: raw, groups: [] } : raw;
@@ -1003,7 +1005,7 @@ export function ProjectsView({
           try {
             const raw = JSON.parse(
               localStorage.getItem(getProjectsStorageKey(userId)) ||
-              localStorage.getItem(LOCAL_KEY) ||
+              (allowLegacyFallback ? localStorage.getItem(LOCAL_KEY) : null) ||
               '{}'
             );
             if (raw.projects && raw.projects.length) {
@@ -1022,7 +1024,7 @@ export function ProjectsView({
     };
     void load();
     return () => { active = false; };
-  }, [userId, onSessionExpired]);
+  }, [userId, allowLegacyFallback, onSessionExpired]);
 
   // Replay pending edits over confirmed data so one failed save only rolls back its own change.
   const apply = (op: (next: ProjectBoard) => Promise<Result>, edit: BoardEdit): Promise<Result> => {
@@ -1036,7 +1038,7 @@ export function ProjectsView({
         result = isCloud ? await op(next) : { success: true };
         if (result.success) {
           saved.current = next;
-          if (!isCloud) localStorage.setItem(LOCAL_KEY, JSON.stringify(next));
+          if (!isCloud && allowLegacyFallback) localStorage.setItem(LOCAL_KEY, JSON.stringify(next));
           localStorage.setItem(getProjectsStorageKey(userId), JSON.stringify(next));
         }
       } catch {

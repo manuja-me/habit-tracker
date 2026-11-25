@@ -17,19 +17,18 @@ CREATE TABLE IF NOT EXISTS public.app_users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Safe migration for existing installations (Add last_login_at, deactivated_at, pin_lookup_hash, pin_changed_at if not exists)
+-- Safe migration for existing installations (Add last_login_at, deactivated_at, pin_changed_at; drop legacy pin_lookup_hash)
 ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
 ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS deactivated_at TIMESTAMPTZ DEFAULT NULL;
-ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS pin_lookup_hash TEXT UNIQUE;
+ALTER TABLE public.app_users DROP COLUMN IF EXISTS pin_lookup_hash;
 ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS pin_changed_at TIMESTAMPTZ DEFAULT NULL;
 
 -- Ensure fixed Owner user exists (Default PIN 1001 with salt)
-INSERT INTO public.app_users (id, username, pin_hash, pin_lookup_hash, role)
+INSERT INTO public.app_users (id, username, pin_hash, role)
 VALUES (
     '00000000-0000-0000-0000-000000000001',
     'owner',
     'd4b1fb9e198b108cb929315ebfc003d15db47be352d126639c09d57a942ce293', -- Salted SHA-256 of 1001
-    'd4b1fb9e198b108cb929315ebfc003d15db47be352d126639c09d57a942ce293',
     'owner'
 )
 ON CONFLICT (username) DO NOTHING;

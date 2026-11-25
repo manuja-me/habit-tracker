@@ -104,10 +104,31 @@ interface DbAdminUserRow {
   deactivated_at?: string | null;
 }
 
+const SAFE_CLIENT_ERRORS = new Set([
+  'Unauthorized: Valid session required.',
+  'ACCOUNT DEACTIVATED // Reactivation required to access application.',
+  'The signed-in account changed. Lock and unlock Zenith to continue.',
+  'Invalid authenticated user ID.',
+]);
+
+const VALID_HABIT_CATEGORIES = new Set<HabitCategory>([
+  'productivity',
+  'health',
+  'fitness',
+  'mindfulness',
+  'learning',
+  'finance',
+  'lifestyle',
+]);
+const VALID_HABIT_FREQUENCIES = new Set<HabitFrequency>(['daily', 'weekdays', 'weekends', 'custom']);
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
+const ICON_NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
 function getErrorMessage(err: unknown, defaultMessage = 'An unexpected error occurred'): string {
-  if (err instanceof Error) return err.message;
-  if (typeof err === 'string') return err;
-  if (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') return err.message;
+  if (err instanceof Error && (SAFE_CLIENT_ERRORS.has(err.message) || err.message.startsWith('Unauthorized:'))) {
+    return err.message;
+  }
+  console.error('Server action error:', err);
   return defaultMessage;
 }
 
@@ -369,8 +390,64 @@ export async function saveHabitAction(habit: Habit, expectedUserId?: string): Pr
     if (!habit.title || typeof habit.title !== 'string' || !habit.title.trim()) {
       return { success: false, error: 'Habit title is required.' };
     }
+    if (!VALID_HABIT_CATEGORIES.has(habit.category)) {
+      return { success: false, error: 'Invalid habit category.' };
+    }
+    if (typeof habit.color !== 'string' || !HEX_COLOR_RE.test(habit.color.trim())) {
+      return { success: false, error: 'Invalid habit color.' };
+    }
+    if (typeof habit.icon !== 'string' || !ICON_NAME_RE.test(habit.icon.trim())) {
+      return { success: false, error: 'Invalid habit icon.' };
+    }
+    if (habit.type !== 'boolean' && habit.type !== 'number') {
+      return { success: false, error: 'Invalid habit type.' };
+    }
+    if (habit.nature !== undefined && habit.nature !== 'do' && habit.nature !== 'dont') {
+      return { success: false, error: 'Invalid habit nature.' };
+    }
+    if (!VALID_HABIT_FREQUENCIES.has(habit.frequency)) {
+      return { success: false, error: 'Invalid habit frequency.' };
+    }
+    if (
+      habit.custom_days !== undefined &&
+      (!Array.isArray(habit.custom_days) ||
+        habit.custom_days.length > 7 ||
+        habit.custom_days.some((d) => !Number.isInteger(d) || d < 0 || d > 6))
+    ) {
+      return { success: false, error: 'Invalid custom days.' };
+    }
+    if (
+      habit.target_value !== undefined &&
+      (!Number.isFinite(habit.target_value) || habit.target_value < 0 || habit.target_value > 1_000_000)
+    ) {
+      return { success: false, error: 'Invalid target value.' };
+    }
+    if (
+      habit.order !== undefined &&
+      (!Number.isFinite(habit.order) || habit.order < -10000 || habit.order > 100000)
+    ) {
+      return { success: false, error: 'Invalid habit order.' };
+    }
+    if (habit.description !== undefined && typeof habit.description !== 'string') {
+      return { success: false, error: 'Invalid habit description.' };
+    }
+
     const cleanTitle = habit.title.trim().slice(0, 200);
-    const cleanTargetValue = Number.isFinite(Number(habit.target_value)) ? Math.max(0, Number(habit.target_value)) : 1;
+    const cleanDescription = habit.description ? habit.description.slice(0, 5000) : '';
+    const cleanColor = habit.color.trim();
+    const cleanIcon = habit.icon.trim();
+    const cleanTargetValue = habit.target_value ?? 1;
+    const cleanCustomDays = habit.custom_days ? [...new Set(habit.custom_days)] : [];
+    const cleanOrder = habit.order === undefined ? 0 : Math.trunc(habit.order);
+    const rawReplacementId =
+      habit.nature === 'dont' && habit.replacement_habit_id != null
+        ? String(habit.replacement_habit_id).trim()
+        : '';
+    const replacementId = rawReplacementId || null;
+    if (replacementId && !isValidUuid(replacementId)) {
+      return { success: false, error: 'Invalid replacement habit ID.' };
+    }
+
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
@@ -387,7 +464,31 @@ export async function saveHabitAction(habit: Habit, expectedUserId?: string): Pr
       return { success: false, error: 'Unauthorized: Cannot modify habit belonging to another user.' };
     }
 
-    const storedDesc = serializeHabitDescription(habit);
+    if (replacementId) {
+      const { data: repHabit, error: repError } = await supabase
+        .from('habits')
+        .select('id, user_id')
+        .eq('id', replacementId)
+        .maybeSingle();
+      if (repError && isOwnerUser(user) && isMissingColumn(repError, 'user_id')) {
+        const legacyRep = await supabase.from('habits').select('id').eq('id', replacementId).maybeSingle();
+        if (legacyRep.error) throw legacyRep.error;
+        if (!legacyRep.data) {
+          return { success: false, error: 'Replacement habit not found.' };
+        }
+      } else {
+        if (repError) throw repError;
+        if (!repHabit || !canAccessUserRecord(user, repHabit.user_id)) {
+          return { success: false, error: 'Replacement habit not found.' };
+        }
+      }
+    }
+
+    const storedDesc = serializeHabitDescription({
+      ...habit,
+      description: cleanDescription,
+      replacement_habit_id: replacementId ?? undefined,
+    });
 
     const habitPayload: Record<string, unknown> = {
       id: habit.id,
@@ -395,17 +496,17 @@ export async function saveHabitAction(habit: Habit, expectedUserId?: string): Pr
       title: cleanTitle,
       description: storedDesc,
       category: habit.category,
-      color: habit.color,
-      icon: habit.icon,
+      color: cleanColor,
+      icon: cleanIcon,
       type: habit.type,
       target_value: cleanTargetValue,
-      target_unit: habit.target_unit ? String(habit.target_unit).slice(0, 50) : '',
+      target_unit: typeof habit.target_unit === 'string' ? habit.target_unit.trim().slice(0, 50) : '',
       frequency: habit.frequency,
-      custom_days: habit.custom_days || [],
+      custom_days: cleanCustomDays,
       archived: Boolean(habit.archived),
-      sort_order: habit.order,
+      sort_order: cleanOrder,
       updated_at: new Date().toISOString(),
-      replacement_habit_id: habit.nature === 'dont' ? (habit.replacement_habit_id || null) : null,
+      replacement_habit_id: replacementId,
     };
 
     if (legacyOwner) delete habitPayload.user_id;
@@ -473,6 +574,9 @@ export async function saveHabitLogAction(log: HabitLog, expectedUserId?: string)
     if (!log.date || typeof log.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(log.date)) {
       return { success: false, error: 'Invalid date format.' };
     }
+    if (!Number.isFinite(log.value) || log.value < 0 || log.value > 1_000_000) {
+      return { success: false, error: 'Invalid log value.' };
+    }
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
@@ -497,7 +601,7 @@ export async function saveHabitLogAction(log: HabitLog, expectedUserId?: string)
       habit_id: log.habit_id,
       user_id: user.userId,
       date: log.date,
-      completed: log.completed,
+      completed: Boolean(log.completed),
       value: log.value,
       updated_at: new Date().toISOString(),
     };
@@ -528,6 +632,12 @@ export async function reorderHabitsAction(orderedHabits: Habit[], expectedUserId
     if (!isValidUuid(user.userId)) {
       throw new Error('Invalid authenticated user ID.');
     }
+    if (!Array.isArray(orderedHabits) || orderedHabits.length > 500) {
+      return { success: false, error: 'Invalid habit reorder payload.' };
+    }
+    if (orderedHabits.some((h) => !h || typeof h !== 'object' || !isValidUuid(h.id) || !Number.isFinite(h.order))) {
+      return { success: false, error: 'Invalid habit item in reorder payload.' };
+    }
     const supabase = getServerSupabase();
     if (!supabase) return { success: true };
 
@@ -535,7 +645,7 @@ export async function reorderHabitsAction(orderedHabits: Habit[], expectedUserId
 
     const results = await Promise.all(
       orderedHabits.map((h) => {
-        const query = supabase.from('habits').update({ sort_order: h.order }).eq('id', h.id);
+        const query = supabase.from('habits').update({ sort_order: Math.trunc(h.order) }).eq('id', h.id);
         return isOwner
           ? query.or(`user_id.eq.${user.userId},user_id.is.null`)
           : query.eq('user_id', user.userId);
@@ -601,7 +711,7 @@ export async function saveDayNoteAction(date: string, content: string, expectedU
     }
 
     if (error) {
-      return { success: false, error: error.message };
+      throw error;
     }
 
     return { success: true };
@@ -849,7 +959,7 @@ export async function adminDeleteUserAction(targetUserId: string): Promise<{
       .maybeSingle();
 
     if (checkErr) {
-      return { success: false, error: checkErr.message };
+      throw checkErr;
     }
 
     if (!targetUser) {
